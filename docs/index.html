@@ -29,8 +29,10 @@
   --dial-ink:#E9EBE7;
   --dial-dim:#9AA1A6;
   --code-bg:#DFE2DB;
+  --plate:#E4E6E1;
 
   --display:ui-monospace,"SFMono-Regular",Menlo,Consolas,"Liberation Mono",monospace;
+  --display-2:"Segoe UI Variable Display","Segoe UI",system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;
   --body:"Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua",Georgia,serif;
   --util:ui-monospace,"SFMono-Regular",Menlo,Consolas,"Liberation Mono",monospace;
 
@@ -50,6 +52,7 @@ html[data-theme="dark"]{
   --dial-ink:#E9EBE7;
   --dial-dim:#8B9298;
   --code-bg:#191D20;
+  --plate:#14181B;
 }
 
 *,*::before,*::after{box-sizing:border-box}
@@ -96,6 +99,18 @@ body{
   font-variant-numeric:tabular-nums;
 }
 
+/* A second display voice, used only for quantities: stage numbers,
+   version strings, the big measurement in the bench. The mono still
+   carries every word, so the hierarchy reads without a second font file. */
+.fig{
+  font-family:var(--display-2);
+  font-weight:600;
+  font-feature-settings:"tnum" 1,"lnum" 1;
+  letter-spacing:-.03em;
+}
+
+.tnum{font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
+
 a{
   color:var(--ink);
   text-decoration:none;
@@ -105,7 +120,7 @@ a{
 
 a:hover{text-decoration:underline}
 
-:where(a,button,summary,input):focus-visible{
+:where(a,button,summary,input,textarea,select):focus-visible{
   outline:2px solid var(--cobalt);
   outline-offset:3px;
 }
@@ -122,35 +137,70 @@ h1,h2,h3{
 p{margin:0 0 1.05em;max-width:var(--measure)}
 p:last-child{margin-bottom:0}
 
-/* ---------- ruler gutter ---------- */
+/* ---------- ruler gutter (functional, not wallpaper) ---------- */
 
 .ruler{
   position:fixed;
   inset:0 auto 0 0;
   width:56px;
   border-right:1px solid var(--hair-soft);
-  background:
-    repeating-linear-gradient(to bottom,
-      var(--hair) 0 1px,
-      transparent 1px 8px) top right/6px 100% no-repeat;
   pointer-events:none;
   z-index:40;
-  opacity:.85;
+  overflow:hidden;
 }
 
-.ruler::after{
-  content:"466 PX";
+.ruler-scale{
   position:absolute;
-  bottom:22px;
+  inset:0 0 0 auto;
+  width:6px;
+  background:repeating-linear-gradient(to bottom,
+    var(--hair) 0 1px,
+    transparent 1px 8px);
+}
+
+.ruler-mark{
+  position:absolute;
   left:0;
+  right:0;
+  top:64px;
+  height:1px;
+  background:var(--cobalt);
+  will-change:transform;
+}
+
+.ruler-mark::after{
+  content:"";
+  position:absolute;
+  right:0;
+  top:-2px;
+  border-top:2.5px solid transparent;
+  border-bottom:2.5px solid transparent;
+  border-right:5px solid var(--cobalt);
+}
+
+.ruler-read{
+  position:absolute;
+  left:0;
+  bottom:0;
   width:56px;
-  text-align:center;
+  padding:14px 0 18px;
+  display:flex;
+  align-items:baseline;
+  justify-content:center;
+  gap:2px;
+  background:var(--paper);
+  border-top:1px solid var(--hair-soft);
   font-family:var(--util);
-  font-size:9px;
-  letter-spacing:.14em;
+  font-size:11px;
+  color:var(--cobalt);
+  letter-spacing:.04em;
+}
+
+.ruler-unit{
+  font-size:8px;
+  letter-spacing:.12em;
   color:var(--steel);
-  transform:rotate(-90deg) translateY(0);
-  transform-origin:center;
+  text-transform:uppercase;
 }
 
 /* ---------- masthead ---------- */
@@ -274,6 +324,18 @@ p:last-child{margin-bottom:0}
   max-width:58ch;
 }
 
+.sec-head .stage-no{
+  display:block;
+  font-family:var(--display-2);
+  font-weight:600;
+  font-size:30px;
+  line-height:1;
+  letter-spacing:-.03em;
+  color:var(--cobalt);
+  font-variant-numeric:tabular-nums;
+  margin-bottom:6px;
+}
+
 /* ---------- hero ---------- */
 
 .hero{
@@ -383,6 +445,30 @@ p:last-child{margin-bottom:0}
     0 26px 60px -30px rgba(0,0,0,.55);
 }
 
+/* dark mode: the bezel is the light source, not an inverted rectangle */
+html[data-theme="dark"] .dial-frame{
+  border-color:#343B40;
+  box-shadow:
+    0 0 0 7px var(--paper),
+    0 0 0 8px #2F373C,
+    0 0 0 9px rgba(124,144,255,.10),
+    0 0 46px -6px rgba(124,144,255,.22),
+    0 0 120px -30px rgba(124,144,255,.30),
+    0 26px 60px -30px rgba(0,0,0,.9);
+}
+
+html[data-theme="dark"] .dial-frame::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  border-radius:50%;
+  pointer-events:none;
+  background:radial-gradient(circle at 50% 12%,
+    rgba(255,255,255,.055) 0%,
+    rgba(255,255,255,.015) 38%,
+    transparent 62%);
+}
+
 .dial-in{
   position:absolute;
   inset:0;
@@ -398,6 +484,27 @@ p:last-child{margin-bottom:0}
 }
 
 .dial-in::-webkit-scrollbar{width:0}
+
+/* guide geometry, drawn at the real 466 scale */
+.dial-guide{
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+  pointer-events:none;
+  color:var(--dial-dim);
+  z-index:2;
+}
+
+.dial-guide .safe{stroke-dasharray:2 6;stroke-width:1;opacity:.55}
+.dial-guide .measure{stroke-width:1;opacity:.30}
+.dial-guide text{
+  font-family:var(--util);
+  font-size:8.5px;
+  letter-spacing:.14em;
+  fill:currentColor;
+  text-transform:uppercase;
+}
 
 /* dimension callouts */
 .dim{
@@ -437,75 +544,141 @@ p:last-child{margin-bottom:0}
   color:var(--brass);
 }
 
-/* dial typography */
+/* dial typography — em-based so the font-scale control scales the whole page of text */
 .dial-in .d-h{
   font-family:var(--display);
   font-weight:700;
-  font-size:14px;
+  font-size:1.11em;
   letter-spacing:-.02em;
-  margin:0 0 9px;
+  margin:0 0 .72em;
   line-height:1.18;
   color:#fff;
 }
 
-.dial-in p{margin:0 0 10px;max-width:none}
+.dial-in p{margin:0 0 .8em;max-width:none}
+.dial-in p:last-child{margin-bottom:0}
 
 .dial-in .d-code{
   font-family:var(--util);
-  font-size:10.5px;
+  font-size:.83em;
   line-height:1.55;
   background:#161A1D;
   border-left:2px solid var(--cobalt);
-  padding:9px 10px;
-  margin:0 0 11px;
+  padding:.72em .8em;
+  margin:0 0 .9em;
   overflow-x:auto;
   white-space:pre;
   color:#D6DBD6;
+  scrollbar-width:thin;
 }
 
 .dial-in .d-math{
   font-family:var(--util);
-  font-size:11px;
+  font-size:.87em;
   text-align:center;
   color:#fff;
-  margin:0 0 11px;
+  margin:0 0 .9em;
   letter-spacing:.02em;
   overflow-x:auto;
   white-space:nowrap;
+  scrollbar-width:thin;
+}
+
+.dial-in .d-math.is-open{border-left:1px dashed #4A5258;text-align:left}
+
+.dial-in .d-quote{
+  margin:0 0 .9em;
+  padding-left:.85em;
+  border-left:2px solid #2C3236;
+  color:#C2C9C7;
+}
+
+.dial-in .d-rule{
+  border:0;
+  border-top:1px solid #2C3236;
+  margin:0 0 .9em;
+}
+
+.dial-in .d-list{
+  margin:0 0 .9em;
+  padding-left:1.1em;
+  list-style:none;
+}
+
+.dial-in .d-list li{
+  position:relative;
+  margin-bottom:.32em;
+}
+
+.dial-in .d-list li::before{
+  content:"—";
+  position:absolute;
+  left:-1.1em;
+  color:var(--cobalt);
+}
+
+.dial-in .d-list.is-ord{counter-reset:dl}
+.dial-in .d-list.is-ord li{counter-increment:dl}
+.dial-in .d-list.is-ord li::before{
+  content:counter(dl) ".";
+  color:var(--cobalt);
+  font-family:var(--util);
+  font-size:.85em;
 }
 
 .dial-in .d-table{
   border-top:1px solid #2C3236;
-  margin:0 0 11px;
+  margin:0 0 .9em;
+}
+
+.dial-in .d-record + .d-record{margin-top:.55em}
+
+.dial-in .d-record-h{
+  font-family:var(--util);
+  font-size:.83em;
+  letter-spacing:.1em;
+  text-transform:uppercase;
+  color:#9BE8D5;
+  padding:.35em 0 .3em;
 }
 
 .dial-in .d-row{
   display:flex;
   justify-content:space-between;
   gap:10px;
-  padding:5px 0;
+  padding:.36em 0;
   border-bottom:1px solid #1C2125;
-  font-size:11.5px;
+  font-size:.91em;
 }
 
 .dial-in .d-row span:first-child{color:var(--dial-dim)}
-.dial-in .d-row span:last-child{font-family:var(--util);font-size:10.5px}
+.dial-in .d-row span:last-child{font-family:var(--util);font-size:.91em}
 
 .dial-in code{
   font-family:var(--util);
-  font-size:10.5px;
+  font-size:.83em;
   background:#1A1E22;
   padding:1px 4px;
   color:#C9D2FF;
 }
 
-/* the "one text node" comparison */
+.dial-in .d-imath{
+  font-family:var(--util);
+  font-size:.92em;
+  color:#C9D2FF;
+  white-space:nowrap;
+}
+
+.dial-in a{color:#9BE8D5;text-decoration:underline;text-decoration-color:#3A5250}
+
+/* the "one text node" comparison: raw source, no block structure */
 .dial-in.wall{
   font-family:var(--util);
-  font-size:10.5px;
+  font-size:.83em;
   line-height:1.62;
   color:#8E969B;
   word-break:break-word;
+  white-space:normal;
 }
 
 .dial-in.wall b{color:#C4CBC9;font-weight:400}
@@ -553,6 +726,432 @@ p:last-child{margin-bottom:0}
   min-height:1.5em;
 }
 
+/* ---------- the answer bench ---------- */
+
+.bench{
+  border-top:1px solid var(--hair);
+  padding:70px 0 78px;
+}
+
+.bench-lede{
+  display:grid;
+  grid-template-columns:var(--gutter) minmax(0,1fr);
+  gap:0 28px;
+  margin-bottom:34px;
+}
+
+.bench-lede h2{
+  font-size:clamp(1.55rem,3.1vw,2.35rem);
+  margin-bottom:14px;
+}
+
+.bench-lede .lede{color:var(--steel);max-width:62ch}
+
+.bench-lede .disclaimer{
+  font-family:var(--util);
+  font-size:11.5px;
+  line-height:1.7;
+  color:var(--steel);
+  border-left:2px solid var(--brass);
+  padding-left:12px;
+  margin-top:18px;
+  max-width:66ch;
+}
+
+.bench-grid{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+  gap:20px;
+  align-items:stretch;
+}
+
+.bench-pane{
+  border:1px solid var(--hair);
+  background:color-mix(in srgb, var(--ink) 2.5%, var(--paper));
+  display:flex;
+  flex-direction:column;
+  min-width:0;
+}
+
+.bench-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:9px 13px;
+  border-bottom:1px solid var(--hair);
+  background:color-mix(in srgb, var(--ink) 3.5%, var(--paper));
+}
+
+.bench-head .label{font-size:10px}
+
+.bench-count{
+  font-family:var(--util);
+  font-size:10px;
+  color:var(--cobalt);
+  letter-spacing:.06em;
+  font-variant-numeric:tabular-nums;
+}
+
+.presets{
+  display:flex;
+  flex-wrap:wrap;
+  gap:0;
+  border-bottom:1px solid var(--hair);
+}
+
+.preset{
+  appearance:none;
+  background:none;
+  border:0;
+  border-right:1px solid var(--hair);
+  color:var(--steel);
+  font-family:var(--util);
+  font-size:10px;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+  padding:8px 11px;
+  cursor:pointer;
+}
+
+.preset:hover{color:var(--ink);background:color-mix(in srgb, var(--ink) 4%, transparent)}
+.preset[aria-pressed="true"]{color:var(--paper);background:var(--ink)}
+
+.bench-src{
+  width:100%;
+  flex:1 1 auto;
+  min-height:212px;
+  resize:vertical;
+  border:0;
+  background:none;
+  color:var(--ink);
+  font-family:var(--util);
+  font-size:12px;
+  line-height:1.7;
+  padding:13px 14px;
+  tab-size:2;
+  display:block;
+}
+
+.bench-src:focus-visible{outline:2px solid var(--cobalt);outline-offset:-2px}
+
+.chips{
+  list-style:none;
+  margin:0;
+  padding:12px;
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+  align-content:flex-start;
+  overflow:auto;
+  max-height:212px;
+  flex:1 1 auto;
+}
+
+.chip{
+  display:inline-flex;
+  align-items:baseline;
+  gap:6px;
+  border:1px solid var(--hair);
+  background:var(--paper);
+  padding:4px 7px;
+  font-family:var(--util);
+  font-size:10.5px;
+  letter-spacing:.02em;
+  color:var(--ink);
+  white-space:nowrap;
+}
+
+.chip-t{color:var(--cobalt)}
+.chip-n{color:var(--steel);font-size:9.5px;letter-spacing:.04em}
+.chip-code .chip-t,.chip-math .chip-t{color:var(--brass)}
+.chip-table .chip-t{color:#2F6B57}
+.chip-empty{color:var(--steel);border-style:dashed}
+
+html[data-theme="dark"] .chip-table .chip-t{color:#9BE8D5}
+
+.bench-tools{
+  display:flex;
+  align-items:center;
+  gap:18px;
+  flex-wrap:wrap;
+  margin:26px 0 8px;
+  padding:12px 0;
+  border-top:1px solid var(--hair);
+  border-bottom:1px solid var(--hair);
+}
+
+.tool{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  font-family:var(--util);
+  font-size:10.5px;
+  letter-spacing:.09em;
+  text-transform:uppercase;
+  color:var(--steel);
+}
+
+.tool-label{color:var(--steel)}
+
+.seg{display:flex;border:1px solid var(--hair)}
+
+.seg button{
+  appearance:none;
+  background:none;
+  border:0;
+  border-right:1px solid var(--hair);
+  color:var(--steel);
+  font-family:var(--util);
+  font-size:10px;
+  letter-spacing:.06em;
+  padding:5px 9px;
+  cursor:pointer;
+  font-variant-numeric:tabular-nums;
+}
+
+.seg button:last-child{border-right:0}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+.seg button:hover:not([aria-pressed="true"]){color:var(--ink)}
+
+.switch{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  cursor:pointer;
+  font-family:var(--util);
+  font-size:10.5px;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+  color:var(--steel);
+}
+
+.switch input{
+  appearance:none;
+  width:30px;
+  height:16px;
+  border:1px solid var(--steel);
+  background:var(--paper);
+  position:relative;
+  cursor:pointer;
+  margin:0;
+  flex:0 0 auto;
+}
+
+.switch input::after{
+  content:"";
+  position:absolute;
+  top:2px;
+  left:2px;
+  width:10px;
+  height:10px;
+  background:var(--steel);
+  transition:transform .14s ease,background .14s ease;
+}
+
+.switch input:checked{border-color:var(--cobalt)}
+.switch input:checked::after{transform:translateX(14px);background:var(--cobalt)}
+
+.bench-dials{
+  display:grid;
+  grid-template-columns:466px 466px;
+  gap:52px;
+  justify-content:center;
+  margin-top:34px;
+}
+
+.bench-dial{
+  width:466px;
+  max-width:100%;
+  position:relative;
+}
+
+.bench-dial .dial-frame{position:relative;inset:auto;width:100%;aspect-ratio:1}
+
+.bench-dial-cap{
+  display:flex;
+  align-items:baseline;
+  justify-content:space-between;
+  gap:12px;
+  margin-top:16px;
+  font-family:var(--util);
+  font-size:10.5px;
+  letter-spacing:.06em;
+  color:var(--steel);
+  text-transform:uppercase;
+}
+
+.bench-dial-cap b{color:var(--ink);font-weight:400;letter-spacing:.1em}
+.bench-dial-cap .tnum{color:var(--cobalt)}
+
+.bench-verdict{
+  font-family:var(--util);
+  font-size:11px;
+  line-height:1.7;
+  color:var(--steel);
+  margin-top:10px;
+  min-height:2.6em;
+}
+
+/* ordinary client: no scroll, hard cut */
+.dial-in.is-cut{
+  overflow:hidden;
+}
+
+.dial-in.is-cut::after{
+  content:"";
+  position:absolute;
+  left:0;
+  right:0;
+  bottom:0;
+  height:70px;
+  background:linear-gradient(to bottom, rgba(10,12,14,0) 0%, rgba(10,12,14,.92) 62%, var(--dial) 100%);
+  pointer-events:none;
+}
+
+.cut-mark{
+  position:absolute;
+  left:50%;
+  bottom:34px;
+  transform:translateX(-50%);
+  z-index:3;
+  font-family:var(--util);
+  font-size:9px;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  color:#8E969B;
+  white-space:nowrap;
+  display:none;
+}
+
+.is-cut .cut-mark{display:block}
+
+.latest{
+  position:absolute;
+  left:50%;
+  bottom:26px;
+  transform:translateX(-50%);
+  z-index:4;
+  appearance:none;
+  border:1px solid #3A4348;
+  background:#12171A;
+  color:#D7DEDA;
+  font-family:var(--util);
+  font-size:9.5px;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  padding:5px 11px;
+  cursor:pointer;
+  display:none;
+}
+
+.latest.on{display:block}
+.latest:hover{border-color:#9BE8D5;color:#9BE8D5}
+
+/* ---------- story: scroll-driven dial ---------- */
+
+.story{
+  display:grid;
+  grid-template-columns:minmax(0,1fr);
+}
+
+.story-dial{display:none}
+
+@media (min-width:1181px){
+  .story{
+    grid-template-columns:286px minmax(0,1fr);
+    gap:0 46px;
+    align-items:start;
+  }
+
+  .story-dial{
+    display:block;
+    grid-column:1;
+    position:sticky;
+    top:78px;
+    padding-top:74px;
+  }
+
+  .story-body{grid-column:2;min-width:0}
+
+  /* one numbering system at a time: the sticky dial owns the stage number */
+  .story-body .sec-head,
+  .story-body .sec-body{grid-template-columns:minmax(0,1fr)}
+  .story-body .sec-head > .rail,
+  .story-body .sec-body > .rail{display:none}
+  .story-body .sec-body > .col{grid-column:1}
+  .story-body .sec-head{margin-bottom:34px}
+}
+
+.story-stage{
+  position:relative;
+  width:100%;
+  aspect-ratio:1;
+}
+
+.story-stage .dial-frame{position:relative;inset:auto;width:100%;aspect-ratio:1}
+
+.story-cap{
+  margin-top:18px;
+  border-top:1px solid var(--hair);
+  padding-top:12px;
+}
+
+.story-cap .stage-no{
+  font-family:var(--display-2);
+  font-weight:600;
+  font-size:26px;
+  line-height:1;
+  letter-spacing:-.03em;
+  color:var(--cobalt);
+  font-variant-numeric:tabular-nums;
+  display:block;
+  margin-bottom:8px;
+}
+
+.story-cap .stage-t{
+  font-family:var(--util);
+  font-size:10.5px;
+  letter-spacing:.12em;
+  text-transform:uppercase;
+  color:var(--ink);
+  display:block;
+  min-height:2.4em;
+}
+
+.story-cap .stage-n{
+  font-family:var(--util);
+  font-size:10px;
+  line-height:1.6;
+  color:var(--steel);
+  display:block;
+  margin-top:8px;
+}
+
+.story-progress{
+  margin-top:14px;
+  height:2px;
+  background:var(--hair-soft);
+  position:relative;
+  overflow:hidden;
+}
+
+.story-progress i{
+  position:absolute;
+  inset:0 auto 0 0;
+  width:0;
+  background:var(--cobalt);
+  transform-origin:left center;
+}
+
+@supports (animation-timeline: scroll()){
+  .story-progress i{
+    animation:story-grow linear both;
+    animation-timeline:scroll(root block);
+  }
+  @keyframes story-grow{from{width:0}to{width:100%}}
+}
+
 /* ---------- spec table ---------- */
 
 .spec-table{
@@ -591,25 +1190,60 @@ p:last-child{margin-bottom:0}
 .plates{
   display:grid;
   grid-template-columns:repeat(auto-fill,minmax(148px,1fr));
-  gap:26px 20px;
+  gap:30px 22px;
   margin-top:8px;
 }
 
 .plate{margin:0}
 
+/* printed-plate texture: inner rule + registration marks, nothing else gains it */
+.plate-img{
+  position:relative;
+  max-width:200px;
+  padding:5px;
+  background:var(--plate);
+  border:1px solid var(--hair);
+}
+
+.plate-img::before{
+  content:"";
+  position:absolute;
+  inset:3px;
+  border:1px solid var(--hair-soft);
+  border-radius:50%;
+  pointer-events:none;
+  z-index:2;
+}
+
+.plate-img::after{
+  content:"";
+  position:absolute;
+  inset:-1px;
+  pointer-events:none;
+  background:
+    linear-gradient(var(--steel),var(--steel)) left 0 top 0/7px 1px no-repeat,
+    linear-gradient(var(--steel),var(--steel)) left 0 top 0/1px 7px no-repeat,
+    linear-gradient(var(--steel),var(--steel)) right 0 top 0/7px 1px no-repeat,
+    linear-gradient(var(--steel),var(--steel)) right 0 top 0/1px 7px no-repeat,
+    linear-gradient(var(--steel),var(--steel)) left 0 bottom 0/7px 1px no-repeat,
+    linear-gradient(var(--steel),var(--steel)) left 0 bottom 0/1px 7px no-repeat,
+    linear-gradient(var(--steel),var(--steel)) right 0 bottom 0/7px 1px no-repeat,
+    linear-gradient(var(--steel),var(--steel)) right 0 bottom 0/1px 7px no-repeat;
+  opacity:.55;
+}
+
 .plate img{
   display:block;
   width:100%;
-  max-width:200px;
   aspect-ratio:1;
   border-radius:50%;
   background:var(--dial);
   cursor:zoom-in;
-  border:1px solid var(--hair);
+  border:0;
   transition:box-shadow .18s ease;
 }
 
-.plate img:hover{box-shadow:0 0 0 3px var(--paper),0 0 0 4px var(--cobalt)}
+.plate img:hover{box-shadow:0 0 0 2px var(--paper),0 0 0 3px var(--cobalt)}
 
 .plate figcaption{
   margin-top:11px;
@@ -620,6 +1254,7 @@ p:last-child{margin-bottom:0}
   letter-spacing:.05em;
   color:var(--steel);
   max-width:200px;
+  line-height:1.5;
 }
 
 .plate figcaption b{
@@ -686,42 +1321,129 @@ p:last-child{margin-bottom:0}
   padding-bottom:9px;
 }
 
-/* ---------- adapters ---------- */
+/* ---------- provider matrix ---------- */
 
-.adapters{
-  border-top:1px solid var(--ink);
-  margin-top:4px;
+.matrix{
+  border:1px solid var(--hair);
+  background:color-mix(in srgb, var(--ink) 2.5%, var(--paper));
 }
 
-.adapter{
+.matrix-tabs{
+  display:flex;
+  flex-wrap:wrap;
+  border-bottom:1px solid var(--hair);
+}
+
+.mtab{
+  appearance:none;
+  background:none;
+  border:0;
+  border-right:1px solid var(--hair);
+  border-bottom:2px solid transparent;
+  color:var(--steel);
+  font-family:var(--util);
+  font-size:11px;
+  letter-spacing:.1em;
+  text-transform:uppercase;
+  padding:11px 17px;
+  cursor:pointer;
+}
+
+.mtab:hover{color:var(--ink)}
+.mtab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--cobalt);background:var(--paper)}
+
+.mpanel{display:none;padding:22px 20px 24px}
+.mpanel.on{display:block}
+
+.mrow{
   display:grid;
-  grid-template-columns:150px 1fr 168px;
-  gap:22px;
-  padding:17px 0;
+  grid-template-columns:132px minmax(0,1fr);
+  gap:0 18px;
+  padding:11px 0;
   border-bottom:1px solid var(--hair-soft);
   align-items:baseline;
 }
 
-.adapter .name{
-  font-family:var(--display);
-  font-weight:700;
-  font-size:14.5px;
-  letter-spacing:-.02em;
-}
+.mrow:last-child{border-bottom:0}
 
-.adapter .wire{
+.mrow dt{
   font-family:var(--util);
-  font-size:12px;
+  font-size:10px;
+  letter-spacing:.14em;
+  text-transform:uppercase;
   color:var(--steel);
 }
 
-.adapter .term{
+.mrow dd{
+  margin:0;
+  font-family:var(--util);
+  font-size:12px;
+  line-height:1.6;
+  color:var(--ink);
+  overflow-wrap:anywhere;
+}
+
+.mrow dd b{color:var(--cobalt);font-weight:400}
+.mrow dd .refuse{color:var(--steel)}
+
+.mrow dd code{
+  background:var(--code-bg);
+  padding:1px 4px;
+  font-size:11.5px;
+}
+
+.mnote{
+  margin-top:16px;
+  font-family:var(--util);
+  font-size:11px;
+  line-height:1.7;
+  color:var(--steel);
+  border-left:2px solid var(--brass);
+  padding-left:12px;
+}
+
+/* the worked example */
+.worked{
+  margin-top:30px;
+  border:1px solid var(--hair);
+  background:var(--code-bg);
+}
+
+.worked-head{
+  display:flex;
+  align-items:baseline;
+  justify-content:space-between;
+  gap:16px;
+  flex-wrap:wrap;
+  padding:11px 16px;
+  border-bottom:1px solid var(--hair);
+  background:color-mix(in srgb, var(--ink) 4%, var(--paper));
+}
+
+.worked-head .label{font-size:10px}
+.worked-head .src{font-family:var(--util);font-size:10px;color:var(--steel);letter-spacing:.04em}
+
+.worked pre{
+  margin:0;
+  padding:16px 18px;
   font-family:var(--util);
   font-size:11.5px;
-  color:var(--cobalt);
-  text-align:right;
-  letter-spacing:.02em;
+  line-height:1.75;
+  overflow-x:auto;
+  color:var(--ink);
+  white-space:pre;
 }
+
+.worked .diff{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);border-top:1px solid var(--hair)}
+
+.worked .side{padding:14px 16px}
+.worked .side + .side{border-left:1px solid var(--hair)}
+.worked .side .label{display:block;margin-bottom:8px;font-size:9.5px}
+.worked .side.before .label{color:var(--steel)}
+.worked .side.after .label{color:var(--cobalt)}
+.worked .side p{font-family:var(--util);font-size:11.5px;line-height:1.65;margin:0;color:var(--ink)}
+.worked .side .msg{color:var(--steel);display:block;margin-top:6px}
+.worked .side.after .msg{color:var(--ink)}
 
 /* ---------- sequence ---------- */
 
@@ -856,6 +1578,79 @@ p:last-child{margin-bottom:0}
   max-width:62ch;
 }
 
+/* ---------- verification status ---------- */
+
+.status{
+  width:100%;
+  border-collapse:collapse;
+  font-family:var(--util);
+  font-size:12px;
+}
+
+.status th{
+  text-align:left;
+  font-size:10px;
+  letter-spacing:.15em;
+  text-transform:uppercase;
+  color:var(--steel);
+  font-weight:400;
+  padding:0 14px 9px 0;
+  border-bottom:1px solid var(--ink);
+  white-space:nowrap;
+}
+
+.status td{
+  padding:11px 14px 11px 0;
+  border-bottom:1px solid var(--hair-soft);
+  vertical-align:top;
+  line-height:1.55;
+}
+
+.status td:first-child{color:var(--ink)}
+.status td:last-child{color:var(--steel);font-size:11px}
+.status tr:last-child td{border-bottom:0}
+
+.pill{
+  display:inline-block;
+  border:1px solid currentColor;
+  padding:1px 7px;
+  font-size:9px;
+  letter-spacing:.13em;
+  text-transform:uppercase;
+  white-space:nowrap;
+  line-height:1.7;
+}
+
+.pill-device{color:#2F6B57}
+.pill-emu{color:var(--brass)}
+.pill-source{color:var(--cobalt)}
+.pill-none{color:#A03A2A}
+
+html[data-theme="dark"] .pill-device{color:#7FD3B4}
+html[data-theme="dark"] .pill-none{color:#FF9C86}
+
+.status-legend{
+  display:flex;
+  gap:20px;
+  flex-wrap:wrap;
+  margin-top:20px;
+  font-family:var(--util);
+  font-size:10.5px;
+  color:var(--steel);
+  letter-spacing:.04em;
+}
+
+.status-note{
+  margin-top:22px;
+  font-family:var(--util);
+  font-size:11px;
+  line-height:1.75;
+  color:var(--steel);
+  max-width:76ch;
+  border-left:2px solid var(--brass);
+  padding-left:12px;
+}
+
 /* ---------- footer ---------- */
 
 .colophon{
@@ -908,6 +1703,7 @@ p:last-child{margin-bottom:0}
   color:var(--steel);
   letter-spacing:.015em;
   max-width:78ch;
+  overflow-wrap:anywhere;
 }
 
 /* ---------- lightbox ---------- */
@@ -934,12 +1730,18 @@ p:last-child{margin-bottom:0}
 
 /* ---------- responsive ---------- */
 
+@media (max-width:1180px){
+  .bench-dials{gap:40px}
+}
+
 @media (max-width:1080px){
   .ruler{display:none}
   .sheet{padding-left:0}
   .masthead-in{padding-left:28px}
   :root{--gutter:64px}
   .dial-stage{width:min(466px,70vw)}
+  .bench-dials{grid-template-columns:minmax(0,1fr);justify-items:center;gap:44px}
+  .bench-dial{width:min(466px,84vw)}
 }
 
 @media (max-width:900px){
@@ -948,14 +1750,16 @@ p:last-child{margin-bottom:0}
   .dim-right{display:none}
   .transform{grid-template-columns:minmax(0,1fr)}
   .tf-arrow{transform:rotate(90deg);padding:6px 0}
-  .adapter{grid-template-columns:minmax(0,1fr);gap:5px}
-  .adapter .term{text-align:left}
+  .bench-grid{grid-template-columns:minmax(0,1fr)}
+  .worked .diff{grid-template-columns:minmax(0,1fr)}
+  .worked .side + .side{border-left:0;border-top:1px solid var(--hair)}
+  .mrow{grid-template-columns:minmax(0,1fr);gap:4px}
 }
 
 @media (max-width:720px){
   :root{--gutter:0px}
-  .sec-head,.sec-body,.colo-grid{grid-template-columns:minmax(0,1fr);gap:0}
-  .sec-head > .rail,.sec-body > .rail{display:none}
+  .sec-head,.sec-body,.colo-grid,.bench-lede{grid-template-columns:minmax(0,1fr);gap:0}
+  .sec-head > .rail,.sec-body > .rail,.bench-lede > .rail{display:none}
   .sec-body > .col,.colo-grid > .col{grid-column:1}
   .masthead .spec{display:none}
   .masthead nav{gap:16px}
@@ -965,16 +1769,32 @@ p:last-child{margin-bottom:0}
   .limit{grid-template-columns:minmax(0,1fr);gap:4px}
   body{font-size:16px}
   .dial-in{padding:44px 38px 48px;font-size:12px}
+  .dim-top{display:none}
+  .dim-right{display:none}
+  .status th:nth-child(3),.status td:nth-child(3){display:none}
+  .bench-tools{gap:12px}
+}
+
+@media (max-width:420px){
+  .masthead-in{gap:12px;padding:0 16px}
+  .masthead nav{gap:12px}
+  .masthead nav a[href="changelog.html"]{display:none}
+  .brand{font-size:13px;gap:7px}
+  .btn{font-size:10.5px;padding:11px 14px;letter-spacing:.1em}
+  .actions{gap:10px}
+  .bench-tools{gap:10px 14px}
+  .bench-dials{gap:36px}
 }
 
 @media (prefers-reduced-motion:reduce){
   html{scroll-behavior:auto}
   *{transition-duration:.01ms !important;animation-duration:.01ms !important}
+  .story-progress i{animation:none;width:0}
 }
 
 /* print: the sheet metaphor survives */
 @media print{
-  .ruler,.masthead,.modes,.actions,.lb{display:none !important}
+  .ruler,.masthead,.modes,.actions,.lb,.bench-tools,.story-dial{display:none !important}
   .sheet{padding-left:0}
   body{background:#fff;color:#000}
   .sec{break-inside:avoid}
@@ -983,7 +1803,11 @@ p:last-child{margin-bottom:0}
 </head>
 <body>
 
-<div class="ruler" aria-hidden="true"></div>
+<div class="ruler" aria-hidden="true">
+  <div class="ruler-scale"></div>
+  <div class="ruler-mark" id="rulerMark"></div>
+  <div class="ruler-read"><span id="rulerRead" class="tnum">466</span><span class="ruler-unit">px</span></div>
+</div>
 
 <header class="masthead">
   <div class="masthead-in">
@@ -997,10 +1821,12 @@ p:last-child{margin-bottom:0}
     </a>
     <span class="spec">Wear OS · BYOK · MIT</span>
     <nav>
-      <a href="#reader">Reader</a>
+      <a href="#bench">Bench</a>
+      <a href="#reader" class="opt">Reader</a>
       <a href="#adapters" class="opt">Adapters</a>
       <a href="#install" class="opt">Install</a>
-      <a href="#limits" class="opt">Limits</a>
+      <a href="#status" class="opt">Status</a>
+      <a href="changelog.html">Changelog</a>
       <a href="https://github.com/michaelxdips/NiroWear">Source</a>
       <button class="tbtn" id="theme" aria-label="Switch colour scheme">◐</button>
     </nav>
@@ -1036,17 +1862,17 @@ p:last-child{margin-bottom:0}
           <a class="btn" href="https://github.com/michaelxdips/NiroWear-Beta/releases/download/v0.1.0-beta.6/NiroWear-0.1.0-beta.6.apk">
             Download APK <span class="sz">3.6 MB · v0.1.0-beta.6</span>
           </a>
-          <a class="btn line" href="https://github.com/michaelxdips/NiroWear">Read the source</a>
+          <a class="btn line" href="#bench">Try the renderer</a>
         </div>
       </div>
 
-      <div class="dial-stage">
+      <div class="dial-stage js-measure">
         <div class="dim dim-top">466 px</div>
         <div class="dim dim-right">96 px safe radius</div>
 
         <div class="dial-frame">
           <div class="dial-in" id="dial" tabindex="0" role="region" aria-label="Example answer rendered inside a 466 pixel circular viewport">
-            <!-- filled by script: blocks mode -->
+            <noscript><p>This viewport is rendered by script. The same answer appears as static text in the sections below.</p></noscript>
           </div>
         </div>
       </div>
@@ -1063,8 +1889,158 @@ p:last-child{margin-bottom:0}
   </div>
 </section>
 
+<!-- ============ THE ANSWER BENCH ============ -->
+<section class="bench" id="bench">
+  <div class="wrap">
+
+    <div class="bench-lede">
+      <div class="rail"><span class="num">00</span></div>
+      <div>
+        <h2>The Answer Bench.</h2>
+        <p class="lede">
+          Paste an answer on the left and watch what the product does with it: the source is parsed
+          into blocks, and each block lays itself out inside a real 466 px circle. Nothing here is a
+          screenshot.
+        </p>
+        <p class="disclaimer">
+          This is a demonstration of the shape, not the app. The tokenizer below is about 130 lines
+          and covers headings, fences, tables, <code>$$</code>, lists and inline code — a deliberate
+          subset, not CommonMark. NiroWear's own renderer is Kotlin, handles more, and is the only
+          implementation that ships.
+        </p>
+      </div>
+    </div>
+
+    <div class="bench-grid">
+
+      <div class="bench-pane">
+        <div class="bench-head">
+          <span class="label">Source — Markdown</span>
+          <span class="bench-count" id="src-count">0 lines</span>
+        </div>
+        <div class="presets" role="group" aria-label="Example answers">
+          <button class="preset" type="button" data-preset="0" aria-pressed="true">Code + prose</button>
+          <button class="preset" type="button" data-preset="1" aria-pressed="false">Wide matrix</button>
+          <button class="preset" type="button" data-preset="2" aria-pressed="false">Long table</button>
+          <button class="preset" type="button" data-preset="3" aria-pressed="false">LaTeX torture</button>
+        </div>
+        <textarea class="bench-src" id="benchSrc" spellcheck="false" aria-label="Markdown source for the answer bench">## How AES-GCM detects tampering
+
+GCM turns a block cipher into an authenticated cipher. It returns ciphertext and a 128-bit tag; decryption refuses to return plaintext unless the tag verifies.
+
+- The tag covers the ciphertext **and** any associated data.
+- Changing one byte invalidates it.
+- Comparison happens in constant time.
+
+```kotlin
+Cipher c = Cipher.getInstance("AES/GCM/NoPadding")
+c.init(DECRYPT_MODE, key, GCMParameterSpec(128, iv))
+c.updateAAD(token)
+byte[] plain = c.doFinal(ciphertext)
+```
+
+$$T = GHASH_H(A \parallel C) \oplus E_K(J_0)$$
+
+| Property | Value |
+|---|---|
+| Tag length | 128 bit |
+| IV | 96 bit |
+| On failure | no plaintext |
+
+A failed decrypt is a generic rejection: the caller learns that the payload is not authentic, and nothing more.</textarea>
+      </div>
+
+      <div class="bench-pane">
+        <div class="bench-head">
+          <span class="label">Blocks — parsed per keystroke</span>
+          <span class="bench-count" id="block-count">0 blocks</span>
+        </div>
+        <ul class="chips" id="chips" aria-label="Parsed block list"></ul>
+        <p class="bench-verdict" id="benchSummary" aria-live="polite">
+          Every answer is a list of typed blocks, never one giant text node.
+        </p>
+      </div>
+
+    </div>
+
+    <div class="bench-tools">
+      <div class="tool">
+        <span class="tool-label">Font scale</span>
+        <div class="seg" role="group" aria-label="Font scale">
+          <button type="button" data-scale="1" aria-pressed="true">1.0</button>
+          <button type="button" data-scale="1.15" aria-pressed="false">1.15</button>
+          <button type="button" data-scale="1.3" aria-pressed="false">1.3</button>
+        </div>
+      </div>
+
+      <div class="tool">
+        <span class="tool-label">Stream</span>
+        <button class="mode" type="button" id="replay" aria-pressed="false" style="border:1px solid var(--hair);padding:5px 10px;font-size:10px">Replay</button>
+      </div>
+
+      <label class="switch">
+        <input type="checkbox" id="truncate" checked>
+        Ordinary client truncates
+      </label>
+    </div>
+
+    <div class="bench-dials">
+
+      <div class="bench-dial js-measure">
+        <div class="dial-frame">
+          <div class="dial-in" id="benchDial" tabindex="0" role="region" aria-label="Your answer rendered as semantic blocks in a 466 pixel circle"></div>
+          <svg class="dial-guide" viewBox="0 0 466 466" aria-hidden="true">
+            <circle class="safe" cx="233" cy="233" r="137" fill="none" stroke="currentColor"/>
+            <path class="measure" d="M46 52V30h0M420 30v22M46 436v-22M420 414v22" fill="none" stroke="currentColor"/>
+            <text x="233" y="22" text-anchor="middle">466 px</text>
+            <text x="233" y="452" text-anchor="middle">96 px safe radius</text>
+          </svg>
+          <button class="latest" type="button" id="latest">Latest ↓</button>
+        </div>
+        <div class="bench-dial-cap">
+          <b>NiroWear</b>
+          <span class="tnum"><span id="benchSize">466</span> px · blocks</span>
+        </div>
+        <p class="bench-verdict" id="benchVerdict">Scrollable. Nothing is cut; wide content pans.</p>
+      </div>
+
+      <div class="bench-dial js-measure">
+        <div class="dial-frame">
+          <div class="dial-in is-cut" id="ordinaryDial" tabindex="0" role="region" aria-label="The same answer in an ordinary client, truncated to fit"></div>
+          <div class="cut-mark" id="cutMark">answer ends here</div>
+        </div>
+        <div class="bench-dial-cap">
+          <b>Ordinary client</b>
+          <span class="tnum"><span id="ordinarySize">466</span> px · one node</span>
+        </div>
+        <p class="bench-verdict" id="ordinaryVerdict">Truncated to fit.</p>
+      </div>
+
+    </div>
+
+  </div>
+</section>
+
+<div class="story">
+
+  <aside class="story-dial" aria-hidden="true">
+    <div class="story-stage js-measure">
+      <div class="dial-frame">
+        <div class="dial-in" id="storyDial"></div>
+      </div>
+    </div>
+    <div class="story-cap">
+      <span class="stage-no" id="stageNo">01</span>
+      <span class="stage-t" id="stageTitle">The question</span>
+      <span class="stage-n" id="stageNote">One continuous answer, advanced by the page scroll.</span>
+    </div>
+    <div class="story-progress"><i></i></div>
+  </aside>
+
+  <div class="story-body">
+
 <!-- ============ 01 CONSTRAINT ============ -->
-<section class="sec" id="constraint">
+<section class="sec" id="constraint" data-stage="1">
   <div class="wrap">
     <div class="sec-head">
       <div class="rail"><span class="num">01</span></div>
@@ -1099,7 +2075,7 @@ p:last-child{margin-bottom:0}
 </section>
 
 <!-- ============ 02 READER ============ -->
-<section class="sec" id="reader">
+<section class="sec" id="reader" data-stage="2">
   <div class="wrap">
     <div class="sec-head">
       <div class="rail"><span class="num">02</span></div>
@@ -1148,7 +2124,8 @@ p:last-child{margin-bottom:0}
 
         <p style="margin-top:26px;color:var(--steel);font-size:15px;max-width:64ch">
           No cell is dropped and no column is silently hidden. A wide table becomes a list of
-          labelled records, which is the only form that survives a 28-character measure.
+          labelled records, which is the only form that survives a 28-character measure. The bench
+          above runs this same transform on the <em>Long table</em> preset.
         </p>
       </div>
     </div>
@@ -1156,7 +2133,7 @@ p:last-child{margin-bottom:0}
 </section>
 
 <!-- ============ 03 ADAPTERS ============ -->
-<section class="sec" id="adapters">
+<section class="sec" id="adapters" data-stage="3">
   <div class="wrap">
     <div class="sec-head">
       <div class="rail"><span class="num">03</span></div>
@@ -1171,42 +2148,104 @@ p:last-child{margin-bottom:0}
     </div>
 
     <div class="sec-body">
-      <div class="rail"><span class="label">Terminal</span></div>
+      <div class="rail"><span class="label">Wire</span></div>
       <div class="col">
-        <div class="adapters">
-          <div class="adapter">
-            <span class="name">OpenAI</span>
-            <span class="wire">Responses API</span>
-            <span class="term">response.completed</span>
+
+        <div class="matrix">
+          <div class="matrix-tabs" role="tablist" aria-label="Provider adapters">
+            <button class="mtab" role="tab" aria-selected="true" aria-controls="mx-openai" id="mt-openai">OpenAI</button>
+            <button class="mtab" role="tab" aria-selected="false" aria-controls="mx-anthropic" id="mt-anthropic">Anthropic</button>
+            <button class="mtab" role="tab" aria-selected="false" aria-controls="mx-gemini" id="mt-gemini">Gemini</button>
+            <button class="mtab" role="tab" aria-selected="false" aria-controls="mx-compat" id="mt-compat">Compatible</button>
           </div>
-          <div class="adapter">
-            <span class="name">Anthropic</span>
-            <span class="wire">Messages API</span>
-            <span class="term">message_stop</span>
+
+          <div class="mpanel on" id="mx-openai" role="tabpanel" aria-labelledby="mt-openai">
+            <dl style="margin:0">
+              <div class="mrow"><dt>Protocol</dt><dd>Responses API · <code>POST {base}/responses</code></dd></div>
+              <div class="mrow"><dt>Auth</dt><dd><code>Authorization: Bearer &lt;key&gt;</code></dd></div>
+              <div class="mrow"><dt>Terminal event</dt><dd><b>response.completed</b> — and the final text it restates must equal the accumulated deltas.</dd></div>
+              <div class="mrow"><dt>Refuses to guess</dt><dd class="refuse">Unknown events inside the <code>response.*</code> namespace are treated as informational; anything outside it is fatal. <code>[DONE]</code> and a closed socket are never accepted as success.</dd></div>
+              <div class="mrow"><dt>Body</dt><dd><code>store:false</code>, <code>instructions</code>, <code>input[]</code>. Nothing is persisted upstream by this client's request.</dd></div>
+            </dl>
           </div>
-          <div class="adapter">
-            <span class="name">Gemini</span>
-            <span class="wire">generateContent, SSE</span>
-            <span class="term">finishReason</span>
+
+          <div class="mpanel" id="mx-anthropic" role="tabpanel" aria-labelledby="mt-anthropic">
+            <dl style="margin:0">
+              <div class="mrow"><dt>Protocol</dt><dd>Messages API · <code>POST {base}/messages</code></dd></div>
+              <div class="mrow"><dt>Auth</dt><dd><code>Authorization: Bearer &lt;key&gt;</code> plus <code>anthropic-version: 2023-06-01</code></dd></div>
+              <div class="mrow"><dt>Terminal event</dt><dd><b>message_stop</b> — reachable only after <code>message_delta</code> reported a <code>stop_reason</code> of <code>end_turn</code>, <code>stop_sequence</code> or <code>refusal</code>, and only if text was seen.</dd></div>
+              <div class="mrow"><dt>Refuses to guess</dt><dd class="refuse"><code>max_tokens</code> is required, so it is read from the model's own metadata. It is never derived from a model name. When metadata is unavailable the code uses 8192 and says so in a comment — a fallback, not a documented default.</dd></div>
+              <div class="mrow"><dt>Roles</dt><dd>Adjacent same-role turns are merged at the wire boundary; canonical history stays provider-neutral.</dd></div>
+            </dl>
           </div>
-          <div class="adapter">
-            <span class="name">Compatible</span>
-            <span class="wire">Chat Completions</span>
-            <span class="term">finish_reason</span>
+
+          <div class="mpanel" id="mx-gemini" role="tabpanel" aria-labelledby="mt-gemini">
+            <dl style="margin:0">
+              <div class="mrow"><dt>Protocol</dt><dd>GenerateContent over SSE · <code>POST {base}/models/{model}:streamGenerateContent?alt=sse</code></dd></div>
+              <div class="mrow"><dt>Auth</dt><dd><code>x-goog-api-key: &lt;key&gt;</code> — not an <code>Authorization</code> header.</dd></div>
+              <div class="mrow"><dt>Terminal event</dt><dd><b>finishReason: "STOP"</b>. Every other reason, including <code>MAX_TOKENS</code>, is a failure rather than a short answer.</dd></div>
+              <div class="mrow"><dt>Refuses to guess</dt><dd class="refuse">Roles must alternate <code>user</code>/<code>model</code>; the adapter merges adjacent turns instead of hoping the endpoint tolerates them. Error identity is read from <code>status</code> and <code>details[].reason</code> before the HTTP code.</dd></div>
+              <div class="mrow"><dt>Failure map</dt><dd>HTTP 400 + <code>status:"INVALID_ARGUMENT"</code> + <code>details[].reason:"API_KEY_INVALID"</code> → <b>API key rejected</b>, not a bad request. See the worked example below.</dd></div>
+            </dl>
+          </div>
+
+          <div class="mpanel" id="mx-compat" role="tabpanel" aria-labelledby="mt-compat">
+            <dl style="margin:0">
+              <div class="mrow"><dt>Protocol</dt><dd>Chat Completions · <code>POST {base}/chat/completions</code></dd></div>
+              <div class="mrow"><dt>Auth</dt><dd><code>Authorization: Bearer &lt;key&gt;</code></dd></div>
+              <div class="mrow"><dt>Terminal event</dt><dd><b>finish_reason: "stop"</b> — the only value treated as success.</dd></div>
+              <div class="mrow"><dt>Refuses to guess</dt><dd class="refuse">Capabilities are never inferred from a model ID. If discovery fails you type the ID yourself and chat anyway; discovery and authentication are separate checks.</dd></div>
+              <div class="mrow"><dt>Base URL</dt><dd>Validated as an API base, not a request endpoint. Credentials, query strings and fragments are rejected.</dd></div>
+            </dl>
           </div>
         </div>
 
-        <p style="margin-top:24px;color:var(--steel);font-size:15px;max-width:64ch">
-          Discovery and authentication are separate checks. If a compatible endpoint will not
-          list its models, you type the ID yourself and chat anyway.
+        <div class="worked">
+          <div class="worked-head">
+            <span class="label">Worked example — why the protocol follows the provider type</span>
+            <span class="src">commit 7c75017 · GeminiProvider.kt</span>
+          </div>
+<pre>POST {base}/models/{model}:streamGenerateContent?alt=sse
+x-goog-api-key: &lt;key&gt;
+
+HTTP/1.1 400
+{
+  "error": {
+    "code":    400,
+    "status":  "INVALID_ARGUMENT",
+    "details": [ { "reason": "API_KEY_INVALID" } ]
+  }
+}</pre>
+          <div class="diff">
+            <div class="side before">
+              <span class="label">Before — code only</span>
+              <p>400 → <code>ProviderError.HTTP</code></p>
+              <span class="msg">“Provider rejected request. Check configuration.”</span>
+            </div>
+            <div class="side after">
+              <span class="label">After — status and reason first</span>
+              <p>400 + <code>INVALID_ARGUMENT</code> + <code>API_KEY_INVALID</code> → <code>INVALID_CREDENTIAL</code></p>
+              <span class="msg">“API key rejected. Check your key.”</span>
+            </div>
+          </div>
+        </div>
+
+        <p class="mnote">
+          Google returns a rejected key as HTTP 400, the same code it uses for a malformed request, so the
+          status code alone cannot separate “wrong key” from “bad request”. Only
+          <code>details[].reason</code> carries <code>API_KEY_INVALID</code>. At Anthropic that same 400 means
+          something else again; at OpenAI it means something else a third time. That is the whole argument for
+          one adapter per provider type: the mapping is a property of the wire protocol, not of the model
+          name printed in the picker.
         </p>
+
       </div>
     </div>
   </div>
 </section>
 
 <!-- ============ 04 KEY ============ -->
-<section class="sec" id="key">
+<section class="sec" id="key" data-stage="4">
   <div class="wrap">
     <div class="sec-head">
       <div class="rail"><span class="num">04</span></div>
@@ -1268,7 +2307,7 @@ p:last-child{margin-bottom:0}
 </section>
 
 <!-- ============ 05 PLATES ============ -->
-<section class="sec" id="plates">
+<section class="sec" id="plates" data-stage="5">
   <div class="wrap">
     <div class="sec-head">
       <div class="rail"><span class="num">05</span></div>
@@ -1286,27 +2325,27 @@ p:last-child{margin-bottom:0}
       <div class="col">
         <div class="plates">
           <figure class="plate">
-            <img src="screenshots/chat-home.png" alt="New chat screen with keyboard and voice entry points" loading="lazy">
+            <div class="plate-img"><img src="screenshots/chat-home.png" alt="New chat screen with keyboard and voice entry points" loading="lazy" width="466" height="466"></div>
             <figcaption><b>I</b> New chat</figcaption>
           </figure>
           <figure class="plate">
-            <img src="screenshots/real-response.png" alt="Streamed answer to a real question about Rayleigh scattering" loading="lazy">
+            <div class="plate-img"><img src="screenshots/real-response.png" alt="Streamed answer to a real question about Rayleigh scattering" loading="lazy" width="466" height="466"></div>
             <figcaption><b>II</b> Streamed answer</figcaption>
           </figure>
           <figure class="plate">
-            <img src="screenshots/streaming-stop.png" alt="Active streaming with the Stop control" loading="lazy">
+            <div class="plate-img"><img src="screenshots/streaming-stop.png" alt="Active streaming with the Stop control" loading="lazy" width="466" height="466"></div>
             <figcaption><b>III</b> Streaming, Stop</figcaption>
           </figure>
           <figure class="plate">
-            <img src="screenshots/code-reader.png" alt="Kotlin code block in a horizontally pannable reader" loading="lazy">
+            <div class="plate-img"><img src="screenshots/code-reader.png" alt="Kotlin code block in a horizontally pannable reader" loading="lazy" width="466" height="466"></div>
             <figcaption><b>IV</b> Code reader</figcaption>
           </figure>
           <figure class="plate">
-            <img src="screenshots/table-record.png" alt="Markdown table converted to labelled vertical records" loading="lazy">
+            <div class="plate-img"><img src="screenshots/table-record.png" alt="Markdown table converted to labelled vertical records" loading="lazy" width="466" height="466"></div>
             <figcaption><b>V</b> Table as records</figcaption>
           </figure>
           <figure class="plate">
-            <img src="screenshots/history.png" alt="Conversation history screen" loading="lazy">
+            <div class="plate-img"><img src="screenshots/history.png" alt="Conversation history screen" loading="lazy" width="466" height="466"></div>
             <figcaption><b>VI</b> History</figcaption>
           </figure>
         </div>
@@ -1316,7 +2355,7 @@ p:last-child{margin-bottom:0}
 </section>
 
 <!-- ============ 06 INSTALL ============ -->
-<section class="sec" id="install">
+<section class="sec" id="install" data-stage="6">
   <div class="wrap">
     <div class="sec-head">
       <div class="rail"><span class="num">06</span></div>
@@ -1366,8 +2405,7 @@ cd NiroWear
 adb install -r app/build/outputs/apk/debug/app-debug.apk</pre>
           </div>
           <p class="fine">
-            The debug variant links an experimental native-math renderer that is not cleared for
-            redistribution. Build debug for your own device only.
+            Debug and release now share one native-math renderer; the old debug-only stub is gone.
           </p>
         </div>
 
@@ -1391,7 +2429,7 @@ adb install -r NiroWear-0.1.0-beta.6.apk</pre>
 </section>
 
 <!-- ============ 07 LIMITS ============ -->
-<section class="sec" id="limits">
+<section class="sec" id="limits" data-stage="7">
   <div class="wrap">
     <div class="sec-head">
       <div class="rail"><span class="num">07</span></div>
@@ -1438,6 +2476,110 @@ adb install -r NiroWear-0.1.0-beta.6.apk</pre>
   </div>
 </section>
 
+<!-- ============ 08 STATUS ============ -->
+<section class="sec" id="status" data-stage="7">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="rail"><span class="num">08</span></div>
+      <div>
+        <h2>What is actually verified.</h2>
+        <p class="lede">
+          Every claim on this page, sorted by the strength of the evidence behind it. A badge wall
+          would be shorter and less useful.
+        </p>
+      </div>
+    </div>
+
+    <div class="sec-body">
+      <div class="rail"><span class="label">Evidence</span></div>
+      <div class="col">
+
+        <table class="status">
+          <thead>
+            <tr><th scope="col">Claim</th><th scope="col">Evidence</th><th scope="col">Where</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Four adapters, four distinct wire protocols</td>
+              <td><span class="pill pill-source">Source</span> One class per provider type; request builders and decoders are separate files.</td>
+              <td>app/src/main/java/com/nirowear/provider/</td>
+            </tr>
+            <tr>
+              <td>EOF is never treated as success</td>
+              <td><span class="pill pill-source">Source</span> Each decoder requires its own terminal event; a closed socket without one is a failure.</td>
+              <td>OpenAiProvider, AnthropicProvider, GeminiProvider, OpenAiCompatibleProvider</td>
+            </tr>
+            <tr>
+              <td>Renderer emits semantic blocks, never one text node</td>
+              <td><span class="pill pill-source">Source</span> <span class="pill pill-device">JVM</span> 118 tests / 22 suites, 0 failures, 0 errors, 0 skipped.</td>
+              <td>ContentBlock.kt; app/build/test-results/testDebugUnitTest/</td>
+            </tr>
+            <tr>
+              <td>Native LaTeX typesetting in release builds</td>
+              <td><span class="pill pill-emu">Emulator</span> Release APK produced Math canvas nodes for a display integral and inline math; 30 TTF files present.</td>
+              <td>Release notes, v0.1.0-beta.6</td>
+            </tr>
+            <tr>
+              <td>Credential pairing encrypts end to end</td>
+              <td><span class="pill pill-emu">Emulator</span> Exercised over loopback only. A real phone on a real LAN has not been tested — the emulator sits behind NAT.</td>
+              <td>PairingServerTest; beta.5 notes</td>
+            </tr>
+            <tr>
+              <td>Static analysis is clean</td>
+              <td><span class="pill pill-device">JVM</span> lintDebug: 0 errors, 4 warnings (2 GradleDependency, 2 InlinedApi), both pre-existing.</td>
+              <td>app/build/reports/lint-results-debug.xml</td>
+            </tr>
+            <tr>
+              <td>Touch reach, battery and thermals on a real watch</td>
+              <td><span class="pill pill-none">Unverified</span> No physical Xiaomi Watch 2 is attached to the build machine.</td>
+              <td>—</td>
+            </tr>
+            <tr>
+              <td>Voice transcription accuracy</td>
+              <td><span class="pill pill-none">Unverified</span> Intent dispatch is tested; recognition quality belongs to the platform and was not measured.</td>
+              <td>—</td>
+            </tr>
+            <tr>
+              <td>Link taps reach a destination on a paired device</td>
+              <td><span class="pill pill-none">Unverified</span> Unit-tested; the emulator has no ACTION_VIEW handler to observe.</td>
+              <td>—</td>
+            </tr>
+            <tr>
+              <td>TalkBack reads the full answer in order</td>
+              <td><span class="pill pill-none">Unverified</span> Semantics and target geometry are tested; audio output was never listened to.</td>
+              <td>—</td>
+            </tr>
+            <tr>
+              <td>Every official provider works with production credentials</td>
+              <td><span class="pill pill-emu">Partial</span> Controlled endpoints plus one third-party Responses endpoint. Not a live sweep of all four.</td>
+              <td>docs/memory/PROVIDERS.md</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="status-legend">
+          <span><span class="pill pill-source">Source</span> read from the shipping code</span>
+          <span><span class="pill pill-device">JVM</span> executed on this machine</span>
+          <span><span class="pill pill-emu">Emulator</span> executed on a 466 px AVD</span>
+          <span><span class="pill pill-none">Unverified</span> no evidence exists</span>
+        </div>
+
+        <p class="status-note">
+          The JVM and lint figures above were read from result XML on 2026-10-22 17:48, not quoted from
+          memory. The connected-test suite is deliberately absent from this table: its last recorded run
+          was on the emulator, and it was not re-run while this page was written, so presenting it as
+          current would be the exact kind of claim this section exists to prevent. Test sources are not
+          published in this repository by policy, so the result XML is not linkable from here.
+        </p>
+
+      </div>
+    </div>
+  </div>
+</section>
+
+  </div>
+</div>
+
 </main>
 
 <footer class="colophon">
@@ -1450,6 +2592,7 @@ adb install -r NiroWear-0.1.0-beta.6.apk</pre>
           <nav class="colo-links">
             <a href="https://github.com/michaelxdips/NiroWear">Source</a>
             <a href="https://github.com/michaelxdips/NiroWear-Beta/releases">Releases</a>
+            <a href="changelog.html">Changelog</a>
             <a href="https://github.com/michaelxdips/NiroWear/blob/main/docs/release/PRIVACY.md">Privacy</a>
             <a href="https://github.com/michaelxdips/NiroWear/blob/main/CONTRIBUTING.md">Contributing</a>
             <a href="https://github.com/michaelxdips/NiroWear/issues">Issues</a>
@@ -1478,59 +2621,258 @@ adb install -r NiroWear-0.1.0-beta.6.apk</pre>
 (function () {
   "use strict";
 
-  /* ---------------- content for the dial ---------------- */
+  var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-  var BLOCKS = [
-    '<h3 class="d-h">How AES-GCM detects tampering</h3>',
-    '<p>GCM is a mode of operation that turns a block cipher into an authenticated cipher. It produces ciphertext and a 128-bit tag; decryption refuses to return plaintext unless the tag verifies.</p>',
-    '<p>Both come from one key stream. The tag is computed over the ciphertext and any associated data, so changing a single byte invalidates it.</p>',
-    '<div class="d-math">T = GHASH<sub>H</sub>(A ‖ C) ⊕ E<sub>K</sub>(J<sub>0</sub>)</div>',
-    '<p>The ciphertext is never authenticated by inspection — the tag is recomputed and compared in constant time:</p>',
-    '<pre class="d-code">Cipher c = Cipher.getInstance("AES/GCM/NoPadding");\n' +
-    'c.init(DECRYPT_MODE, key, new GCMParameterSpec(128, iv));\n' +
-    'c.updateAAD(token);\n' +
-    'byte[] plain = c.doFinal(ciphertext); // AEADBadTagException</pre>',
-    '<p>In NiroWear that is why a failed decrypt is a generic rejection: the caller learns that the payload is not authentic, and nothing more.</p>',
-    '<div class="d-table">',
-    '<div class="d-row"><span>Tag length</span><span>128 bit</span></div>',
-    '<div class="d-row"><span>IV</span><span>96 bit</span></div>',
-    '<div class="d-row"><span>AAD</span><span>session token</span></div>',
-    '<div class="d-row"><span>On failure</span><span>no plaintext</span></div>',
-    '</div>',
-    '<p>Because the tag covers the associated data, a payload encrypted for one session cannot be replayed into another.</p>'
-  ].join("");
+  /* ============================================================
+     1. A deliberately partial block tokenizer.
+     It exists to show the shape of the pipeline, not to be a
+     second implementation of the product. Covers: headings,
+     fences, tables, $$, lists, quotes, rules, paragraphs,
+     inline code / strong / em / inline math / links.
+     ============================================================ */
 
-  var WALL =
-    '<b>## How AES-GCM detects tampering</b> GCM is a mode of operation that turns a block ' +
-    'cipher into an authenticated cipher. It produces ciphertext and a 128-bit tag; ' +
-    'decryption refuses to return plaintext unless the tag verifies. Both come from one key ' +
-    'stream. The tag is computed over the ciphertext and any associated data, so changing a ' +
-    'single byte invalidates it. **T = GHASH_H(A || C) XOR E_K(J_0)** The ciphertext is never ' +
-    'authenticated by inspection - the tag is recomputed and compared in constant time: ' +
-    '`Cipher c = Cipher.getInstance("AES/GCM/NoPadding"); c.init(DECRYPT_MODE, key, new ' +
-    'GCMParameterSpec(128, iv)); c.updateAAD(token); byte[] plain = c.doFinal(ciphertext);` ' +
-    'In NiroWear that is why a failed decrypt is a generic rejection: the caller learns that ' +
-    'the payload is not authentic, and nothing more. Tag length 128 bit. IV 96 bit. AAD ' +
-    'session token. On failure no plaintext. Because the tag covers the associated data, a ' +
-    'payload encrypted for one session cannot be replayed into another.';
+  var FENCE = /^(\s*)(`{3,}|~{3,})\s*([A-Za-z0-9_+.-]*)\s*$/;
+  var HEAD  = /^(#{1,6})\s+(.*?)\s*#*\s*$/;
+  var HR    = /^\s{0,3}([-*_])(?:\s*\1){2,}\s*$/;
+  var UL    = /^(\s*)[-*+]\s+(.*)$/;
+  var OL    = /^(\s*)\d{1,9}[.)]\s+(.*)$/;
+  var QUOTE = /^\s{0,3}>\s?(.*)$/;
+  var TSEP  = /^\s*\|?\s*:?-{2,}:?\s*(?:\|\s*:?-{2,}:?\s*)*\|?\s*$/;
+
+  function esc(s) {
+    return String(s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function isBlockStart(line, next) {
+    if (!line.trim()) return true;
+    if (FENCE.test(line) || HEAD.test(line) || HR.test(line)) return true;
+    if (UL.test(line) || OL.test(line) || QUOTE.test(line)) return true;
+    if (/^\s*\$\$/.test(line)) return true;
+    if (next !== undefined && line.indexOf("|") !== -1 && TSEP.test(next)) return true;
+    return false;
+  }
+
+  function cells(line) {
+    var s = line.trim();
+    if (s.charAt(0) === "|") s = s.slice(1);
+    if (s.charAt(s.length - 1) === "|") s = s.slice(0, -1);
+    var out = [], cur = "", escaped = false;
+    for (var i = 0; i < s.length; i++) {
+      var ch = s.charAt(i);
+      if (escaped) { cur += ch; escaped = false; continue; }
+      if (ch === "\\") { cur += ch; escaped = true; continue; }
+      if (ch === "|") { out.push(cur.trim()); cur = ""; continue; }
+      cur += ch;
+    }
+    out.push(cur.trim());
+    return out;
+  }
+
+  function tokenize(src) {
+    var lines = String(src).replace(/\r\n?/g, "\n").split("\n");
+    var blocks = [], i = 0, budget = 6000;
+
+    while (i < lines.length && budget-- > 0) {
+      var line = lines[i], next = lines[i + 1];
+      if (!line.trim()) { i++; continue; }
+
+      var f = FENCE.exec(line);
+      if (f) {
+        var mark = f[2].charAt(0), len = f[2].length, lang = f[3] || "", body = [];
+        i++;
+        while (i < lines.length) {
+          var t = lines[i].trim();
+          var isClose = t.length >= len && t.split("").every(function (c) { return c === mark; });
+          if (isClose) { i++; break; }
+          body.push(lines[i]); i++;
+        }
+        blocks.push({ type: "code", lang: lang, text: body.join("\n") });
+        continue;
+      }
+
+      if (/^\s*\$\$/.test(line)) {
+        var one = line.trim(), inner = one.slice(2);
+        if (inner.length > 2 && inner.slice(-2) === "$$" && inner.slice(0, -2).indexOf("$$") === -1) {
+          blocks.push({ type: "math", text: inner.slice(0, -2).trim(), open: false });
+          i++; continue;
+        }
+        var math = [], closed = false;
+        if (inner.trim()) math.push(inner);
+        i++;
+        while (i < lines.length) {
+          var cur = lines[i].trim();
+          if (cur.slice(-2) === "$$") { math.push(cur.slice(0, -2)); i++; closed = true; break; }
+          math.push(lines[i]); i++;
+        }
+        blocks.push({ type: "math", text: math.join("\n").trim(), open: !closed });
+        continue;
+      }
+
+      var h = HEAD.exec(line);
+      if (h) { blocks.push({ type: "heading", level: h[1].length, text: h[2] }); i++; continue; }
+
+      if (HR.test(line)) { blocks.push({ type: "divider" }); i++; continue; }
+
+      if (line.indexOf("|") !== -1 && next !== undefined && TSEP.test(next)) {
+        var head = cells(line), rows = [];
+        i += 2;
+        while (i < lines.length && lines[i].trim() && lines[i].indexOf("|") !== -1) {
+          rows.push(cells(lines[i])); i++;
+        }
+        blocks.push({ type: "table", head: head, rows: rows });
+        continue;
+      }
+
+      var li = UL.exec(line) || OL.exec(line);
+      if (li) {
+        var ordered = !UL.test(line), items = [];
+        while (i < lines.length) {
+          var m2 = UL.exec(lines[i]) || OL.exec(lines[i]);
+          if (!m2) break;
+          items.push(m2[2]);
+          i++;
+        }
+        blocks.push({ type: "list", ordered: ordered, items: items });
+        continue;
+      }
+
+      if (QUOTE.test(line)) {
+        var q = [];
+        while (i < lines.length && QUOTE.test(lines[i])) { q.push(QUOTE.exec(lines[i])[1]); i++; }
+        blocks.push({ type: "quote", text: q.join(" ").trim() });
+        continue;
+      }
+
+      var para = [];
+      while (i < lines.length && lines[i].trim() && !isBlockStart(lines[i], lines[i + 1])) {
+        para.push(lines[i].trim()); i++;
+      }
+      if (para.length) blocks.push({ type: "paragraph", text: para.join(" ") });
+      else i++;
+    }
+
+    return blocks;
+  }
+
+  /* inline spans: code first, as a placeholder, so $ and * inside code survive */
+  function inline(s) {
+    var codes = [];
+    var t = String(s).replace(/`([^`]+)`/g, function (_, c) {
+      codes.push(c);
+      return "\u0000" + (codes.length - 1) + "\u0000";
+    });
+    t = esc(t);
+    t = t.replace(/\$([^$\n]+)\$/g, '<span class="d-imath">$1</span>');
+    t = t.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+    t = t.replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>");
+    t = t.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" rel="noopener">$1</a>');
+    t = t.replace(/\u0000(\d+)\u0000/g, function (_, n) { return "<code>" + esc(codes[+n]) + "</code>"; });
+    return t;
+  }
+
+  function blocksToHtml(blocks) {
+    var out = [];
+    blocks.forEach(function (b) {
+      if (b.type === "heading") {
+        // Level 2, always: these are sample answers inside a labelled region, and a
+        // document may not jump h1 -> h3. The source level is kept for the chip label.
+        out.push('<h2 class="d-h">' + inline(b.text) + "</h2>");
+      } else if (b.type === "paragraph") {
+        out.push("<p>" + inline(b.text) + "</p>");
+      } else if (b.type === "code") {
+        out.push('<pre class="d-code">' + esc(b.text) + "</pre>");
+      } else if (b.type === "math") {
+        out.push('<div class="d-math' + (b.open ? " is-open" : "") + '">' + esc(b.text) + "</div>");
+      } else if (b.type === "quote") {
+        out.push('<blockquote class="d-quote">' + inline(b.text) + "</blockquote>");
+      } else if (b.type === "divider") {
+        out.push('<hr class="d-rule">');
+      } else if (b.type === "list") {
+        out.push('<ul class="d-list' + (b.ordered ? " is-ord" : "") + '">' +
+          b.items.map(function (it) { return "<li>" + inline(it) + "</li>"; }).join("") + "</ul>");
+      } else if (b.type === "table") {
+        out.push('<div class="d-table">' + b.rows.map(function (r) {
+          var label = inline(r[0] || "");
+          var rest = r.slice(1).map(function (c, idx) {
+            return '<div class="d-row"><span>' + inline(b.head[idx + 1] || "") + "</span><span>" + inline(c) + "</span></div>";
+          }).join("");
+          return '<div class="d-record"><div class="d-record-h">' + label + "</div>" + rest + "</div>";
+        }).join("") + "</div>");
+      }
+    });
+    return out.join("");
+  }
+
+  function chipHtml(blocks) {
+    if (!blocks.length) return '<li class="chip chip-empty">no blocks yet</li>';
+    return blocks.map(function (b) {
+      var note = "";
+      if (b.type === "heading") note = "h" + b.level;
+      else if (b.type === "code") note = (b.lang || "plain") + " · " + b.text.split("\n").length + " ln";
+      else if (b.type === "math") note = b.open ? "unclosed" : b.text.length + " ch";
+      else if (b.type === "table") note = Math.max(0, b.head.length - 1) + " col · " + b.rows.length + " row";
+      else if (b.type === "list") note = b.items.length + " item";
+      else if (b.type === "paragraph") note = b.text.length + " ch";
+      return '<li class="chip chip-' + b.type + '"><span class="chip-t">' + b.type +
+        '</span><span class="chip-n">' + esc(note) + "</span></li>";
+    }).join("");
+  }
+
+  /* ============================================================
+     2. Hero dial
+     ============================================================ */
+
+  var HERO_MD = [
+    "## How AES-GCM detects tampering",
+    "",
+    "GCM is a mode of operation that turns a block cipher into an authenticated cipher. It produces ciphertext and a 128-bit tag; decryption refuses to return plaintext unless the tag verifies.",
+    "",
+    "Both come from one key stream. The tag is computed over the ciphertext and any associated data, so changing a single byte invalidates it.",
+    "",
+    "$$T = GHASH_H(A \\parallel C) \\oplus E_K(J_0)$$",
+    "",
+    "The ciphertext is never authenticated by inspection — the tag is recomputed and compared in constant time:",
+    "",
+    "```",
+    "Cipher c = Cipher.getInstance(\"AES/GCM/NoPadding\");",
+    "c.init(DECRYPT_MODE, key, new GCMParameterSpec(128, iv));",
+    "c.updateAAD(token);",
+    "byte[] plain = c.doFinal(ciphertext); // AEADBadTagException",
+    "```",
+    "",
+    "In NiroWear that is why a failed decrypt is a generic rejection: the caller learns that the payload is not authentic, and nothing more.",
+    "",
+    "| Property | Value |",
+    "|---|---|",
+    "| Tag length | 128 bit |",
+    "| IV | 96 bit |",
+    "| AAD | session token |",
+    "| On failure | no plaintext |",
+    "",
+    "Because the tag covers the associated data, a payload encrypted for one session cannot be replayed into another."
+  ].join("\n");
 
   var dial = document.getElementById("dial");
   var note = document.getElementById("mode-note");
-  var modes = Array.prototype.slice.call(document.querySelectorAll(".mode"));
+  var modes = Array.prototype.slice.call(document.querySelectorAll(".mode[data-mode]"));
 
   var NOTES = {
     blocks: "The same answer, rendered the way NiroWear renders it. Scroll inside the dial.",
     wall: "One text node. Markdown syntax, code indentation and the formula all collapse into running prose."
   };
 
-  function render(mode) {
+  function renderHero(mode) {
     if (!dial) return;
     if (mode === "wall") {
       dial.className = "dial-in wall";
-      dial.innerHTML = WALL;
+      dial.textContent = HERO_MD;
     } else {
       dial.className = "dial-in";
-      dial.innerHTML = BLOCKS;
+      dial.innerHTML = blocksToHtml(tokenize(HERO_MD));
     }
     dial.scrollTop = 0;
     if (note) note.textContent = NOTES[mode] || "";
@@ -1540,12 +2882,482 @@ adb install -r NiroWear-0.1.0-beta.6.apk</pre>
   }
 
   modes.forEach(function (b) {
-    b.addEventListener("click", function () { render(b.getAttribute("data-mode")); });
+    b.addEventListener("click", function () { renderHero(b.getAttribute("data-mode")); });
   });
 
-  render("blocks");
+  renderHero("blocks");
 
-  /* ---------------- theme ---------------- */
+  /* ============================================================
+     3. The Answer Bench
+     ============================================================ */
+
+  var PRESETS = [
+    [
+      "## How AES-GCM detects tampering",
+      "",
+      "GCM turns a block cipher into an authenticated cipher. It returns ciphertext and a 128-bit tag; decryption refuses to return plaintext unless the tag verifies.",
+      "",
+      "- The tag covers the ciphertext **and** any associated data.",
+      "- Changing one byte invalidates it.",
+      "- Comparison happens in constant time.",
+      "",
+      "```kotlin",
+      "Cipher c = Cipher.getInstance(\"AES/GCM/NoPadding\")",
+      "c.init(DECRYPT_MODE, key, GCMParameterSpec(128, iv))",
+      "c.updateAAD(token)",
+      "byte[] plain = c.doFinal(ciphertext)",
+      "```",
+      "",
+      "$$T = GHASH_H(A \\parallel C) \\oplus E_K(J_0)$$",
+      "",
+      "| Property | Value |",
+      "|---|---|",
+      "| Tag length | 128 bit |",
+      "| IV | 96 bit |",
+      "| On failure | no plaintext |",
+      "",
+      "A failed decrypt is a generic rejection: the caller learns that the payload is not authentic, and nothing more."
+    ].join("\n"),
+
+    [
+      "## Rotation matrix, 4×4",
+      "",
+      "A rigid rotation about the z axis, written out because the answer needs every entry:",
+      "",
+      "$$R_z(\\theta) = \\begin{pmatrix} \\cos\\theta & -\\sin\\theta & 0 & 0 \\\\ \\sin\\theta & \\cos\\theta & 0 & 0 \\\\ 0 & 0 & 1 & 0 \\\\ 0 & 0 & 0 & 1 \\end{pmatrix}$$",
+      "",
+      "The last row is what makes it homogeneous rather than a bare 3×3. Drop it and translations stop composing with rotations.",
+      "",
+      "| Entry | Meaning |",
+      "|---|---|",
+      "| $R_{11}$ | cos θ |",
+      "| $R_{21}$ | sin θ |",
+      "| $R_{44}$ | 1 |",
+      "",
+      "Pan the formula above. It is not shrunk to fit — that would make the subscripts unreadable at this measure."
+    ].join("\n"),
+
+    [
+      "## Model comparison",
+      "",
+      "| Model | Speed | Context | Cost / Mtok | Notes |",
+      "|---|---|---|---|---|",
+      "| Aurora | Fast | 128k | 0.15 | Cheapest tier, good for extraction |",
+      "| Basalt | Slow | 1M | 3.00 | Long documents, expensive per token |",
+      "| Cinder | Mixed | 32k | 0.60 | Mid tier, best reasoning per dollar |",
+      "| Dolerite | Fast | 200k | 0.40 | Vision capable, not used here |",
+      "| Ember | Slow | 128k | 1.20 | Strong on code, weak on prose |",
+      "",
+      "Five columns cannot be a grid on this screen. Each row becomes a labelled record instead, and no cell is dropped."
+    ].join("\n"),
+
+    [
+      "## LaTeX torture",
+      "",
+      "An integral with limits, a nested fraction, a sum, and a cases block:",
+      "",
+      "$$\\int_{-\\infty}^{\\infty} \\frac{1}{\\sqrt{2\\pi\\sigma^2}} \\exp\\left(-\\frac{(x-\\mu)^2}{2\\sigma^2}\\right) dx = 1$$",
+      "",
+      "$$\\sum_{k=1}^{n} \\frac{1}{k^2} = \\frac{\\pi^2}{6} \\quad\\text{and}\\quad f(x) = \\begin{cases} x^2 & x \\ge 0 \\\\ -x & x < 0 \\end{cases}$$",
+      "",
+      "A matrix that is deliberately too wide for 466 px:",
+      "",
+      "$$\\begin{pmatrix} a_{11} & a_{12} & a_{13} & a_{14} & a_{15} & a_{16} \\\\ a_{21} & a_{22} & a_{23} & a_{24} & a_{25} & a_{26} \\\\ a_{31} & a_{32} & a_{33} & a_{34} & a_{35} & a_{36} \\end{pmatrix}$$",
+      "",
+      "The last one pans. NiroWear never shrinks a wide formula until it becomes unreadable; a swipe is cheaper than a squint.",
+      "",
+      "Inline math also works: $E = mc^2$ and $\\nabla \\cdot \\mathbf{E} = \\rho/\\varepsilon_0$.",
+      "",
+      "> A refused formula falls back to readable source text. It never renders blank."
+    ].join("\n")
+  ];
+
+  var src = document.getElementById("benchSrc");
+  var chips = document.getElementById("chips");
+  var blockCount = document.getElementById("block-count");
+  var srcCount = document.getElementById("src-count");
+  var summary = document.getElementById("benchSummary");
+  var benchDial = document.getElementById("benchDial");
+  var ordinaryDial = document.getElementById("ordinaryDial");
+  var benchVerdict = document.getElementById("benchVerdict");
+  var ordinaryVerdict = document.getElementById("ordinaryVerdict");
+  var cutMark = document.getElementById("cutMark");
+  var latest = document.getElementById("latest");
+  var benchFrame = benchDial ? benchDial.closest(".bench-dial") : null;
+
+  var currentBlocks = [];
+  var follow = true;
+  var streamTimer = null;
+
+  function measureDials() {
+    Array.prototype.slice.call(document.querySelectorAll(".js-measure")).forEach(function (el) {
+      var w = Math.round(el.getBoundingClientRect().width);
+      if (el.classList.contains("bench-dial")) {
+        var tag = el.querySelector(".bench-dial-cap .tnum span");
+        if (tag) tag.textContent = w;
+      }
+    });
+    var read = document.getElementById("rulerRead");
+    if (!read) return;
+    var best = null, bestDist = Infinity;
+    Array.prototype.slice.call(document.querySelectorAll(".js-measure")).forEach(function (el) {
+      var r = el.getBoundingClientRect();
+      if (r.bottom < 0 || r.top > window.innerHeight) return;
+      var dist = Math.abs((r.top + r.bottom) / 2 - window.innerHeight / 2);
+      if (dist < bestDist) { bestDist = dist; best = r; }
+    });
+    if (best) read.textContent = Math.round(best.width);
+  }
+
+  function countUnreachable() {
+    if (!ordinaryDial) return 0;
+    var h = ordinaryDial.clientHeight;
+    var nodes = ordinaryDial.children;
+    var hidden = 0;
+    for (var i = 0; i < nodes.length; i++) {
+      if (nodes[i].offsetTop + nodes[i].offsetHeight > h - 8) hidden++;
+    }
+    return hidden;
+  }
+
+  function renderBench() {
+    if (!src || !benchDial) return;
+    var text = src.value;
+    currentBlocks = tokenize(text);
+
+    if (chips) chips.innerHTML = chipHtml(currentBlocks);
+    if (blockCount) blockCount.textContent = currentBlocks.length + (currentBlocks.length === 1 ? " block" : " blocks");
+    if (srcCount) srcCount.textContent = text.split("\n").length + " lines";
+
+    var html = blocksToHtml(currentBlocks);
+    benchDial.innerHTML = html;
+    ordinaryDial.innerHTML = html;
+
+    if (summary) {
+      summary.textContent = currentBlocks.length
+        ? currentBlocks.length + " blocks: " + currentBlocks.map(function (b) { return b.type; }).join(", ") + "."
+        : "Nothing to parse yet.";
+    }
+
+    updateCut();
+    measureDials();
+  }
+
+  function updateCut() {
+    if (!ordinaryDial) return;
+    var truncate = document.getElementById("truncate");
+    var on = truncate ? truncate.checked : true;
+    ordinaryDial.classList.toggle("is-cut", on);
+    ordinaryDial.scrollTop = 0;
+
+    var hidden = countUnreachable();
+    var total = currentBlocks.length;
+
+    if (on) {
+      var lost = Math.max(0, Math.min(total, hidden));
+      ordinaryVerdict.textContent = lost
+        ? "Truncated to fit — " + lost + " of " + total + " blocks are unreachable."
+        : "Truncated to fit — this answer happens to fit.";
+      if (cutMark) cutMark.textContent = lost ? "answer ends here · " + lost + " blocks lost" : "answer ends here";
+    } else {
+      ordinaryVerdict.textContent = "Truncation off: the ordinary column can scroll too, so the only difference left is block structure.";
+      if (cutMark) cutMark.textContent = "answer ends here";
+    }
+
+    if (benchVerdict) {
+      var sc = benchDial.scrollHeight, cl = benchDial.clientHeight;
+      benchVerdict.textContent = sc > cl + 2
+        ? "Scrollable: " + Math.round(sc) + " px of content in a " + Math.round(cl) + " px viewport."
+        : "Fits without scrolling at this font scale.";
+    }
+  }
+
+  if (src) {
+    var pending = false;
+    src.addEventListener("input", function () {
+      if (pending) return;
+      pending = true;
+      window.requestAnimationFrame(function () { pending = false; renderBench(); });
+    });
+  }
+
+  Array.prototype.slice.call(document.querySelectorAll(".preset")).forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var idx = +btn.getAttribute("data-preset");
+      src.value = PRESETS[idx];
+      Array.prototype.slice.call(document.querySelectorAll(".preset")).forEach(function (b) {
+        b.setAttribute("aria-pressed", b === btn ? "true" : "false");
+      });
+      stopStream();
+      renderBench();
+    });
+  });
+
+  Array.prototype.slice.call(document.querySelectorAll(".seg button")).forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var scale = +btn.getAttribute("data-scale");
+      Array.prototype.slice.call(document.querySelectorAll(".seg button")).forEach(function (b) {
+        b.setAttribute("aria-pressed", b === btn ? "true" : "false");
+      });
+      if (benchDial) benchDial.style.fontSize = (12.6 * scale) + "px";
+      if (ordinaryDial) ordinaryDial.style.fontSize = (12.6 * scale) + "px";
+      updateCut();
+    });
+  });
+
+  var truncateBox = document.getElementById("truncate");
+  if (truncateBox) truncateBox.addEventListener("change", updateCut);
+
+  /* the real streaming rule: follow only while the reader is at the bottom */
+  function atBottom(el) {
+    return el.scrollHeight - el.scrollTop - el.clientHeight < 26;
+  }
+
+  if (benchDial) {
+    benchDial.addEventListener("scroll", function () {
+      if (!follow && atBottom(benchDial)) {
+        follow = true;
+        if (latest) latest.classList.remove("on");
+      }
+    });
+  }
+
+  if (latest) {
+    latest.addEventListener("click", function () {
+      follow = true;
+      latest.classList.remove("on");
+      if (benchDial) benchDial.scrollTop = benchDial.scrollHeight;
+    });
+  }
+
+  function stopStream() {
+    if (streamTimer) { window.clearInterval(streamTimer); streamTimer = null; }
+    var replay = document.getElementById("replay");
+    if (replay) replay.setAttribute("aria-pressed", "false");
+  }
+
+  var replayBtn = document.getElementById("replay");
+  if (replayBtn) {
+    replayBtn.addEventListener("click", function () {
+      if (streamTimer) { stopStream(); return; }
+      var blocks = tokenize(src.value);
+      if (!blocks.length) return;
+      if (reduce) { renderBench(); return; }
+
+      replayBtn.setAttribute("aria-pressed", "true");
+      follow = true;
+      if (latest) latest.classList.remove("on");
+      benchDial.innerHTML = "";
+      benchDial.scrollTop = 0;
+
+      var at = 0;
+      streamTimer = window.setInterval(function () {
+        at++;
+        benchDial.insertAdjacentHTML("beforeend", blocksToHtml([blocks[at - 1]]));
+        if (follow) benchDial.scrollTop = benchDial.scrollHeight;
+        else if (latest) latest.classList.add("on");
+        if (at >= blocks.length) stopStream();
+      }, 320);
+    });
+  }
+
+  if (benchDial) {
+    benchDial.addEventListener("wheel", function () {
+      if (streamTimer && !atBottom(benchDial)) {
+        follow = false;
+        if (latest) latest.classList.add("on");
+      }
+    }, { passive: true });
+  }
+
+  renderBench();
+
+  /* ============================================================
+     4. Scroll-linked dial narrative
+     ============================================================ */
+
+  var STAGES = {
+    1: {
+      no: "01",
+      title: "The question",
+      note: "A watch-shaped question arrives. 28–34 characters per line.",
+      md: [
+        "**You**",
+        "",
+        "Why does a watch need its own renderer?",
+        "",
+        "**NiroWear**",
+        "",
+        "Because 466 px cannot hold a paragraph the way a phone can. The measure is 28–34 characters, so structure carries the meaning."
+      ].join("\n")
+    },
+    2: {
+      no: "02",
+      title: "Streaming",
+      note: "Tokens arrive as blocks; the reader follows only while you are at the bottom.",
+      md: [
+        "## Rendering, as it arrives",
+        "",
+        "The answer is parsed into blocks while it streams. A heading becomes a heading the moment its line completes; a fence opens a code block and holds it until it closes.",
+        "",
+        "Nothing is re-flowed into one text node at the end, because there is no end yet.",
+        "",
+        "Partial content stays visible after an interruption."
+      ].join("\n")
+    },
+    3: {
+      no: "03",
+      title: "Code block",
+      note: "Fenced code keeps its indentation and pans horizontally.",
+      md: [
+        "## Decode one frame",
+        "",
+        "```kotlin",
+        "val event = Json.parseToJsonElement(payload)",
+        "  .jsonObject[\"type\"]?.jsonPrimitive?.content",
+        "when (event) {",
+        "  \"message_stop\" -> Completed",
+        "  else -> Unit",
+        "}",
+        "```",
+        "",
+        "The block keeps its own background and a left rule, so it never reads as prose."
+      ].join("\n")
+    },
+    4: {
+      no: "04",
+      title: "Wide formula",
+      note: "A formula too wide for the circle pans instead of shrinking.",
+      md: [
+        "## Wide content pans",
+        "",
+        "$$\\int_{-\\infty}^{\\infty} e^{-x^2} dx = \\sqrt{\\pi}$$",
+        "",
+        "That one fits. This one does not, and it is not allowed to shrink:",
+        "",
+        "$$\\sum_{i=1}^{n}\\sum_{j=1}^{m} a_{ij} x_i y_j = \\mathbf{x}^{\\mathsf{T}} A \\mathbf{y}$$",
+        "",
+        "A swipe is cheaper than a squint."
+      ].join("\n")
+    },
+    5: {
+      no: "05",
+      title: "Table becomes records",
+      note: "Four columns cannot be a grid at this measure. Each row becomes a record.",
+      md: [
+        "## Tables become records",
+        "",
+        "| Model | Speed | Context |",
+        "|---|---|---|",
+        "| Aurora | Fast | 128k |",
+        "| Basalt | Slow | 1M |",
+        "| Cinder | Mixed | 32k |",
+        "",
+        "No cell is dropped and no column is hidden."
+      ].join("\n")
+    },
+    6: {
+      no: "06",
+      title: "Interrupted, and kept",
+      note: "Stop cancels the request and keeps what arrived. It is never replayed.",
+      md: [
+        "## Interrupted",
+        "",
+        "The answer was mid-sentence when the request was cancelled. The partial text is already durable:",
+        "",
+        "> Stop cancels the HTTP call, persists what arrived, and settles before the next send.",
+        "",
+        "Nothing is replayed automatically. You decide what happens next."
+      ].join("\n")
+    },
+    7: {
+      no: "07",
+      title: "Complete",
+      note: "The terminal event arrived, so the answer is finished — not merely quiet.",
+      md: [
+        "## Complete",
+        "",
+        "A stream that simply stops is an interruption. This one ended on its protocol's terminal event:",
+        "",
+        "- `response.completed`",
+        "- `message_stop`",
+        "- `finishReason: STOP`",
+        "- `finish_reason: stop`",
+        "",
+        "That is the difference between an answer and a silence."
+      ].join("\n")
+    }
+  };
+
+  var storyDial = document.getElementById("storyDial");
+  var stageNo = document.getElementById("stageNo");
+  var stageTitle = document.getElementById("stageTitle");
+  var stageNote = document.getElementById("stageNote");
+  var sections = Array.prototype.slice.call(document.querySelectorAll("[data-stage]"));
+
+  function setStage(n) {
+    var s = STAGES[n] || STAGES[1];
+    if (storyDial && storyDial.getAttribute("data-stage") !== String(n)) {
+      storyDial.setAttribute("data-stage", String(n));
+      storyDial.innerHTML = blocksToHtml(tokenize(s.md));
+      storyDial.scrollTop = 0;
+    }
+    if (stageNo) stageNo.textContent = s.no;
+    if (stageTitle) stageTitle.textContent = s.title;
+    if (stageNote) stageNote.textContent = s.note;
+  }
+
+  if (sections.length && "IntersectionObserver" in window) {
+    var seen = {};
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        seen[e.target.id] = e.isIntersecting ? e.intersectionRatio : 0;
+      });
+      var bestId = null, best = 0;
+      Object.keys(seen).forEach(function (id) {
+        if (seen[id] > best) { best = seen[id]; bestId = id; }
+      });
+      if (bestId) {
+        var el = document.getElementById(bestId);
+        setStage(+el.getAttribute("data-stage"));
+      }
+    }, { rootMargin: "-40% 0px -40% 0px", threshold: [0, 0.01, 0.25, 0.5, 1] });
+
+    sections.forEach(function (s) { io.observe(s); });
+  }
+
+  setStage(1);
+
+  /* ============================================================
+     5. Provider matrix
+     ============================================================ */
+
+  var mtabs = Array.prototype.slice.call(document.querySelectorAll(".mtab"));
+
+  function selectTab(tab, list, attr, panelAttr) {
+    list.forEach(function (t) {
+      var on = t === tab;
+      t.setAttribute(attr, on ? "true" : "false");
+      var panel = document.getElementById(t.getAttribute(panelAttr));
+      if (panel) panel.classList.toggle("on", on);
+    });
+  }
+
+  mtabs.forEach(function (tab) {
+    tab.addEventListener("click", function () {
+      selectTab(tab, mtabs, "aria-selected", "aria-controls");
+    });
+    tab.addEventListener("keydown", function (e) {
+      var i = mtabs.indexOf(tab), next = null;
+      if (e.key === "ArrowRight") next = mtabs[(i + 1) % mtabs.length];
+      if (e.key === "ArrowLeft") next = mtabs[(i - 1 + mtabs.length) % mtabs.length];
+      if (next) { e.preventDefault(); next.focus(); selectTab(next, mtabs, "aria-selected", "aria-controls"); }
+    });
+  });
+
+  /* ============================================================
+     6. Theme
+     ============================================================ */
 
   var root = document.documentElement;
   var stored = null;
@@ -1566,7 +3378,9 @@ adb install -r NiroWear-0.1.0-beta.6.apk</pre>
     });
   }
 
-  /* ---------------- install tabs ---------------- */
+  /* ============================================================
+     7. Install tabs
+     ============================================================ */
 
   var tabs = Array.prototype.slice.call(document.querySelectorAll(".tab"));
   tabs.forEach(function (tab) {
@@ -1580,7 +3394,9 @@ adb install -r NiroWear-0.1.0-beta.6.apk</pre>
     });
   });
 
-  /* ---------------- copy ---------------- */
+  /* ============================================================
+     8. Copy
+     ============================================================ */
 
   Array.prototype.slice.call(document.querySelectorAll(".cp")).forEach(function (btn) {
     btn.addEventListener("click", function () {
@@ -1614,7 +3430,9 @@ adb install -r NiroWear-0.1.0-beta.6.apk</pre>
     document.body.removeChild(ta);
   }
 
-  /* ---------------- lightbox ---------------- */
+  /* ============================================================
+     9. Lightbox
+     ============================================================ */
 
   var lb = document.getElementById("lb");
   var lbImg = lb ? lb.querySelector("img") : null;
@@ -1635,6 +3453,36 @@ adb install -r NiroWear-0.1.0-beta.6.apk</pre>
   document.addEventListener("keydown", function (e) {
     if (e.key === "Escape" && lb) lb.classList.remove("on");
   });
+
+  /* ============================================================
+     10. Ruler + measurement
+     ============================================================ */
+
+  var mark = document.getElementById("rulerMark");
+
+  function tick() {
+    measureDials();
+    if (mark) {
+      var max = document.documentElement.scrollHeight - window.innerHeight;
+      var p = max > 0 ? Math.min(1, Math.max(0, window.scrollY / max)) : 0;
+      var travel = window.innerHeight - 150;
+      mark.style.transform = "translateY(" + Math.round(p * travel) + "px)";
+    }
+  }
+
+  var ticking = false;
+  window.addEventListener("scroll", function () {
+    if (ticking) return;
+    ticking = true;
+    window.requestAnimationFrame(function () { ticking = false; tick(); });
+  }, { passive: true });
+
+  window.addEventListener("resize", function () {
+    measureDials();
+    updateCut();
+  });
+
+  tick();
 })();
 </script>
 </body>

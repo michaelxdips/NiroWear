@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NiroWear — changelog</title>
+<meta name="description" content="Every NiroWear release, with the artifact identity and the checks that were actually run for each one.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="branding/nirowear-mark.svg">
+<style>
+:root{
+  --paper:#ECEDE9;--ink:#101315;--steel:#5A6167;--hair:#C9CCC5;--hair-soft:#DBDED7;
+  --cobalt:#1D39C4;--brass:#7E5C1C;--dial:#0A0C0E;--code-bg:#DFE2DB;
+  --display:ui-monospace,"SFMono-Regular",Menlo,Consolas,"Liberation Mono",monospace;
+  --display-2:"Segoe UI Variable Display","Segoe UI",system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;
+  --body:"Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua",Georgia,serif;
+  --util:ui-monospace,"SFMono-Regular",Menlo,Consolas,"Liberation Mono",monospace;
+}
+html[data-theme="dark"]{
+  --paper:#0E1012;--ink:#E8E9E5;--steel:#8A9196;--hair:#2A2E31;--hair-soft:#1D2124;
+  --cobalt:#7C90FF;--brass:#C79A46;--dial:#05070A;--code-bg:#191D20;
+}
+*,*::before,*::after{box-sizing:border-box}
+body{
+  margin:0;background:var(--paper);color:var(--ink);
+  font-family:var(--body);font-size:17px;line-height:1.62;
+  -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
+}
+a{color:var(--ink);text-decoration:none;text-underline-offset:3px;text-decoration-thickness:1px}
+a:hover{text-decoration:underline}
+:where(a,button):focus-visible{outline:2px solid var(--cobalt);outline-offset:3px}
+h1,h2,h3{font-family:var(--display);font-weight:700;letter-spacing:-.045em;line-height:.98;margin:0;text-wrap:balance}
+p{margin:0 0 1.05em;max-width:64ch}
+p:last-child{margin-bottom:0}
+.label{font-family:var(--util);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--steel)}
+
+.masthead{position:sticky;top:0;z-index:50;background:color-mix(in srgb,var(--paper) 92%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--hair)}
+.masthead-in{display:flex;align-items:center;gap:18px;min-height:58px;max-width:900px;margin:0 auto;padding:0 28px}
+.brand{display:flex;align-items:baseline;gap:9px;font-family:var(--display);font-weight:700;font-size:15px;letter-spacing:.02em;text-transform:uppercase}
+.brand svg{width:17px;height:17px;flex:0 0 auto;align-self:center}
+.masthead nav{margin-left:auto;display:flex;align-items:center;gap:20px;font-family:var(--util);font-size:11px;letter-spacing:.11em;text-transform:uppercase}
+.masthead nav a{color:var(--steel)}
+.masthead nav a:hover{color:var(--ink);text-decoration:none}
+.tbtn{appearance:none;background:none;border:1px solid var(--hair);color:var(--steel);width:30px;height:30px;display:grid;place-items:center;cursor:pointer;font-family:var(--util);font-size:12px;line-height:1;padding:0}
+.tbtn:hover{border-color:var(--ink);color:var(--ink)}
+
+.wrap{max-width:900px;margin:0 auto;padding:0 28px}
+.head{padding:64px 0 40px;border-bottom:1px solid var(--ink)}
+.head h1{font-size:clamp(2rem,5vw,3rem);margin-bottom:18px}
+.head p{color:var(--steel);font-size:17px;max-width:58ch}
+.head .meta{font-family:var(--util);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--steel);margin-top:24px}
+
+.release{padding:48px 0 44px;border-bottom:1px solid var(--hair);display:grid;grid-template-columns:132px minmax(0,1fr);gap:0 32px;align-items:start}
+.release:last-of-type{border-bottom:0}
+.rside{position:sticky;top:82px}
+.rver{font-family:var(--display-2);font-weight:600;font-size:22px;letter-spacing:-.03em;line-height:1;display:block;font-variant-numeric:tabular-nums}
+.rdate{font-family:var(--util);font-size:10.5px;letter-spacing:.08em;color:var(--steel);display:block;margin-top:8px}
+.rbadge{display:inline-block;margin-top:12px;border:1px solid currentColor;padding:1px 7px;font-family:var(--util);font-size:9px;letter-spacing:.13em;text-transform:uppercase;line-height:1.7;color:var(--brass)}
+.rbadge.latest{color:var(--cobalt)}
+
+.rbody h2{font-size:clamp(1.25rem,2.4vw,1.6rem);margin-bottom:14px;letter-spacing:-.03em}
+.rbody > p{color:var(--steel);font-size:16px;margin-bottom:18px}
+.rbody ul{margin:0 0 18px;padding-left:20px;color:var(--steel);font-size:15.5px}
+.rbody li{margin-bottom:8px}
+.rbody li strong{color:var(--ink);font-weight:600}
+.rbody code{font-family:var(--util);font-size:.86em;background:var(--code-bg);padding:1px 4px;overflow-wrap:anywhere}
+
+.ident{border:1px solid var(--hair);background:var(--code-bg);margin:18px 0 0}
+.ident div{display:grid;grid-template-columns:110px minmax(0,1fr);gap:0 14px;padding:7px 13px;border-bottom:1px solid var(--hair-soft);font-family:var(--util);font-size:11px}
+.ident div:last-child{border-bottom:0}
+.ident dt{color:var(--steel);letter-spacing:.08em;text-transform:uppercase;font-size:9.5px;padding-top:2px}
+.ident dd{margin:0;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+
+.gate{width:100%;border-collapse:collapse;font-family:var(--util);font-size:11.5px;margin-top:18px}
+.gate th{text-align:left;font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--steel);font-weight:400;padding:0 12px 7px 0;border-bottom:1px solid var(--ink)}
+.gate td{padding:8px 12px 8px 0;border-bottom:1px solid var(--hair-soft);vertical-align:top}
+.gate td:first-child{color:var(--steel)}
+.gate td:last-child{text-align:right;color:var(--ink);font-variant-numeric:tabular-nums;white-space:nowrap}
+.gate tr:last-child td{border-bottom:0}
+
+.note{margin-top:18px;font-family:var(--util);font-size:11px;line-height:1.7;color:var(--steel);border-left:2px solid var(--brass);padding-left:12px;max-width:70ch}
+
+.colophon{border-top:1px solid var(--ink);padding:40px 0 60px;margin-top:20px}
+.colophon .fine{font-family:var(--util);font-size:10.5px;line-height:1.85;color:var(--steel);max-width:78ch}
+
+@media (max-width:720px){
+  .release{grid-template-columns:minmax(0,1fr);gap:18px}
+  .rside{position:static}
+  .rver{font-size:19px}
+  .ident div{grid-template-columns:minmax(0,1fr);gap:2px}
+  .gate td:last-child{text-align:left;white-space:normal}
+  .masthead nav a.opt{display:none}
+  body{font-size:16px}
+}
+@media (prefers-reduced-motion:reduce){*{transition-duration:.01ms !important;animation-duration:.01ms !important}}
+@media print{.masthead{display:none}body{background:#fff;color:#000}.release{break-inside:avoid}}
+</style>
+</head>
+<body>
+
+<header class="masthead">
+  <div class="masthead-in">
+    <a class="brand" href="index.html">
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <circle cx="12" cy="12" r="10.2" stroke="currentColor" stroke-width="1.6"/>
+        <circle cx="12" cy="12" r="5.4" stroke="currentColor" stroke-width="1.6"/>
+        <path d="M12 1.8v3.1M12 19.1v3.1M1.8 12h3.1M19.1 12h3.1" stroke="currentColor" stroke-width="1.6"/>
+      </svg>
+      NiroWear
+    </a>
+    <nav>
+      <a href="index.html">Home</a>
+      <a href="index.html#bench" class="opt">Bench</a>
+      <a href="index.html#status" class="opt">Status</a>
+      <a href="https://github.com/michaelxdips/NiroWear">Source</a>
+      <button class="tbtn" id="theme" aria-label="Switch colour scheme">◐</button>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <div class="head">
+    <span class="label">Release history</span>
+    <h1 style="margin-top:14px">Changelog</h1>
+    <p>
+      Every published build, in order, with the numbers that identify it. Each entry records what was
+      actually executed for that release — not what was intended.
+    </p>
+    <p class="meta">Generated from git history and the NiroWear-Beta release API · 2026-10-22</p>
+  </div>
+
+  <!-- beta.6 -->
+  <article class="release">
+    <div class="rside">
+      <span class="rver">beta.6</span>
+      <span class="rdate">2026-10-22</span>
+      <span class="rbadge latest">Latest</span>
+    </div>
+    <div class="rbody">
+      <h2>Native LaTeX in release builds</h2>
+      <p>
+        Until this release, release builds could only show formula source as monospace text. The
+        debug-only stub returned <code>null</code> and the reader fell back to the LaTeX source. Both
+        variants now share one native typesetter.
+      </p>
+      <ul>
+        <li><strong>Licensing resolved on evidence.</strong> The dependency's POM declares plain GPL v2; its actual <code>LICENSE</code> carries an independent-module linking exception, which is what permits linking it from MIT code.</li>
+        <li><strong>Obligations shipped.</strong> The notice, the exception and the canonical GPL-2.0 text are bundled in the app under <code>assets/legal/</code>.</li>
+        <li><strong>Hostile input refused before the parser sees it.</strong> File-inclusion macros, macro definitions and unbalanced braces degrade to readable source; a refused formula never renders blank.</li>
+      </ul>
+      <dl class="ident">
+        <div><dt>versionCode</dt><dd>7</dd></div>
+        <div><dt>size</dt><dd>3,593,274 B</dd></div>
+        <div><dt>sha256</dt><dd>bd9c7eb968dc3b10c873591a79c81987c147980c480620af464dc2c65154fcb9</dd></div>
+        <div><dt>certificate</dt><dd>7d4e6e99…abe3</dd></div>
+      </dl>
+      <table class="gate">
+        <thead><tr><th>Check</th><th>Result</th></tr></thead>
+        <tbody>
+          <tr><td>Release build installed, non-debuggable confirmed</td><td>pass</td></tr>
+          <tr><td>Seeded display + inline math produced Math canvas nodes</td><td>pass</td></tr>
+          <tr><td>NativeMathTest on device</td><td>0.482 s</td></tr>
+          <tr><td>TrueType fonts in APK</td><td>30</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </article>
+
+  <!-- beta.5 -->
+  <article class="release">
+    <div class="rside">
+      <span class="rver">beta.5</span>
+      <span class="rdate">2026-10-22</span>
+    </div>
+    <div class="rbody">
+      <h2>The credential-entry release</h2>
+      <p>
+        Setting up a provider stopped requiring a 164-character key typed on a watch keyboard. The
+        watch serves a one-time page; the key is pasted on a device with a real keyboard and
+        encrypted before it leaves the browser.
+      </p>
+      <ul>
+        <li><strong>Ephemeral ECDH P-256 + AES-GCM</strong>, with a 128-bit single-use token as associated data.</li>
+        <li><strong>Two-minute TTL, one use.</strong> The socket closes when you leave the screen.</li>
+        <li><strong>Errors that name the actual problem.</strong> A 401 reads “API key rejected”; a 404 reads “Model unavailable”. They were previously one message.</li>
+        <li><strong>Source published under MIT</strong> at github.com/michaelxdips/NiroWear.</li>
+      </ul>
+      <dl class="ident">
+        <div><dt>versionCode</dt><dd>6</dd></div>
+        <div><dt>size</dt><dd>3,072,665 B</dd></div>
+        <div><dt>sha256</dt><dd>c0ff1240bc525ad8f9d3aa38a63f0fb1eb852b490658b81a3c1a3a4c3dba9f63</dd></div>
+      </dl>
+    </div>
+  </article>
+
+  <!-- beta.4 -->
+  <article class="release">
+    <div class="rside">
+      <span class="rver">beta.4</span>
+      <span class="rdate">2026-10-21</span>
+    </div>
+    <div class="rbody">
+      <h2>The “Thread” launcher mark</h2>
+      <p>
+        One page edge that never closes: the right stem stops partway down, because the answer is
+        still arriving. Single stroke, no gradient, designed to survive the monochrome launcher mask.
+      </p>
+      <ul>
+        <li><strong>Menu row against the bezel</strong> — worst ink radius 230.7 → 225.6 px on a 466 px face.</li>
+        <li><strong>Reader text against the bezel</strong> — worst ink radius 231.3 → 217.0 px.</li>
+        <li><strong>Provider heading casing</strong> — <code>Add Openai</code> became <code>Add OpenAI</code>.</li>
+      </ul>
+      <table class="gate">
+        <thead><tr><th>Check</th><th>Result</th></tr></thead>
+        <tbody>
+          <tr><td>JVM unit tests</td><td>92 / 92, 19 suites</td></tr>
+          <tr><td>Connected tests, 466×466 @ 320 dpi</td><td>53 tests</td></tr>
+          <tr><td>lintRelease</td><td>0 errors, 16 warnings</td></tr>
+          <tr><td>Release cold launch on emulator</td><td>646 ms</td></tr>
+        </tbody>
+      </table>
+      <dl class="ident">
+        <div><dt>versionCode</dt><dd>5</dd></div>
+        <div><dt>size</dt><dd>3,056,281 B</dd></div>
+        <div><dt>sha256</dt><dd>da3818840c2c2257208428589b576652f7bf5fbd745e08fa9ede64958c0de1fa</dd></div>
+      </dl>
+      <p class="note">
+        Native math was not in this build: release fell back to Unicode/LaTeX source rendering, and
+        the licensing question was still open. It was closed two releases later.
+      </p>
+    </div>
+  </article>
+
+  <!-- beta.2 -->
+  <article class="release">
+    <div class="rside">
+      <span class="rver">beta.2</span>
+      <span class="rdate">2026-10-12</span>
+    </div>
+    <div class="rbody">
+      <h2>Closure pass</h2>
+      <p>
+        Defect-closure work on the reader, credential storage and provider setup. This release was
+        distributed as a binary only; the source was not yet public.
+      </p>
+      <dl class="ident">
+        <div><dt>size</dt><dd>3,023,513 B</dd></div>
+        <div><dt>sha256</dt><dd>d524c3bae5a26ab5cac7c8c3b80f62824b1ecc82506f180ca005954eeaeaa0b6</dd></div>
+      </dl>
+    </div>
+  </article>
+
+  <!-- beta.1 -->
+  <article class="release">
+    <div class="rside">
+      <span class="rver">beta.1</span>
+      <span class="rdate">2026-10-10</span>
+    </div>
+    <div class="rbody">
+      <h2>First public build</h2>
+      <p>
+        The first signed beta: four provider adapters, streaming with Stop, linear history, edit and
+        retry, and the document reader. 25,994,739 B — the large size is the unstripped native
+        toolchain, and it was 25 MB smaller by beta.4.
+      </p>
+      <dl class="ident">
+        <div><dt>size</dt><dd>25,994,739 B</dd></div>
+        <div><dt>sha256</dt><dd>25b091753743c5b439bb1413525ddef9f69a28d81bd7dae9773013e32605fdb7</dd></div>
+      </dl>
+      <p class="note">
+        Signed with a debug-class certificate (<code>CN=Android Debug</code>) as a stable limited-beta
+        identity. It is not production-grade signing. Every release since keeps that identity so
+        in-place updates keep working; changing it would force an uninstall, which deletes local
+        conversations.
+      </p>
+    </div>
+  </article>
+
+</main>
+
+<footer class="colophon">
+  <div class="wrap">
+    <p class="fine">
+      Versions, sizes and hashes on this page were read from the NiroWear-Beta release API on
+      2026-10-22, and the gate figures from the result XML and release notes for each build. Where a
+      number was not recorded for a release it is omitted rather than estimated.<br><br>
+      <a href="index.html">Back to the site</a> · <a href="https://github.com/michaelxdips/NiroWear">Source</a> · <a href="https://github.com/michaelxdips/NiroWear-Beta/releases">Releases</a>
+    </p>
+  </div>
+</footer>
+
+<script>
+(function () {
+  "use strict";
+  var root = document.documentElement;
+  var stored = null;
+  try { stored = localStorage.getItem("nirowear-scheme"); } catch (e) {}
+  if (stored === "dark" || stored === "light") root.setAttribute("data-theme", stored);
+  else if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) root.setAttribute("data-theme", "dark");
+
+  var btn = document.getElementById("theme");
+  if (btn) btn.addEventListener("click", function () {
+    var next = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
+    root.setAttribute("data-theme", next);
+    try { localStorage.setItem("nirowear-scheme", next); } catch (e) {}
+  });
+})();
+</script>
+</body>
+</html>

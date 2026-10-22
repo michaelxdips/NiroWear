@@ -51,6 +51,7 @@
 !docs/licenses/**
 !docs/screenshots/**
 !docs/index.html
+!docs/changelog.html
 !docs/.nojekyll
 !fixtures/MATERIAL_ICONS_LICENSE.txt
 !fixtures/MATERIAL_ICONS_NOTICE.txt
