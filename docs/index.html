@@ -60,6 +60,14 @@ html[data-theme="dark"]{
 html{
   scroll-behavior:smooth;
   -webkit-text-size-adjust:100%;
+  /* The masthead is sticky and 58px tall, so an anchor jump would otherwise land
+     with the target heading hidden underneath it. */
+  scroll-padding-top:74px;
+}
+
+/* Belt and braces for browsers that honour the per-element property instead. */
+:where(section[id], main[id], .bench[id]){
+  scroll-margin-top:74px;
 }
 
 body{
