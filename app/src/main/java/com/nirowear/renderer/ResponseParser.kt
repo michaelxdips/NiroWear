@@ -51,15 +51,82 @@ object ResponseParser {
     // Hoisted out of the per-line loop: the pattern is constant, so building a Regex for every
     // line of every streamed answer was pure overhead. One instance, reused.
     private val FENCE = Regex("^ {0,3}(`{3,}|~{3,})(.*)$")
-    private val CONTAINER = Regex("^(?: {0,3}(?:>|[-*+]|\\d{1,9}[.)])(?: |$))+")
 
-    /** Drops list/blockquote markers so a fenced block nested in a container still hides math. */
+    /** Block nesting allowed before the subtree is flattened. Deep enough for real answers. */
+    private const val MAX_DEPTH = 24
+
+    /** Container depth the Markdown library may build. Beyond this it flattens instead of recursing. */
+    private const val MAX_CONTAINER_DEPTH = 48
+
+    /**
+     * Collapses container markers beyond [MAX_CONTAINER_DEPTH] in one line.
+     *
+     * CommonMark recurses once per nesting level while building its tree — before any of our code
+     * runs — so 200k '>' characters in a single line overflowed the stack inside the library, and
+     * `Parser.Builder` exposes no depth limit to configure. Trimming the source is the only place the
+     * bound can be enforced. Past the cap the extra markers are dropped, which loses indentation no
+     * real answer uses but keeps the text.
+     */
+    private fun capContainers(line: String): String {
+        var index = 0
+        var depth = 0
+        while (index < line.length) {
+            var cursor = index
+            var spaces = 0
+            while (cursor < line.length && line[cursor] == ' ' && spaces < 3) { cursor++; spaces++ }
+            if (cursor >= line.length) break
+            var end = -1
+            var needsSpace = true
+            when (line[cursor]) {
+                // A blockquote marker is `>` and the following space is optional, so `>>>>>>>>x` is
+                // deeply nested nesting and must be counted here.
+                '>' -> { end = cursor + 1; needsSpace = false }
+                '-', '*', '+' -> end = cursor + 1
+                in '0'..'9' -> {
+                    var digits = cursor
+                    while (digits < line.length && line[digits].isDigit() && digits - cursor < 9) digits++
+                    if (digits > cursor && digits < line.length &&
+                        (line[digits] == '.' || line[digits] == ')')) end = digits + 1
+                }
+            }
+            if (end < 0 || (needsSpace && end < line.length && line[end] != ' ')) break
+            depth++
+            index = if (end < line.length) end + 1 else line.length
+            if (depth >= MAX_CONTAINER_DEPTH) return " ".repeat(MAX_CONTAINER_DEPTH) + line.substring(index)
+        }
+        return line
+    }
+
+    /**
+     * Drops list/blockquote markers so a fenced block nested in a container still hides math.
+     *
+     * Scanned by hand rather than with `^(?:...(?: |$))+`. That regex recursed once per marker, so
+     * roughly 700 quote markers in one line — a few hundred bytes of model output — threw
+     * `StackOverflowError` and took the app down. A loop cannot overflow.
+     */
     private fun uncontainer(line: String): String {
-        var rest = line
+        var index = 0
         while (true) {
-            val match = CONTAINER.find(rest) ?: return rest
-            if (match.value.isEmpty()) return rest
-            rest = rest.substring(match.value.length)
+            var cursor = index
+            // Up to three leading spaces belong to the container marker, not to the content.
+            var spaces = 0
+            while (cursor < line.length && line[cursor] == ' ' && spaces < 3) { cursor++; spaces++ }
+            if (cursor >= line.length) return line.substring(index)
+
+            var end = -1
+            when (val char = line[cursor]) {
+                '>', '-', '*', '+' -> end = cursor + 1
+                in '0'..'9' -> {
+                    var digits = cursor
+                    while (digits < line.length && line[digits].isDigit() && digits - cursor < 9) digits++
+                    if (digits > cursor && digits < line.length &&
+                        (line[digits] == '.' || line[digits] == ')')) end = digits + 1
+                }
+            }
+            // A marker only counts when followed by a space or the end of the line.
+            if (end < 0 || (end < line.length && line[end] != ' ')) return line.substring(index)
+            index = if (end < line.length) end + 1 else line.length
+            if (index >= line.length) return ""
         }
     }
 
@@ -90,9 +157,11 @@ object ResponseParser {
             markdown.clear()
         }
         for (line in source.replace("\r\n", "\n").split('\n')) {
+            // Bound nesting before the Markdown library recurses on it.
+            val bounded = capContainers(line)
             // A display may close mid-line; whatever follows is ordinary content again, so the
             // remainder is rescanned instead of being swallowed into the equation.
-            var rest: String? = line
+            var rest: String? = bounded
             while (rest != null) {
                 val open = math
                 if (open != null) {
@@ -147,14 +216,40 @@ object ResponseParser {
 
     private fun children(node: Node): Sequence<Node> = generateSequence(node.firstChild) { it.next }
 
+    /**
+     * Collects the text under a node without recursing per level, so a pathologically nested subtree
+     * still yields its content instead of being dropped when the depth cap is hit.
+     */
+    private fun flattenText(root: Node): String {
+        val builder = StringBuilder()
+        val pending = ArrayDeque<Node>()
+        pending.addLast(root)
+        while (pending.isNotEmpty()) {
+            val node = pending.removeLast()
+            if (node is Text) builder.append(node.literal)
+            if (node is SoftLineBreak || node is HardLineBreak) builder.append(' ')
+            var child = node.firstChild
+            while (child != null) { pending.addLast(child); child = child.next }
+        }
+        return builder.toString().trim()
+    }
+
     private fun appendBlocks(node: Node, out: MutableList<ContentBlock>, depth: Int = 0, quoted: Boolean = false) {
+        // Nesting is bounded by the document, so a hostile 2000-level blockquote would recurse until
+        // the stack dies. Past this depth the remaining subtree is flattened into one paragraph
+        // instead of descending, which keeps the text and stops the crash.
+        if (depth > MAX_DEPTH) {
+            val text = flattenText(node)
+            if (text.isNotBlank()) out += ContentBlock.Paragraph(listOf(InlineContent(text)))
+            return
+        }
         when (node) {
             is Paragraph -> out += if (quoted) ContentBlock.Quote(inlines(node)) else ContentBlock.Paragraph(inlines(node))
             is Heading -> out += ContentBlock.Heading(node.level, inlines(node))
             is FencedCodeBlock -> out += ContentBlock.Code(node.info.orEmpty(), node.literal.removeSuffix("\n"))
             is IndentedCodeBlock -> out += ContentBlock.Code("", node.literal.removeSuffix("\n"))
             is ThematicBreak -> out += ContentBlock.Divider
-            is BlockQuote -> children(node).forEach { appendBlocks(it, out, depth, true) }
+            is BlockQuote -> children(node).forEach { appendBlocks(it, out, depth + 1, true) }
             is BulletList, is OrderedList -> {
                 val start = (node as? OrderedList)?.markerStartNumber ?: 1
                 children(node).forEachIndexed { index, item ->

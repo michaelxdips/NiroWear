@@ -84,8 +84,26 @@ internal class GeminiStreamDecoder {
     fun accept(payload: String): List<StreamEvent> = try {
         val root = Json.parseToJsonElement(payload).jsonObject
         root["error"]?.let {
-            val code = it.jsonObject["code"]?.jsonPrimitive?.intOrNull
-            return listOf(StreamEvent.Failure(if (code != null) httpError(code) else ProviderError.HTTP))
+            val body = it.jsonObject
+            val code = body["code"]?.jsonPrimitive?.intOrNull
+            // Gemini answers a rejected key with HTTP 400 and INVALID_ARGUMENT, and a missing model
+            // with 404. The status code alone therefore cannot separate "wrong key" from "bad
+            // request", so the reason string is checked first — it is the only place
+            // API_KEY_INVALID appears.
+            val status = body["status"]?.jsonPrimitive?.contentOrNull.orEmpty()
+            val reasons = body["details"]?.jsonArray.orEmpty().mapNotNull {
+                it.jsonObject["reason"]?.jsonPrimitive?.contentOrNull
+            }
+            val mapped = when {
+                status == "UNAUTHENTICATED" || "API_KEY_INVALID" in reasons ||
+                    "API_KEY_EXPIRED" in reasons || "API_KEY_SERVICE_BLOCKED" in reasons ->
+                    ProviderError.INVALID_CREDENTIAL
+                status == "PERMISSION_DENIED" -> ProviderError.PERMISSION_DENIED
+                code == 400 && status == "INVALID_ARGUMENT" -> ProviderError.HTTP
+                code != null -> httpError(code)
+                else -> ProviderError.HTTP
+            }
+            return listOf(StreamEvent.Failure(mapped))
         }
         if (root["promptFeedback"]?.jsonObject?.get("blockReason") != null) return listOf(StreamEvent.Failure(ProviderError.HTTP))
         val candidates = root["candidates"]?.jsonArray ?: return emptyList()

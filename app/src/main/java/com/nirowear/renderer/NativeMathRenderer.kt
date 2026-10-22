@@ -18,39 +18,28 @@ import ru.noties.jlatexmath.JLatexMathDrawable
  * MIT-licensed application. The GPL text, the exception, the bundled-font notices and the
  * corresponding-source offer ship in `assets/legal/` and are surfaced in-app.
  *
- * Safety: assistant output is untrusted. File-inclusion macros, macro definitions and pathological
- * nesting are refused before the parser sees them, and the result is bounds-checked so a hostile
- * formula cannot allocate an enormous canvas.
+ * Safety: assistant output is untrusted, so admission is decided by [NativeMathGuard] before the
+ * parser sees anything, and the result is bounds-checked. A refused formula falls back to readable
+ * source text rather than rendering blank.
  */
 object NativeMathRenderer : MathRenderer {
     private val mutex = Mutex() // JLaTeXMath maintains shared parser/font state.
 
-    private val forbidden = Regex(
-        "\\\\(?:includegraphics|input|include|newcommand|renewcommand|def|newenvironment|rule|scalebox|resizebox)\\b"
-    )
-
     override suspend fun render(source: String, textSizePx: Float): Drawable? = withContext(Dispatchers.Default) {
-        // Untrusted model output must not access files, define macros, or allocate huge canvases.
-        if (source.length > 4096 || source.count { it == '{' } > 128 || forbidden.containsMatchIn(source)) {
-            return@withContext null
-        }
-        var depth = 0
-        source.forEachIndexed { index, char ->
-            if (index == 0 || source[index - 1] != '\\') {
-                if (char == '{') depth++
-                if (char == '}') depth--
-                if (depth < 0) return@withContext null
-            }
-        }
-        if (depth != 0) return@withContext null
+        if (!NativeMathGuard.isSafe(source)) return@withContext null
 
         mutex.withLock {
             try {
                 JLatexMathDrawable.builder(source).textSize(textSizePx).color(Color.WHITE)
                     .padding(4).build().takeIf {
+                        // Bounds are checked after layout because the library computes them there;
+                        // the guard above is what keeps the input small enough to be worth laying out.
                         it.intrinsicWidth in 1..8192 && it.intrinsicHeight in 1..2048
                     }
             } catch (_: RuntimeException) {
+                null
+            } catch (_: StackOverflowError) {
+                // A pathological formula must degrade to source text, not take the app down.
                 null
             }
         }
