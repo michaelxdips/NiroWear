@@ -10,6 +10,8 @@ Streamed answers that read like a document — Markdown, code, math, tables and 
 [![Platform](https://img.shields.io/badge/platform-Wear%20OS%203%2B-4285F4.svg)](#requirements)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.x-7F52FF.svg)](https://kotlinlang.org)
 
+**Website: [michaelxdips.github.io/NiroWear](https://michaelxdips.github.io/NiroWear/)**
+
 [Features](#features) · [Install](#install) · [Provider setup](#provider-setup) · [Architecture](#architecture) · [Contributing](#contributing)
 
 </div>
@@ -78,7 +80,7 @@ NiroWear is a **standalone** Wear app: it does not require a phone companion and
 
 There is no store listing. Two supported routes:
 
-**Prebuilt APK** — grab the latest release from [NiroWear-Beta](https://github.com/michaelxdips/NiroWear-Beta/releases). These are signed release builds; the source in *this* repository builds the same app.
+**Prebuilt APK** — grab `NiroWear-0.1.0-beta.5.apk` from [NiroWear-Beta releases](https://github.com/michaelxdips/NiroWear-Beta/releases). Signed, non-debuggable, versionCode 6. The source in *this* repository builds the same app.
 
 **From source**
 
