@@ -1,0 +1,605 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NiroWear — BYOK AI chat for Wear OS</title>
+<meta name="description" content="NiroWear is a bring-your-own-key AI chat client for Wear OS. Markdown, code, math and tables that stay readable on a 466x466 round watch. MIT licensed.">
+<meta property="og:title" content="NiroWear — BYOK AI chat for Wear OS">
+<meta property="og:description" content="Read complete AI answers on your watch. Your provider, your key. MIT licensed.">
+<meta property="og:type" content="website">
+<link rel="icon" href="branding/nirowear-mark.svg">
+<style>
+:root{
+  --bg:#0a0a0b; --panel:#141416; --panel2:#1c1c1f; --line:#2a2a2f;
+  --fg:#f2f3f5; --muted:#9aa0a6; --accent:#a8c7fa; --accent-ink:#062e6f;
+  --ok:#7ee2a8; --warn:#ffd28a; --radius:16px; --max:1080px;
+}
+html[data-theme="light"]{
+  --bg:#f7f8fa; --panel:#ffffff; --panel2:#f0f2f5; --line:#dfe3e8;
+  --fg:#16181c; --muted:#5b6169; --accent:#0b57d0; --accent-ink:#ffffff;
+  --ok:#116b3a; --warn:#8a5a00;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;background:var(--bg);color:var(--fg);
+  font:16px/1.65 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+code,kbd,pre{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.wrap{max-width:var(--max);margin:0 auto;padding:0 24px}
+.muted{color:var(--muted)}
+
+/* header */
+header{
+  position:sticky;top:0;z-index:50;backdrop-filter:blur(12px);
+  background:color-mix(in srgb,var(--bg) 82%,transparent);
+  border-bottom:1px solid var(--line);
+}
+.nav{display:flex;align-items:center;gap:18px;height:62px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:-.02em;color:var(--fg)}
+.brand img{width:26px;height:26px}
+.nav nav{display:flex;gap:20px;margin-left:auto;font-size:14px;flex-wrap:wrap}
+.nav nav a{color:var(--muted)}
+.nav nav a:hover{color:var(--fg);text-decoration:none}
+.iconbtn{
+  background:var(--panel2);border:1px solid var(--line);color:var(--fg);
+  width:36px;height:36px;border-radius:10px;cursor:pointer;font-size:15px;
+  display:grid;place-items:center;flex:0 0 auto;
+}
+.iconbtn:hover{border-color:var(--accent)}
+
+/* hero */
+.hero{padding:74px 0 56px;text-align:center}
+.pill{
+  display:inline-flex;align-items:center;gap:8px;font-size:13px;
+  background:var(--panel);border:1px solid var(--line);
+  padding:6px 14px;border-radius:999px;color:var(--muted);margin-bottom:26px;
+}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 10px var(--ok)}
+h1{font-size:clamp(2.2rem,6vw,3.9rem);line-height:1.06;letter-spacing:-.035em;margin:0 0 20px}
+h1 .grad{
+  background:linear-gradient(100deg,var(--accent),#c9a8fa 55%,var(--ok));
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+}
+.lede{font-size:clamp(1rem,2.1vw,1.2rem);color:var(--muted);max-width:620px;margin:0 auto 34px}
+.cta{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+.btn{
+  display:inline-flex;align-items:center;gap:9px;padding:13px 24px;border-radius:12px;
+  font-weight:600;font-size:15px;border:1px solid transparent;cursor:pointer;
+  transition:transform .12s ease,border-color .12s ease;
+}
+.btn:hover{transform:translateY(-1px);text-decoration:none}
+.btn.primary{background:var(--accent);color:var(--accent-ink)}
+.btn.ghost{background:var(--panel);border-color:var(--line);color:var(--fg)}
+.btn.ghost:hover{border-color:var(--accent)}
+
+/* watch mock */
+.watchstage{display:grid;place-items:center;padding:54px 0 10px}
+.watch{
+  position:relative;width:300px;height:300px;border-radius:50%;
+  background:radial-gradient(circle at 50% 35%,#20242b,#0a0c10 72%);
+  border:11px solid #191b1f;
+  box-shadow:0 0 0 2px #2c3038,0 34px 80px -22px rgba(0,0,0,.9),inset 0 0 46px rgba(0,0,0,.8);
+  overflow:hidden;display:grid;place-items:center;
+}
+.watch .screen{
+  width:100%;height:100%;padding:38px 34px;display:flex;flex-direction:column;
+  justify-content:center;gap:9px;font-size:12.5px;line-height:1.45;color:#e8eaed;
+}
+.watch .screen .q{color:#9aa0a6;font-size:11px;letter-spacing:.04em;text-transform:uppercase}
+.watch .screen .a{font-size:13px}
+.watch .screen .cur{display:inline-block;width:7px;height:14px;background:#a8c7fa;vertical-align:-2px;animation:blink 1.05s steps(2) infinite}
+@keyframes blink{50%{opacity:0}}
+.watch .crown{position:absolute;right:-15px;top:44%;width:7px;height:34px;background:#2c3038;border-radius:3px}
+
+/* sections */
+section{padding:76px 0;border-top:1px solid var(--line)}
+.eyebrow{font-size:12.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:700;margin:0 0 12px}
+h2{font-size:clamp(1.6rem,3.4vw,2.3rem);letter-spacing:-.025em;margin:0 0 14px}
+.sub{color:var(--muted);max-width:640px;margin:0 0 40px}
+
+/* feature grid */
+.grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(258px,1fr))}
+.card{
+  background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+  padding:24px;transition:border-color .15s ease,transform .15s ease;
+}
+.card:hover{border-color:color-mix(in srgb,var(--accent) 55%,var(--line));transform:translateY(-2px)}
+.card h3{margin:0 0 8px;font-size:1.02rem;letter-spacing:-.01em}
+.card p{margin:0;color:var(--muted);font-size:14.5px}
+.card .ico{font-size:19px;margin-bottom:14px;display:block}
+
+/* screenshots */
+.shots{display:grid;gap:18px;grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}
+.shot{
+  background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+  padding:14px;text-align:center;cursor:zoom-in;transition:border-color .15s,transform .15s;
+}
+.shot:hover{border-color:var(--accent);transform:translateY(-3px)}
+.shot img{width:100%;max-width:200px;border-radius:50%;display:block;margin:0 auto 12px}
+.shot span{font-size:13px;color:var(--muted)}
+.lightbox{
+  position:fixed;inset:0;background:rgba(0,0,0,.9);display:none;
+  place-items:center;z-index:100;padding:24px;cursor:zoom-out;
+}
+.lightbox.on{display:grid}
+.lightbox img{max-width:min(90vw,90vh);border-radius:24px}
+
+/* install tabs */
+.tabs{display:flex;gap:6px;background:var(--panel2);padding:5px;border-radius:12px;border:1px solid var(--line);width:fit-content;margin-bottom:22px;flex-wrap:wrap}
+.tab{
+  background:none;border:0;color:var(--muted);padding:9px 18px;border-radius:9px;
+  font:inherit;font-size:14px;font-weight:600;cursor:pointer;
+}
+.tab[aria-selected="true"]{background:var(--panel);color:var(--fg);box-shadow:0 1px 3px rgba(0,0,0,.3)}
+.panel{display:none}
+.panel.on{display:block}
+pre{
+  background:var(--panel);border:1px solid var(--line);border-radius:12px;
+  padding:18px 20px;overflow-x:auto;font-size:13.5px;line-height:1.7;margin:0 0 14px;
+  position:relative;
+}
+.copy{
+  position:absolute;top:10px;right:10px;background:var(--panel2);border:1px solid var(--line);
+  color:var(--muted);border-radius:8px;padding:5px 11px;font-size:12px;cursor:pointer;font-family:inherit;
+}
+.copy:hover{color:var(--fg);border-color:var(--accent)}
+
+/* steps */
+.steps{counter-reset:s;display:grid;gap:14px}
+.step{
+  counter-increment:s;background:var(--panel);border:1px solid var(--line);
+  border-radius:12px;padding:18px 20px 18px 62px;position:relative;
+}
+.step::before{
+  content:counter(s);position:absolute;left:18px;top:17px;
+  width:28px;height:28px;border-radius:50%;background:var(--accent);color:var(--accent-ink);
+  display:grid;place-items:center;font-weight:700;font-size:13.5px;
+}
+.step strong{display:block;margin-bottom:3px}
+.step span{color:var(--muted);font-size:14.5px}
+
+/* table */
+.tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:12px}
+table{border-collapse:collapse;width:100%;font-size:14.5px;min-width:520px}
+th,td{padding:13px 18px;text-align:left;border-bottom:1px solid var(--line)}
+th{background:var(--panel2);font-size:12.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+tr:last-child td{border-bottom:0}
+td code{background:var(--panel2);padding:2px 7px;border-radius:5px;font-size:13px}
+
+/* faq */
+details{
+  background:var(--panel);border:1px solid var(--line);border-radius:12px;
+  padding:0;margin-bottom:10px;overflow:hidden;
+}
+details[open]{border-color:color-mix(in srgb,var(--accent) 45%,var(--line))}
+summary{
+  padding:17px 20px;cursor:pointer;font-weight:600;font-size:15px;
+  list-style:none;display:flex;justify-content:space-between;gap:16px;align-items:center;
+}
+summary::-webkit-details-marker{display:none}
+summary::after{content:"+";color:var(--accent);font-size:19px;font-weight:400;flex:0 0 auto}
+details[open] summary::after{content:"−"}
+details .body{padding:0 20px 19px;color:var(--muted);font-size:14.5px}
+details .body code{background:var(--panel2);padding:2px 6px;border-radius:5px;font-size:13px}
+
+/* callout */
+.callout{
+  border-left:3px solid var(--warn);background:color-mix(in srgb,var(--warn) 8%,var(--panel));
+  padding:16px 20px;border-radius:0 12px 12px 0;margin:0 0 18px;font-size:14.5px;
+}
+.callout strong{color:var(--warn)}
+
+/* footer */
+footer{border-top:1px solid var(--line);padding:44px 0 60px;color:var(--muted);font-size:14px}
+.foot{display:flex;justify-content:space-between;gap:24px;flex-wrap:wrap}
+.foot nav{display:flex;gap:20px;flex-wrap:wrap}
+.foot a{color:var(--muted)}
+.foot a:hover{color:var(--fg)}
+
+/* reveal */
+.rv{opacity:0;transform:translateY(16px);transition:opacity .55s ease,transform .55s ease}
+.rv.in{opacity:1;transform:none}
+@media (prefers-reduced-motion:reduce){
+  .rv{opacity:1;transform:none;transition:none}
+  html{scroll-behavior:auto}
+  .watch .screen .cur{animation:none}
+}
+@media(max-width:640px){
+  .nav nav{display:none}
+  .hero{padding:52px 0 34px}
+  section{padding:56px 0}
+  .watch{width:250px;height:250px}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap nav">
+    <a class="brand" href="#top"><img src="branding/nirowear-mark.svg" alt="">NiroWear</a>
+    <nav>
+      <a href="#features">Features</a>
+      <a href="#screens">Screenshots</a>
+      <a href="#install">Install</a>
+      <a href="#setup">Setup</a>
+      <a href="#faq">FAQ</a>
+      <a href="https://github.com/michaelxdips/NiroWear">Source</a>
+    </nav>
+    <button class="iconbtn" id="theme" aria-label="Toggle colour theme" title="Toggle theme">◐</button>
+  </div>
+</header>
+
+<main id="top">
+
+<div class="hero wrap">
+  <div class="pill"><span class="dot"></span> MIT licensed · source available</div>
+  <h1>Read the <span class="grad">whole answer</span><br>on your wrist.</h1>
+  <p class="lede">
+    NiroWear is a bring-your-own-key AI chat client for Wear OS. Markdown, code, math and tables
+    that stay readable on a 466 × 466 round display — no phone, no account, no middleman.
+  </p>
+  <div class="cta">
+    <a class="btn primary" href="#install">Get the APK</a>
+    <a class="btn ghost" href="https://github.com/michaelxdips/NiroWear">View source →</a>
+  </div>
+
+  <div class="watchstage">
+    <div class="watch" aria-hidden="true">
+      <div class="crown"></div>
+      <div class="screen">
+        <div class="q">You asked</div>
+        <div class="a" style="color:#9aa0a6">Why is the sky blue?</div>
+        <div class="a" id="typed"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<section id="features">
+  <div class="wrap">
+    <p class="eyebrow">Why this exists</p>
+    <h2>Everything else truncates. This doesn't.</h2>
+    <p class="sub">
+      Mirrored notifications cut answers in half. Voice assistants can't show a code block.
+      Phone apps assume six inches. NiroWear treats the watch as the primary device.
+    </p>
+    <div class="grid">
+      <div class="card rv">
+        <span class="ico">🔌</span>
+        <h3>Four real adapters</h3>
+        <p>OpenAI Responses, Anthropic Messages, Gemini GenerateContent and generic Chat Completions. Protocol follows the provider type — never guessed from a model name.</p>
+      </div>
+      <div class="card rv">
+        <span class="ico">🔑</span>
+        <h3>Your key, stored properly</h3>
+        <p>AES-GCM under a non-exportable Android Keystore key. Only ciphertext and nonce touch disk. No plaintext fallback, ever.</p>
+      </div>
+      <div class="card rv">
+        <span class="ico">📱</span>
+        <h3>No typing on the watch</h3>
+        <p>The watch serves a one-time pairing page. Paste the key on your phone into a real form; it arrives encrypted with ephemeral ECDH + AES-GCM.</p>
+      </div>
+      <div class="card rv">
+        <span class="ico">⌨️</span>
+        <h3>Keyboard and voice</h3>
+        <p>Both are first-class. Voice delegates to the platform recogniser and always returns text you can review before sending.</p>
+      </div>
+      <div class="card rv">
+        <span class="ico">📖</span>
+        <h3>A reader, not a bubble</h3>
+        <p>Output is parsed into semantic blocks — headings, lists, code, math, tables, links — and rendered as a document.</p>
+      </div>
+      <div class="card rv">
+        <span class="ico">↔️</span>
+        <h3>Wide content pans</h3>
+        <p>Code and formulas never shrink into illegibility. They pan horizontally inside one vertical reader. Tables become labelled records.</p>
+      </div>
+      <div class="card rv">
+        <span class="ico">⏹</span>
+        <h3>Stop that actually stops</h3>
+        <p>Stop cancels the HTTP request and keeps the partial answer. Nothing is replayed behind your back.</p>
+      </div>
+      <div class="card rv">
+        <span class="ico">🧵</span>
+        <h3>One linear conversation</h3>
+        <p>Edit an earlier message: it replaces it, deletes what followed, and regenerates. No branches, no variant pickers.</p>
+      </div>
+      <div class="card rv">
+        <span class="ico">🕶</span>
+        <h3>No backend at all</h3>
+        <p>No analytics, no crash reporting, no NiroWear server. The only network calls go to the endpoint you configured.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="screens">
+  <div class="wrap">
+    <p class="eyebrow">Real captures</p>
+    <h2>466 × 466, uncropped</h2>
+    <p class="sub">Actual screenshots from the app running against a real HTTPS endpoint. Click any to enlarge.</p>
+    <div class="shots">
+      <div class="shot rv"><img src="screenshots/chat-home.png" alt="New chat with keyboard and voice controls"><span>New chat</span></div>
+      <div class="shot rv"><img src="screenshots/real-response.png" alt="Streamed answer to a real question"><span>Streamed answer</span></div>
+      <div class="shot rv"><img src="screenshots/streaming-stop.png" alt="Active streaming with Stop control"><span>Streaming + Stop</span></div>
+      <div class="shot rv"><img src="screenshots/code-reader.png" alt="Kotlin code block in a pannable reader"><span>Code reader</span></div>
+      <div class="shot rv"><img src="screenshots/table-record.png" alt="Table rendered as labelled records"><span>Tables as records</span></div>
+      <div class="shot rv"><img src="screenshots/history.png" alt="Conversation history"><span>History</span></div>
+    </div>
+  </div>
+</section>
+
+<section id="install">
+  <div class="wrap">
+    <p class="eyebrow">Install</p>
+    <h2>Two minutes, no store</h2>
+    <p class="sub">There is no Play Store listing. Sideload the signed release, or build it yourself from source.</p>
+
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" aria-selected="true" data-panel="p-apk">Signed APK</button>
+      <button class="tab" role="tab" aria-selected="false" data-panel="p-build">Build from source</button>
+      <button class="tab" role="tab" aria-selected="false" data-panel="p-adb">ADB over Wi-Fi</button>
+    </div>
+
+    <div class="panel on" id="p-apk">
+      <div class="steps">
+        <div class="step"><strong>Download the release</strong><span>Grab the latest <code>.apk</code> from the releases page. It is signed and non-debuggable.</span></div>
+        <div class="step"><strong>Enable developer options on the watch</strong><span>Settings → System → About → tap <em>Build number</em> seven times, then enable <em>ADB debugging</em>.</span></div>
+        <div class="step"><strong>Install over ADB</strong><span>Connect the watch by USB or use wireless debugging, then run the command below.</span></div>
+      </div>
+      <pre><button class="copy">Copy</button>adb install -r NiroWear-0.1.0-beta.5.apk</pre>
+      <p class="muted" style="font-size:14px;margin:0">
+        Upgrading from an older beta keeps your conversations, because the signing identity is unchanged.
+      </p>
+    </div>
+
+    <div class="panel" id="p-build">
+      <pre><button class="copy">Copy</button>git clone https://github.com/michaelxdips/NiroWear.git
+cd NiroWear
+.\gradlew.bat :app:assembleDebug
+adb install -r app\build\outputs\apk\debug\app-debug.apk</pre>
+      <p class="muted" style="font-size:14px;margin:0">
+        Needs JDK 25 and Android SDK platform 36. The Gradle wrapper is checked in — do not install Gradle separately.
+      </p>
+    </div>
+
+    <div class="panel" id="p-adb">
+      <pre><button class="copy">Copy</button># On the watch: Settings → Developer options → Wireless debugging → Pair with new device
+adb pair 192.168.1.50:37123
+adb connect 192.168.1.50:5555
+adb install -r NiroWear-0.1.0-beta.5.apk</pre>
+      <p class="muted" style="font-size:14px;margin:0">
+        The IP and port come from the watch's own wireless-debugging screen. Both devices must be on the same network.
+      </p>
+    </div>
+
+    <div class="tablewrap" style="margin-top:32px">
+      <table>
+        <thead><tr><th>Requirement</th><th>Minimum</th></tr></thead>
+        <tbody>
+          <tr><td>Wear OS</td><td>3.0 (API 30) or newer</td></tr>
+          <tr><td>Display</td><td>Round strongly recommended; tuned for 466 × 466</td></tr>
+          <tr><td>Network</td><td>Wi-Fi, or the Bluetooth bridge to a paired phone</td></tr>
+          <tr><td>Build JDK</td><td>25 (app bytecode targets Java 17)</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section id="setup">
+  <div class="wrap">
+    <p class="eyebrow">Provider setup</p>
+    <h2>Get the key onto the watch without typing it</h2>
+    <p class="sub">
+      An API key is 40–200 opaque characters. Typing that on a 1.4-inch keyboard is not a friction
+      problem, it is a correctness problem — the failure mode is a silent typo.
+    </p>
+
+    <div class="steps" style="margin-bottom:34px">
+      <div class="step"><strong>Open Providers / model → Add your provider</strong><span>Name and base URL are prefilled. Only the key is missing.</span></div>
+      <div class="step"><strong>Tap “Set up from phone”</strong><span>The watch shows a URL like <code>http://192.168.1.24:41234/</code>.</span></div>
+      <div class="step"><strong>Open it on your phone or laptop</strong><span>Fill the normal web form and tap <em>Send to watch</em>. The page is valid for two minutes and one use.</span></div>
+      <div class="step"><strong>The watch saves and validates by itself</strong><span>Models are listed automatically. Manual entry stays available underneath if you have no Wi-Fi.</span></div>
+    </div>
+
+    <div class="callout">
+      <strong>Why a URL and a form?</strong> Setup happens once. After that the app rides whatever
+      network the watch already has. A one-time pairing that costs a URL is cheap when it is never repeated.
+    </div>
+
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Preset</th><th>Default base URL</th><th>Wire protocol</th></tr></thead>
+        <tbody>
+          <tr><td>OpenAI</td><td><code>https://api.openai.com/v1</code></td><td>Responses</td></tr>
+          <tr><td>Anthropic</td><td><code>https://api.anthropic.com/v1</code></td><td>Messages</td></tr>
+          <tr><td>Gemini</td><td><code>https://generativelanguage.googleapis.com/v1beta</code></td><td>GenerateContent (SSE)</td></tr>
+          <tr><td>OpenAI-compatible</td><td>Your operator's HTTPS base</td><td>Chat Completions</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section id="faq">
+  <div class="wrap">
+    <p class="eyebrow">Straight answers</p>
+    <h2>FAQ</h2>
+    <p class="sub">Including the limitations, because a page that hides them is useless.</p>
+
+    <details><summary>Where is my API key stored?</summary>
+      <div class="body">Encrypted with AES-GCM under a non-exportable Android Keystore key. Only versioned ciphertext and a nonce are written to storage; the provider profile holds a credential <em>reference</em>, never the key. If decryption fails you must re-enter it — there is deliberately no plaintext fallback.</div>
+    </details>
+
+    <details><summary>Does it work without a phone?</summary>
+      <div class="body">Yes. NiroWear is a standalone Wear app. The phone is only convenient for pasting the key during setup, because it has a real keyboard. It needs its own network — Wi-Fi, or the Bluetooth bridge if a phone is paired.</div>
+    </details>
+
+    <details><summary>Is my conversation sent anywhere else?</summary>
+      <div class="body">No. There is no NiroWear backend, no analytics and no crash reporting. Requests go directly from the watch to the endpoint you configured, so that provider's retention policy applies — not ours.</div>
+    </details>
+
+    <details><summary>Why isn't native math typesetting in release builds?</summary>
+      <div class="body">The native renderer depends on a GPL-with-linking-exception library whose exact redistribution obligations are not cleared. Release builds use a source fallback: LaTeX stays readable and pannable, but it is not typeset. The native path exists in debug only.</div>
+    </details>
+
+    <details><summary>What still isn't verified?</summary>
+      <div class="body">Physical Xiaomi Watch 2 acceptance (battery, thermals, input), voice transcription accuracy, end-to-end link taps on a paired device, and TalkBack audio. Emulator evidence is extensive; it is not a substitute for a real watch.</div>
+    </details>
+
+    <details><summary>Can I use any OpenAI-compatible endpoint?</summary>
+      <div class="body">Yes, as long as it speaks Chat Completions over HTTPS and you know a model ID. Model discovery failing never blocks you — type the model ID manually. Discovery and authentication are separate checks.</div>
+    </details>
+
+    <details><summary>Will switching provider lose my history?</summary>
+      <div class="body">No. History is provider-neutral; each assistant message records which profile and model produced it, so one linear conversation survives any number of switches.</div>
+    </details>
+
+    <details><summary>Is there an iOS-paired story?</summary>
+      <div class="body">The pairing page works from any browser, including an iPhone, because it is just a URL on your LAN. No companion app is involved on either platform.</div>
+    </details>
+  </div>
+</section>
+
+<section id="license">
+  <div class="wrap">
+    <p class="eyebrow">Open source</p>
+    <h2>MIT licensed</h2>
+    <p class="sub">
+      Application source is MIT — use it, fork it, ship it. Third-party dependencies keep their own
+      licences; the one non-permissive build-time dependency is debug-only and is not redistributed.
+    </p>
+    <div class="cta" style="justify-content:flex-start">
+      <a class="btn primary" href="https://github.com/michaelxdips/NiroWear">Source on GitHub</a>
+      <a class="btn ghost" href="https://github.com/michaelxdips/NiroWear/blob/main/LICENSE">Read the licence</a>
+      <a class="btn ghost" href="https://github.com/michaelxdips/NiroWear-Beta/releases">All releases</a>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap foot">
+    <div>
+      <strong style="color:var(--fg)">NiroWear</strong> · BYOK AI chat for Wear OS<br>
+      <span style="font-size:13px">Not affiliated with Google, OpenAI, Anthropic or any model provider.</span>
+    </div>
+    <nav>
+      <a href="https://github.com/michaelxdips/NiroWear">GitHub</a>
+      <a href="https://github.com/michaelxdips/NiroWear-Beta/releases">Releases</a>
+      <a href="https://github.com/michaelxdips/NiroWear/blob/main/docs/release/PRIVACY.md">Privacy</a>
+      <a href="https://github.com/michaelxdips/NiroWear/blob/main/CONTRIBUTING.md">Contributing</a>
+      <a href="https://github.com/michaelxdips/NiroWear/issues">Issues</a>
+    </nav>
+  </div>
+</footer>
+
+<div class="lightbox" id="lb"><img alt="Enlarged screenshot"></div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* theme */
+  var root = document.documentElement;
+  var saved = null;
+  try { saved = localStorage.getItem("nirowear-theme"); } catch(e){}
+  if (saved) root.setAttribute("data-theme", saved);
+  else if (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches)
+    root.setAttribute("data-theme","light");
+
+  document.getElementById("theme").addEventListener("click", function(){
+    var next = root.getAttribute("data-theme") === "light" ? "dark" : "light";
+    root.setAttribute("data-theme", next);
+    try { localStorage.setItem("nirowear-theme", next); } catch(e){}
+  });
+
+  /* typed hero line */
+  var target = document.getElementById("typed");
+  var text = "Because air scatters short wavelengths far more than long ones. Blue light bounces around the sky and reaches your eye from every direction.";
+  if (target && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    var i = 0;
+    (function step(){
+      if (i <= text.length) {
+        target.innerHTML = text.slice(0, i) + '<span class="cur"></span>';
+        i++;
+        setTimeout(step, 16);
+      } else {
+        target.innerHTML = text + '<span class="cur"></span>';
+      }
+    })();
+  } else if (target) {
+    target.textContent = text;
+  }
+
+  /* install tabs */
+  var tabs = Array.prototype.slice.call(document.querySelectorAll(".tab"));
+  tabs.forEach(function(tab){
+    tab.addEventListener("click", function(){
+      tabs.forEach(function(t){
+        t.setAttribute("aria-selected", t === tab ? "true" : "false");
+        var p = document.getElementById(t.getAttribute("data-panel"));
+        if (p) p.classList.toggle("on", t === tab);
+      });
+    });
+  });
+
+  /* copy buttons */
+  Array.prototype.slice.call(document.querySelectorAll(".copy")).forEach(function(btn){
+    btn.addEventListener("click", function(){
+      var pre = btn.parentElement;
+      var clone = pre.cloneNode(true);
+      var c = clone.querySelector(".copy");
+      if (c) c.remove();
+      var txt = clone.textContent.trim();
+      function done(){ btn.textContent = "Copied"; setTimeout(function(){ btn.textContent = "Copy"; }, 1600); }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(txt).then(done, function(){ fallback(txt, done); });
+      } else fallback(txt, done);
+    });
+  });
+  function fallback(txt, done){
+    var ta = document.createElement("textarea");
+    ta.value = txt; ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand("copy"); done(); } catch(e){}
+    document.body.removeChild(ta);
+  }
+
+  /* lightbox */
+  var lb = document.getElementById("lb");
+  var lbImg = lb.querySelector("img");
+  Array.prototype.slice.call(document.querySelectorAll(".shot img")).forEach(function(img){
+    img.addEventListener("click", function(){
+      lbImg.src = img.src;
+      lbImg.alt = img.alt;
+      lb.classList.add("on");
+    });
+  });
+  lb.addEventListener("click", function(){ lb.classList.remove("on"); });
+  document.addEventListener("keydown", function(e){
+    if (e.key === "Escape") lb.classList.remove("on");
+  });
+
+  /* reveal on scroll */
+  if ("IntersectionObserver" in window) {
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(en){
+        if (en.isIntersecting) { en.target.classList.add("in"); io.unobserve(en.target); }
+      });
+    }, { rootMargin: "0px 0px -60px 0px" });
+    Array.prototype.slice.call(document.querySelectorAll(".rv")).forEach(function(el){ io.observe(el); });
+  } else {
+    Array.prototype.slice.call(document.querySelectorAll(".rv")).forEach(function(el){ el.classList.add("in"); });
+  }
+})();
+</script>
+</body>
+</html>

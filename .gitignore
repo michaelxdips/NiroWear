@@ -50,6 +50,8 @@
 !docs/branding/**
 !docs/licenses/**
 !docs/screenshots/**
+!docs/index.html
+!docs/.nojekyll
 !fixtures/MATERIAL_ICONS_LICENSE.txt
 !fixtures/MATERIAL_ICONS_NOTICE.txt
 !fixtures/RENDER_TORTURE_FIXTURE.md
