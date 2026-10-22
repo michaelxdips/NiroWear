@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 108 108">
+  <title>NiroWear — Thread, 24 px companion</title>
+  <!-- Same geometry as the master, grown 0.39 per side so the stroke lands on 2 whole device
+       pixels at 24 px instead of 1.83. Only for 24 px use; do not scale this up. -->
+  <path d="M31.5 30.48 H76.5 V63.89 H67.5 V38.7 H40.5 V77.52 H31.5 Z" fill="#9BE8D5"/>
+</svg>

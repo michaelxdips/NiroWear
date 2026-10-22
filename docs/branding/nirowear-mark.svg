@@ -1,8 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="108" height="108" viewBox="0 0 108 108">
   <title>NiroWear — Thread</title>
   <rect width="108" height="108" rx="24" fill="#11171E"/>
-  <!-- Authored at 256 (M58 202 V54 H198 V152, stroke 32) then scaled x0.7679 about 54,54 so the
-       furthest ink corner is r=32.50, inside the 66dp adaptive-icon safe circle. -->
-  <path d="M35.72 73.32 V34.68 H72.28 V60.27" fill="none" stroke="#9BE8D5" stroke-width="8.35"
-        stroke-linecap="square" stroke-linejoin="miter"/>
+  <!-- One page edge that never closes: the right stem stops partway down because the answer is
+       still arriving. Authored at 256 as M58 202 V54 H198 V152 with a 32-wide stroke, then scaled
+       to 108-space and expanded to this filled outline. Furthest ink corner r=32, inside the
+       66/108 adaptive-icon safe circle (r<=33). No strokes: the master is pure fill. -->
+  <path d="M31.89 30.87 H76.11 V64.28 H67.89 V39.09 H40.11 V77.13 H31.89 Z" fill="#9BE8D5"/>
 </svg>

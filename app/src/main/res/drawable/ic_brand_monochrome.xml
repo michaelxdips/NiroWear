@@ -1,11 +1,8 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
     <!-- Same geometry as ic_brand_foreground, single tint for the API 33+ monochrome mask.
-         Stroke widened by 0.6dp (to 8.95) so the 24dp launcher tint keeps an even weight. -->
+         The outline is grown 0.39dp per side (equivalent to the previous 8.95dp stroke) so the
+         24dp launcher tint keeps an even optical weight. -->
     <path
-        android:pathData="M35.72,73.32 V34.68 H72.28 V60.27"
-        android:fillColor="@android:color/transparent"
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="8.95"
-        android:strokeLineCap="square"
-        android:strokeLineJoin="miter" />
+        android:pathData="M31.5,30.48 H76.5 V63.89 H67.5 V38.7 H40.5 V77.52 H31.5 Z"
+        android:fillColor="#FFFFFF" />
 </vector>

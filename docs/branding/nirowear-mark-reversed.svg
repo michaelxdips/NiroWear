@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="108" height="108" viewBox="0 0 108 108">
+  <title>NiroWear — Thread, reversed</title>
+  <!-- Reversed lockup: the same outline in ink on a paper ground, for use where the mint
+       accent is unavailable (one-colour print, fax, embossing, light-on-dark inverted).
+       Geometry identical to the master; only the two colours swap roles. -->
+  <rect width="108" height="108" rx="24" fill="#ECEDE9"/>
+  <path d="M31.89 30.87 H76.11 V64.28 H67.89 V39.09 H40.11 V77.13 H31.89 Z" fill="#11171E"/>
+</svg>

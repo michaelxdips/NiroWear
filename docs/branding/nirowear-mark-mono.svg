@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="108" height="108" viewBox="0 0 108 108">
+  <title>NiroWear — Thread, monochrome</title>
+  <!-- One colour, transparent ground, for the API 33+ monochrome launcher mask and any
+       single-colour reproduction. Geometry identical to the master. -->
+  <path d="M31.89 30.87 H76.11 V64.28 H67.89 V39.09 H40.11 V77.13 H31.89 Z" fill="#000000"/>
+</svg>
