@@ -80,7 +80,7 @@ NiroWear is a **standalone** Wear app: it does not require a phone companion and
 
 There is no store listing. Two supported routes:
 
-**Prebuilt APK** — grab `NiroWear-0.1.0-beta.5.apk` from [NiroWear-Beta releases](https://github.com/michaelxdips/NiroWear-Beta/releases). Signed, non-debuggable, versionCode 6. The source in *this* repository builds the same app.
+**Prebuilt APK** — grab `NiroWear-0.1.0-beta.6.apk` from [NiroWear-Beta releases](https://github.com/michaelxdips/NiroWear-Beta/releases). Signed, non-debuggable, versionCode 7. The source in *this* repository builds the same app.
 
 **From source**
 
