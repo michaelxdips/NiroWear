@@ -508,6 +508,12 @@ html[data-theme="dark"] .dial-frame::after{
   overflow-x:hidden;
   scrollbar-width:none;
   padding:0 4px;
+  /* Fade only the bottom edge of the scroll box, so content leaving the viewport
+     reads as "continues below" instead of being guillotined mid-glyph. A vertical
+     mask cannot clip horizontally, so it cannot shave a leading character the way
+     a border-radius on this box did. */
+  -webkit-mask-image:linear-gradient(to bottom, #000 0, #000 calc(100% - 26px), transparent 100%);
+  mask-image:linear-gradient(to bottom, #000 0, #000 calc(100% - 26px), transparent 100%);
   color:var(--dial-ink);
   font-family:var(--body);
   font-size:12.6px;
