@@ -1235,7 +1235,12 @@ html[data-theme="dark"] .chip-table .chip-t{color:#9BE8D5}
 .plate img{
   display:block;
   width:100%;
+  /* height:auto is load-bearing. The markup carries width="466" height="466" for
+     layout stability, and an HTML height attribute outranks aspect-ratio; without
+     this the plate renders 162x466 instead of 466x466. */
+  height:auto;
   aspect-ratio:1;
+  object-fit:cover;
   border-radius:50%;
   background:var(--dial);
   cursor:zoom-in;
