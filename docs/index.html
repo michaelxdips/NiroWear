@@ -411,11 +411,14 @@ p:last-child{margin-bottom:0}
 
 .btn.line{
   background:none;
+  /* The base .btn sets color:var(--paper), which inverts with the theme and lands
+     at 1.02:1 on the page ground in dark mode. An outline button must use the
+     text token, not the button-label token. */
   color:var(--ink);
-  border-color:var(--hair);
+  border-color:var(--steel);
 }
 
-.btn.line:hover{background:none;border-color:var(--ink);color:var(--ink)}
+.btn.line:hover{background:color-mix(in srgb, var(--ink) 6%, transparent);border-color:var(--ink);color:var(--ink)}
 
 .btn .sz{
   font-size:10px;
@@ -445,6 +448,16 @@ p:last-child{margin-bottom:0}
     0 26px 60px -30px rgba(0,0,0,.55);
 }
 
+/* The scroll viewport is inset to the circle's safe band, so its corners already
+   sit inside the curve (232.1 against a radius of 233). No edge fade is needed:
+   adding one only masked the first and last lines of real content. */
+.dial-fade{display:none}
+
+/* The scroll container is absolutely positioned, so it forms its own stacking
+   context; the fade overlays above only win because they carry a higher z-index
+   and the container is not itself z-indexed. */
+.dial-frame > .dial-in{position:absolute;z-index:1}
+
 /* dark mode: the bezel is the light source, not an inverted rectangle */
 html[data-theme="dark"] .dial-frame{
   border-color:#343B40;
@@ -471,12 +484,22 @@ html[data-theme="dark"] .dial-frame::after{
 
 .dial-in{
   position:absolute;
-  inset:0;
-  border-radius:50%;
+  /* The scroll viewport must be the safe band of the circle, not the whole disc.
+     A 466 px circle only offers the 156 px text half-width between y=62 and y=402;
+     outside that the chord narrows and text ends get sliced by the curve. Inset
+     the box itself so scrolling happens inside the safe band. */
+  left:76px;
+  right:76px;
+  top:62px;
+  bottom:62px;
+  /* No border-radius here. A rounded overflow box clips glyphs at the corners,
+     which shaved the leading "H" off the first heading. The circle mask belongs to
+     the frame; this inner box only needs to scroll. */
+  border-radius:0;
   overflow-y:auto;
   overflow-x:hidden;
   scrollbar-width:none;
-  padding:52px 46px 58px;
+  padding:0 4px;
   color:var(--dial-ink);
   font-family:var(--body);
   font-size:12.6px;
@@ -580,11 +603,97 @@ html[data-theme="dark"] .dial-frame::after{
   margin:0 0 .9em;
   letter-spacing:.02em;
   overflow-x:auto;
+  overflow-y:hidden;
   white-space:nowrap;
   scrollbar-width:thin;
+  line-height:1.9;
 }
 
 .dial-in .d-math.is-open{border-left:1px dashed #4A5258;text-align:left}
+
+/* ---------- TeX output ----------
+   Built as inline-level spans so a formula flows in a sentence, with the few
+   vertical constructions (fraction, root, matrix) using inline-block. */
+
+.tx{font-family:var(--util);white-space:nowrap}
+.tx sub,.tx sup{font-size:.68em;line-height:0}
+.tx-sub{vertical-align:-.28em}
+.tx-sup{vertical-align:.42em}
+
+.tx-frac{
+  display:inline-flex;
+  flex-direction:column;
+  vertical-align:-.52em;
+  text-align:center;
+  margin:0 .16em;
+  font-size:.94em;
+}
+.tx-num{
+  display:block;
+  padding:0 .18em .06em;
+  border-bottom:1px solid currentColor;
+  line-height:1.25;
+}
+.tx-den{display:block;padding:.06em .18em 0;line-height:1.25}
+
+.tx-root{display:inline-flex;align-items:flex-start;margin:0 .1em}
+.tx-radical{font-size:1.16em;line-height:1;transform:translateY(.06em)}
+.tx-radicand{
+  border-top:1px solid currentColor;
+  padding:.1em .14em 0 0;
+  margin-left:-.06em;
+  line-height:1.3;
+}
+.tx-root-i{font-size:.6em;align-self:flex-start;margin-right:-.28em;margin-top:-.1em}
+
+.tx-op-wrap{
+  display:inline-flex;
+  flex-direction:column;
+  align-items:center;
+  vertical-align:-.42em;
+  margin:0 .12em;
+  font-size:.96em;
+}
+.tx-op{font-size:1.42em;line-height:1}
+.tx-op-lim-lo,.tx-op-lim-hi{font-size:.6em;line-height:1.15;white-space:nowrap}
+
+.tx-func{font-style:normal;margin:0 .06em}
+.tx-text{font-family:var(--body);font-style:normal}
+.tx-bold{font-weight:700}
+.tx-sans{font-family:var(--display-2)}
+.tx-italic{font-style:italic}
+.tx-delim{font-size:1.12em;vertical-align:-.06em}
+.tx-quad{display:inline-block;width:.85em}
+.tx-newline{display:inline-block;width:.3em}
+.tx-thin{display:inline-block;width:.14em}
+.tx-overline{border-top:1px solid currentColor;padding-top:.06em}
+.tx-hat::before{content:"^";font-size:.7em;vertical-align:.55em;margin-right:-.28em}
+.tx-vec::before{content:"→";font-size:.7em;vertical-align:.62em;margin-right:-.3em}
+
+.tx-matrix,.tx-cases{
+  display:inline-flex;
+  align-items:center;
+  vertical-align:-.42em;
+  margin:0 .12em;
+  gap:.06em;
+}
+.tx-matrix table,.tx-cases table{
+  border-collapse:collapse;
+  font-size:.94em;
+}
+.tx-matrix td,.tx-cases td{
+  padding:.14em .34em;
+  text-align:center;
+  white-space:nowrap;
+}
+.tx-cases td:last-child{text-align:left;color:var(--dial-dim)}
+.tx-cases .tx-delim{font-size:1.9em;line-height:1;font-weight:300}
+
+.tx-unknown{color:#FFB4A2;border-bottom:1px dotted #FFB4A2}
+
+/* inline math inside prose */
+.d-imath .tx{white-space:normal}
+.d-imath .tx-frac,.d-imath .tx-matrix,.d-imath .tx-cases{vertical-align:-.4em}
 
 .dial-in .d-quote{
   margin:0 0 .9em;
@@ -993,20 +1102,11 @@ html[data-theme="dark"] .chip-table .chip-t{color:#9BE8D5}
   min-height:2.6em;
 }
 
-/* ordinary client: no scroll, hard cut */
+/* ordinary client: no scroll, hard cut.
+   The fade is a real .dial-fade.bottom.cut element, not a pseudo-element, so it can
+   sit above the absolutely-positioned scroll container without a stacking fight. */
 .dial-in.is-cut{
   overflow:hidden;
-}
-
-.dial-in.is-cut::after{
-  content:"";
-  position:absolute;
-  left:0;
-  right:0;
-  bottom:0;
-  height:70px;
-  background:linear-gradient(to bottom, rgba(10,12,14,0) 0%, rgba(10,12,14,.92) 62%, var(--dial) 100%);
-  pointer-events:none;
 }
 
 .cut-mark{
@@ -1014,7 +1114,8 @@ html[data-theme="dark"] .chip-table .chip-t{color:#9BE8D5}
   left:50%;
   bottom:34px;
   transform:translateX(-50%);
-  z-index:3;
+  /* Above the fade (z-index 8) or the label is swallowed by the gradient. */
+  z-index:10;
   font-family:var(--util);
   font-size:9px;
   letter-spacing:.14em;
@@ -1085,8 +1186,11 @@ html[data-theme="dark"] .chip-table .chip-t{color:#9BE8D5}
 
 .story-stage{
   position:relative;
-  width:100%;
+  /* Width, not height, is the constraint: the frame is square, so capping the
+     width caps the height and the sticky caption still fits in the viewport. */
+  width:min(286px, 100%);
   aspect-ratio:1;
+  margin:0 auto;
 }
 
 .story-stage .dial-frame{position:relative;inset:auto;width:100%;aspect-ratio:1}
@@ -1805,6 +1909,22 @@ html[data-theme="dark"] .pill-none{color:#FF9C86}
   .sec{break-inside:avoid}
 }
 </style>
+<script>
+/* Apply the stored or preferred scheme before first paint. Running this at the end
+   of the body instead caused a real defect: the page painted with light tokens,
+   then switched, leaving controls (the primary button especially) composited with
+   the wrong background until the next repaint. */
+(function () {
+  try {
+    var stored = localStorage.getItem("nirowear-scheme");
+    if (stored === "dark" || stored === "light") {
+      document.documentElement.setAttribute("data-theme", stored);
+    } else if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
+      document.documentElement.setAttribute("data-theme", "dark");
+    }
+  } catch (e) {}
+})();
+</script>
 </head>
 <body>
 
@@ -1817,10 +1937,9 @@ html[data-theme="dark"] .pill-none{color:#FF9C86}
 <header class="masthead">
   <div class="masthead-in">
     <a class="brand" href="#top">
-      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <circle cx="12" cy="12" r="10.2" stroke="currentColor" stroke-width="1.6"/>
-        <circle cx="12" cy="12" r="5.4" stroke="currentColor" stroke-width="1.6"/>
-        <path d="M12 1.8v3.1M12 19.1v3.1M1.8 12h3.1M19.1 12h3.1" stroke="currentColor" stroke-width="1.6"/>
+      <svg viewBox="0 0 108 108" aria-hidden="true">
+        <rect width="108" height="108" rx="24" fill="currentColor"/>
+        <path d="M31.89 30.87 H76.11 V64.28 H67.89 V39.09 H40.11 V77.13 H31.89 Z" fill="var(--paper)"/>
       </svg>
       NiroWear
     </a>
@@ -1879,6 +1998,8 @@ html[data-theme="dark"] .pill-none{color:#FF9C86}
           <div class="dial-in" id="dial" tabindex="0" role="region" aria-label="Example answer rendered inside a 466 pixel circular viewport">
             <noscript><p>This viewport is rendered by script. The same answer appears as static text in the sections below.</p></noscript>
           </div>
+          <div class="dial-fade top" aria-hidden="true"></div>
+          <div class="dial-fade bottom" aria-hidden="true"></div>
         </div>
       </div>
 
@@ -1994,6 +2115,8 @@ A failed decrypt is a generic rejection: the caller learns that the payload is n
       <div class="bench-dial js-measure">
         <div class="dial-frame">
           <div class="dial-in" id="benchDial" tabindex="0" role="region" aria-label="Your answer rendered as semantic blocks in a 466 pixel circle"></div>
+          <div class="dial-fade top" aria-hidden="true"></div>
+          <div class="dial-fade bottom" aria-hidden="true"></div>
           <svg class="dial-guide" viewBox="0 0 466 466" aria-hidden="true">
             <circle class="safe" cx="233" cy="233" r="137" fill="none" stroke="currentColor"/>
             <path class="measure" d="M46 52V30h0M420 30v22M46 436v-22M420 414v22" fill="none" stroke="currentColor"/>
@@ -2012,6 +2135,8 @@ A failed decrypt is a generic rejection: the caller learns that the payload is n
       <div class="bench-dial js-measure">
         <div class="dial-frame">
           <div class="dial-in is-cut" id="ordinaryDial" tabindex="0" role="region" aria-label="The same answer in an ordinary client, truncated to fit"></div>
+          <div class="dial-fade top" aria-hidden="true"></div>
+          <div class="dial-fade bottom cut" aria-hidden="true"></div>
           <div class="cut-mark" id="cutMark">answer ends here</div>
         </div>
         <div class="bench-dial-cap">
@@ -2032,6 +2157,8 @@ A failed decrypt is a generic rejection: the caller learns that the payload is n
     <div class="story-stage js-measure">
       <div class="dial-frame">
         <div class="dial-in" id="storyDial"></div>
+        <div class="dial-fade top" aria-hidden="true"></div>
+        <div class="dial-fade bottom" aria-hidden="true"></div>
       </div>
     </div>
     <div class="story-cap">
@@ -2570,11 +2697,12 @@ adb install -r NiroWear-0.1.0-beta.6.apk</pre>
         </div>
 
         <p class="status-note">
-          The JVM and lint figures above were read from result XML on 2026-10-22 17:48, not quoted from
-          memory. The connected-test suite is deliberately absent from this table: its last recorded run
-          was on the emulator, and it was not re-run while this page was written, so presenting it as
-          current would be the exact kind of claim this section exists to prevent. Test sources are not
-          published in this repository by policy, so the result XML is not linkable from here.
+          The JVM and lint figures above were read from the result XML produced by a forced re-run on
+          2026-10-22 at 21:07, not quoted from memory. The connected-test suite is deliberately absent
+          from this table: its last recorded run was on the emulator, and it was not re-run while this
+          page was written, so presenting it as current would be the exact kind of claim this section
+          exists to prevent. Test sources are not published in this repository by policy, so the result
+          XML is not linkable from here.
         </p>
 
       </div>
@@ -2763,15 +2891,24 @@ adb install -r NiroWear-0.1.0-beta.6.apk</pre>
     return blocks;
   }
 
-  /* inline spans: code first, as a placeholder, so $ and * inside code survive */
+  /* inline spans: code and inline math first, as placeholders, so $ and \ survive escaping */
   function inline(s) {
     var codes = [];
+    var maths = [];
     var t = String(s).replace(/`([^`]+)`/g, function (_, c) {
       codes.push(c);
       return "\u0000" + (codes.length - 1) + "\u0000";
     });
+    // Inline math must be lifted out before esc(), or \theta becomes &theta; and
+    // the TeX renderer sees entities instead of commands.
+    t = t.replace(/\$([^$\n]+)\$/g, function (_, tex) {
+      maths.push(tex);
+      return "\u0001" + (maths.length - 1) + "\u0001";
+    });
     t = esc(t);
-    t = t.replace(/\$([^$\n]+)\$/g, '<span class="d-imath">$1</span>');
+    t = t.replace(/\u0001(\d+)\u0001/g, function (_, n) {
+      return '<span class="d-imath">' + texRender(maths[+n]) + "</span>";
+    });
     t = t.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
     t = t.replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>");
     t = t.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" rel="noopener">$1</a>');
@@ -2791,7 +2928,7 @@ adb install -r NiroWear-0.1.0-beta.6.apk</pre>
       } else if (b.type === "code") {
         out.push('<pre class="d-code">' + esc(b.text) + "</pre>");
       } else if (b.type === "math") {
-        out.push('<div class="d-math' + (b.open ? " is-open" : "") + '">' + esc(b.text) + "</div>");
+        out.push('<div class="d-math' + (b.open ? " is-open" : "") + '">' + texRender(b.text) + "</div>");
       } else if (b.type === "quote") {
         out.push('<blockquote class="d-quote">' + inline(b.text) + "</blockquote>");
       } else if (b.type === "divider") {
@@ -2826,6 +2963,265 @@ adb install -r NiroWear-0.1.0-beta.6.apk</pre>
         '</span><span class="chip-n">' + esc(note) + "</span></li>";
     }).join("");
   }
+
+/* Compact TeX subset renderer for the Answer Bench.
+   Deliberately partial: fractions, roots, scripts, big operators, matrices,
+   cases, and the symbol set the presets use. Unknown commands fall back to
+   their own name in text, never to a raw backslash. */
+
+var TEX_SYM = {
+  parallel: "∥", oplus: "⊕", otimes: "⊗", cdot: "·", times: "×", div: "÷",
+  theta: "θ", Theta: "Θ", pi: "π", sigma: "σ", Sigma: "Σ", mu: "μ", rho: "ρ",
+  varepsilon: "ε", epsilon: "ϵ", infty: "∞", nabla: "∇", partial: "∂",
+  le: "≤", leq: "≤", ge: "≥", geq: "≥", ne: "≠", neq: "≠", pm: "±", mp: "∓",
+  approx: "≈", equiv: "≡", sim: "∼", propto: "∝", to: "→", rightarrow: "→",
+  leftarrow: "←", Rightarrow: "⇒", mapsto: "↦",
+  alpha: "α", beta: "β", gamma: "γ", Gamma: "Γ", delta: "δ", Delta: "Δ",
+  lambda: "λ", Lambda: "Λ", omega: "ω", Omega: "Ω", phi: "φ", varphi: "φ",
+  psi: "ψ", tau: "τ", eta: "η", xi: "ξ", zeta: "ζ", chi: "χ", kappa: "κ",
+  ldots: "…", cdots: "⋯", dots: "…", prime: "′", circ: "∘",
+  langle: "⟨", rangle: "⟩", lfloor: "⌊", rfloor: "⌋", lceil: "⌈", rceil: "⌉",
+  lbrace: "{", rbrace: "}", "%": "%", "$": "$", "&": "&", "#": "#", "_": "_",
+  "{": "{", "}": "}", "|": "‖"
+};
+
+var TEX_FUNCS = ["exp", "log", "ln", "sin", "cos", "tan", "max", "min", "lim",
+                 "sup", "inf", "det", "dim", "gcd", "arg", "deg"];
+var TEX_OPS = { int: "∫", sum: "∑", prod: "∏", oint: "∮", iint: "∬" };
+
+function texEscape(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function texRender(src) {
+  var i = 0, n = src.length;
+
+  function skipSpace() {
+    while (i < n) {
+      var c = src.charAt(i);
+      if (c === " " || c === "\n" || c === "\t") i++;
+      else break;
+    }
+  }
+
+  function parseGroupRaw() {
+    skipSpace();
+    if (src.charAt(i) === "{") {
+      i++;
+      var start = i, depth = 1;
+      while (i < n && depth > 0) {
+        var c = src.charAt(i);
+        if (c === "\\") { i += 2; continue; }
+        if (c === "{") depth++;
+        else if (c === "}") { depth--; if (!depth) break; }
+        i++;
+      }
+      var raw = src.slice(start, i);
+      if (src.charAt(i) === "}") i++;
+      return raw;
+    }
+    var ch = src.charAt(i);
+    i++;
+    return ch === undefined ? "" : ch;
+  }
+
+  function parseGroupHtml() {
+    skipSpace();
+    if (src.charAt(i) === "{") {
+      i++;
+      /* Parse until the matching close brace. parse() stops AT the brace and does
+         not consume it, so the caller closes it exactly once. */
+      var out = parse("}");
+      if (src.charAt(i) === "}") i++;
+      return out;
+    }
+    if (src.charAt(i) === "\\") return parseCommand();
+    var ch = src.charAt(i);
+    i++;
+    return ch === undefined ? "" : texEscape(ch);
+  }
+
+  function parseScripts(base) {
+    var out = base, sup = "", sub = "";
+    for (var guard = 0; guard < 8; guard++) {
+      skipSpace();
+      var c = src.charAt(i);
+      if (c === "^") { i++; sup = parseGroupHtml(); }
+      else if (c === "_") { i++; sub = parseGroupHtml(); }
+      else break;
+    }
+    if (sub) out = out + '<sub class="tx-sub">' + sub + "</sub>";
+    if (sup) out = out + '<sup class="tx-sup">' + sup + "</sup>";
+    return out;
+  }
+
+  function parseEnv(name) {
+    var endTag = "\\end{" + name + "}";
+    var close = src.indexOf(endTag, i);
+    if (close === -1) close = n;
+    var body = src.slice(i, close);
+    i = close + endTag.length;
+    var rows = body.split("\\\\").map(function (r) { return r.trim(); });
+
+    if (name === "pmatrix" || name === "bmatrix" || name === "matrix") {
+      var l = name === "pmatrix" ? "(" : name === "bmatrix" ? "[" : "";
+      var r = name === "pmatrix" ? ")" : name === "bmatrix" ? "]" : "";
+      var html = '<span class="tx-matrix">' + (l ? '<span class="tx-delim">' + l + "</span>" : "");
+      html += "<table>";
+      rows.forEach(function (row) {
+        if (!row) return;
+        var cells = row.split("&");
+        html += "<tr>" + cells.map(function (c) {
+          return "<td>" + texRender(c.trim()) + "</td>";
+        }).join("") + "</tr>";
+      });
+      html += "</table>" + (r ? '<span class="tx-delim">' + r + "</span>" : "") + "</span>";
+      return html;
+    }
+
+    if (name === "cases") {
+      var h = '<span class="tx-cases"><span class="tx-delim">{</span><table>';
+      rows.forEach(function (row) {
+        if (!row) return;
+        var idx = row.indexOf("&");
+        var val = idx === -1 ? row : row.slice(0, idx);
+        var cond = idx === -1 ? "" : row.slice(idx + 1);
+        h += "<tr><td>" + texRender(val.trim()) + "</td><td>" +
+             (cond ? "if " + texRender(cond.trim()) : "") + "</td></tr>";
+      });
+      h += "</table></span>";
+      return h;
+    }
+
+    /* unknown environment: render its body inline rather than leaking the name */
+    return texRender(body);
+  }
+
+  function parseCommand() {
+    i++; /* the backslash */
+    var start = i;
+    while (i < n && /[A-Za-z]/.test(src.charAt(i))) i++;
+    var name = src.slice(start, i);
+
+    if (!name) {
+      var ch = src.charAt(i);
+      i++;
+      if (ch === "\\") return '<span class="tx-newline"></span>';
+      if (ch === "," || ch === ";") return '<span class="tx-thin"></span>';
+      return texEscape(ch);
+    }
+
+    if (name === "begin") {
+      var env = parseGroupRaw();
+      return parseEnv(env);
+    }
+    if (name === "end") { parseGroupRaw(); return ""; }
+
+    if (name === "frac" || name === "dfrac" || name === "tfrac") {
+      var num = parseGroupHtml(), den = parseGroupHtml();
+      return '<span class="tx-frac"><span class="tx-num">' + num +
+             '</span><span class="tx-den">' + den + "</span></span>";
+    }
+    if (name === "sqrt") {
+      var idx = "";
+      skipSpace();
+      if (src.charAt(i) === "[") {
+        var close = src.indexOf("]", i);
+        idx = texRender(src.slice(i + 1, close));
+        i = close + 1;
+      }
+      var rad = parseGroupHtml();
+      return '<span class="tx-root">' + (idx ? '<span class="tx-root-i">' + idx + "</span>" : "") +
+             '<span class="tx-radical">√</span><span class="tx-radicand">' + rad + "</span></span>";
+    }
+    if (name === "text" || name === "mathrm" || name === "operatorname") {
+      return '<span class="tx-text">' + texEscape(parseGroupRaw()) + "</span>";
+    }
+    if (name === "mathbf") {
+      return '<span class="tx-bold">' + parseGroupHtml() + "</span>";
+    }
+    if (name === "mathsf" || name === "mathtt") {
+      return '<span class="tx-sans">' + parseGroupHtml() + "</span>";
+    }
+    if (name === "mathit" || name === "mathcal") {
+      return '<span class="tx-italic">' + parseGroupHtml() + "</span>";
+    }
+    if (name === "left" || name === "right" || name === "big" || name === "Big" ||
+        name === "bigl" || name === "bigr" || name === "Bigl" || name === "Bigr") {
+      skipSpace();
+      var d = src.charAt(i);
+      if (d === "\\") return parseCommand();
+      i++;
+      if (d === ".") return "";
+      return '<span class="tx-delim">' + texEscape(d) + "</span>";
+    }
+    if (name === "quad") return '<span class="tx-quad"></span>';
+    if (name === "qquad") return '<span class="tx-quad"></span><span class="tx-quad"></span>';
+    if (name === "overline") return '<span class="tx-overline">' + parseGroupHtml() + "</span>";
+    if (name === "hat") return '<span class="tx-hat">' + parseGroupHtml() + "</span>";
+    if (name === "vec") return '<span class="tx-vec">' + parseGroupHtml() + "</span>";
+
+    if (TEX_OPS[name]) {
+      var op = '<span class="tx-op">' + TEX_OPS[name] + "</span>";
+      var lims = "";
+      for (var g = 0; g < 4; g++) {
+        skipSpace();
+        var c2 = src.charAt(i);
+        if (c2 === "_") { i++; lims += '<span class="tx-op-lim-lo">' + parseGroupHtml() + "</span>"; }
+        else if (c2 === "^") { i++; lims += '<span class="tx-op-lim-hi">' + parseGroupHtml() + "</span>"; }
+        else break;
+      }
+      return '<span class="tx-op-wrap">' + lims + op + "</span>";
+    }
+
+    if (TEX_FUNCS.indexOf(name) !== -1) {
+      return '<span class="tx-func">' + name + "</span>";
+    }
+
+    if (Object.prototype.hasOwnProperty.call(TEX_SYM, name)) {
+      return texEscape(TEX_SYM[name]);
+    }
+
+    /* Unknown command: show the name as text. Never emit a bare backslash. */
+    return '<span class="tx-unknown">' + texEscape(name) + "</span>";
+  }
+
+  function parse(stop) {
+    var out = "";
+    while (i < n) {
+      var c = src.charAt(i);
+      if (stop && c === stop) break;
+      if (c === "\\") { out += parseCommand(); continue; }
+      if (c === "^" || c === "_") {
+        var marker = c;
+        i++;
+        var arg = parseGroupHtml();
+        out += marker === "^" ? '<sup class="tx-sup">' + arg + "</sup>"
+                              : '<sub class="tx-sub">' + arg + "</sub>";
+        continue;
+      }
+      if (c === "{") {
+        i++;
+        out += parse("}");
+        if (src.charAt(i) === "}") i++;
+        continue;
+      }
+      if (c === "&") { i++; continue; }
+      if (c === "~") { i++; out += "\u00a0"; continue; }
+      if (c === "-") { i++; out += "\u2212"; continue; }
+      out += texEscape(c);
+      i++;
+    }
+    return out;
+  }
+
+  var html = parse("");
+  return '<span class="tx">' + html + "</span>";
+}
+
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = { texRender: texRender };
+}
 
   /* ============================================================
      2. Hero dial
