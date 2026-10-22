@@ -8,6 +8,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.io.Closeable
 import java.io.InputStream
+import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.Socket
 import java.security.KeyFactory
@@ -47,18 +48,29 @@ internal class PairingServer(
     private val host: String,
     ttlMillis: Long = 120_000,
     private val onPayload: (PairingPayload) -> Unit,
-) : Closeable {    private val socket = ServerSocket(0, 1)
+) : Closeable {
     private val token = ByteArray(16).also { SecureRandom().nextBytes(it) }
     private val pair = KeyPairGenerator.getInstance("EC")
         .apply { initialize(ECGenParameterSpec("secp256r1")) }.generateKeyPair()
     private val deadline = System.currentTimeMillis() + ttlMillis
 
+    // Bound to the address we advertise, not the wildcard: the listener must not be reachable on a
+    // tethered or secondary interface the user never saw.
+    private val socket = ServerSocket(0, 1, InetAddress.getByName(host))
+
     @Volatile private var consumed = false
     @Volatile private var closed = false
+    @Volatile private var active: Socket? = null
     private var worker: Thread? = null
 
     val port: Int get() = socket.localPort
-    val url: String get() = "http://$host:$port/"
+
+    /**
+     * Capability URL. The token is a path segment, not something the server hands out: whoever can
+     * read the watch screen learns it, and nobody else does. It doubles as the AES-GCM associated
+     * data, so a payload encrypted for one session cannot be replayed into another.
+     */
+    val url: String get() = "http://$host:$port/${b64(token)}/"
 
     fun start() {
         if (worker != null) return
@@ -69,7 +81,8 @@ internal class PairingServer(
                 // explicit 410 instead of a bare connection reset, then self-closes.
                 while (!socket.isClosed && System.currentTimeMillis() < deadline + GRACE_MILLIS) {
                     val client = try { socket.accept() } catch (_: java.net.SocketTimeoutException) { continue }
-                    client.use { handle(it) }
+                    active = client
+                    try { client.use { handle(it) } } finally { active = null }
                 }
             } catch (_: Throwable) {
                 // Close, timeout and the UI stopping the screen all land here. Nothing to report.
@@ -82,12 +95,18 @@ internal class PairingServer(
         if (closed) return
         closed = true
         runCatching { socket.close() }
+        // Closing the listener alone leaves the worker blocked in read() on an accepted client, so
+        // the socket would outlive the screen. Closing the active client unblocks it.
+        runCatching { active?.close() }
     }
 
     private fun handle(client: Socket) {
+        // A per-read timeout alone lets one byte every 1.9 s hold the single worker for hours and
+        // outlive the screen. The wall clock is the real bound.
+        val requestDeadline = System.currentTimeMillis() + REQUEST_MILLIS
         client.soTimeout = 2000
         val input = client.getInputStream()
-        val head = readHead(input) ?: return respond(client, 400, TEXT, "bad request")
+        val head = readHead(input, requestDeadline) ?: return respond(client, 400, TEXT, "bad request")
         val lines = head.split("\r\n")
         val parts = lines.firstOrNull().orEmpty().split(' ')
         if (parts.size < 2) return respond(client, 400, TEXT, "bad request")
@@ -98,16 +117,25 @@ internal class PairingServer(
         if (declared > MAX_BODY) return respond(client, 400, TEXT, "too large")
         val body = if (declared > 0) readExactly(input, declared) ?: return respond(client, 400, TEXT, "short body")
         else ByteArray(0)
+        // The whole session lives under an unguessable prefix. A caller without the capability gets
+        // 404 on every route, which is also the honest answer: there is nothing here for them.
+        val prefix = "/${b64(token)}"
         when {
-            method == "GET" && path == "/" -> respond(client, 200, HTML, PAIRING_PAGE)
-            method == "GET" && path == "/handshake" -> respond(client, 200, JSON, handshake())
-            method == "POST" && path == "/pair" -> pair(client, body)
+            !path.startsWith(prefix) -> respond(client, 404, TEXT, "not found")
+            method == "GET" && path == "$prefix/" -> respond(client, 200, HTML, PAIRING_PAGE)
+            method == "GET" && path == "$prefix/handshake" -> respond(client, 200, JSON, handshake())
+            method == "POST" && path == "$prefix/pair" -> pair(client, body)
             else -> respond(client, 404, TEXT, "not found")
         }
     }
 
+    /**
+     * Public half of the ephemeral key only. The token is deliberately absent: it is the capability
+     * the caller already had to know in order to reach this route, and echoing it back would hand
+     * the session to anyone who could merely connect.
+     */
     private fun handshake(): String =
-        """{"v":1,"pub":"${b64(uncompressed(pair.public as ECPublicKey))}","token":"${b64(token)}"}"""
+        """{"v":1,"pub":"${b64(uncompressed(pair.public as ECPublicKey))}"}"""
 
     private fun pair(client: Socket, body: ByteArray) {
         // Expiry is checked before the token so a late request cannot burn the session's only use.
@@ -119,11 +147,13 @@ internal class PairingServer(
         // Constant-time, before any crypto work: a wrong token must not even reach ECDH.
         if (presented == null || !MessageDigest.isEqual(token, presented))
             return respond(client, 401, JSON, """{"ok":false}""")
-        consumed = true
+        // Only a payload that actually decrypts consumes the session. Marking it consumed before
+        // decryption let one garbage body burn the remaining TTL and block the real phone.
         val payload = try { decrypt(root) } catch (_: Exception) { null }
         // One generic 400 for every failure: a decrypt error must not tell an attacker which byte was
         // wrong, and a rejected payload must never leave a half-written profile behind.
         if (payload == null) return respond(client, 400, JSON, """{"ok":false}""")
+        consumed = true
         // Answer before handing the payload on: the consumer may close the listener from the
         // callback, and the browser must not lose the confirmation to that race.
         respond(client, 200, JSON, """{"ok":true}""")
@@ -202,10 +232,11 @@ internal class PairingServer(
         }
     }
 
-    /** Reads until the blank line that ends the request headers. Cap keeps a hostile peer bounded. */
-    private fun readHead(input: InputStream): String? {
+    /** Reads until the blank line that ends the request headers. Cap and wall clock keep a peer bounded. */
+    private fun readHead(input: InputStream, deadline: Long): String? {
         val out = StringBuilder()
         while (out.length < MAX_HEAD) {
+            if (System.currentTimeMillis() > deadline) return null
             val byte = input.read()
             if (byte < 0) return null
             out.append(byte.toChar())
@@ -234,6 +265,7 @@ internal class PairingServer(
         const val MAX_BODY = 4096
         const val MAX_HEAD = 8192
         const val GRACE_MILLIS = 5_000L
+        const val REQUEST_MILLIS = 5_000L
         const val HTML = "text/html; charset=utf-8"
         const val JSON = "application/json"
         const val TEXT = "text/plain; charset=utf-8"
@@ -282,14 +314,18 @@ return btoa(b).replace(/\+/g,'-').replace(/\//g,'_').split('=').join('');}
 function unb64u(s){s=s.replace(/-/g,'+').replace(/_/g,'/');var b=atob(s),u=new Uint8Array(b.length),i;
 for(i=0;i<b.length;i++){u[i]=b.charCodeAt(i);}return u;}
 var ready=null;
+// The capability token is the first path segment the user was given. Reading it from our own URL
+// keeps it out of the handshake response, so an unauthenticated caller can never learn it.
+var CAP=decodeURIComponent(location.pathname.split('/')[1]||'');
 async function init(){
- var hs=await (await fetch('/handshake')).json();
+ if(!CAP){throw new Error('missing capability');}
+ var hs=await (await fetch('/'+CAP+'/handshake')).json();
  var wp=await crypto.subtle.importKey('raw',unb64u(hs.pub),{name:'ECDH',namedCurve:'P-256'},false,[]);
  var mine=await crypto.subtle.generateKey({name:'ECDH',namedCurve:'P-256'},true,['deriveBits']);
  var shared=await crypto.subtle.deriveBits({name:'ECDH',public:wp},mine.privateKey,256);
  var aes=await crypto.subtle.importKey('raw',shared,{name:'AES-GCM'},false,['encrypt']);
  ready={aes:aes,pub:b64u(await crypto.subtle.exportKey('raw',mine.publicKey)),
-  iv:crypto.getRandomValues(new Uint8Array(12)),aad:unb64u(hs.token)};
+  iv:crypto.getRandomValues(new Uint8Array(12)),aad:unb64u(CAP)};
 }
 document.getElementById('go').onclick=async function(){
  var out=document.getElementById('out');
@@ -300,7 +336,7 @@ document.getElementById('go').onclick=async function(){
  try{
   var ct=await crypto.subtle.encrypt({name:'AES-GCM',iv:ready.iv,additionalData:ready.aad},
    ready.aes,new TextEncoder().encode(body));
-  var r=await fetch('/pair',{method:'POST',headers:{'Content-Type':'application/json'},
+  var r=await fetch('/'+CAP+'/pair',{method:'POST',headers:{'Content-Type':'application/json'},
    body:JSON.stringify({v:1,t:b64u(ready.aad),pub:ready.pub,iv:b64u(ready.iv),ct:b64u(ct)})});
   out.textContent=r.ok?'Sent. Finish on the watch.':'Rejected. Restart pairing on the watch.';
   if(r.ok){document.getElementById('key').value='';}

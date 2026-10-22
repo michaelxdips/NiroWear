@@ -84,10 +84,13 @@ fun ProviderScreen(onBack: () -> Unit) {
 
     // The one save tail. Manual entry and LAN pairing both end here, so there is no second
     // persistence path and no way for an arriving key to skip the promotion probe.
-    suspend fun saveProfile() {
+    // One save tail for both entry paths. Manual entry passes its field value; a paired key is
+    // handed over directly so it never has to exist in the revealable editing state.
+    suspend fun saveProfile(explicit: SecretValue? = null) {
         busy = true
         try {
-            val cleaned = app.settings.save(profile(), key.takeIf { it.isNotBlank() }?.let { SecretValue(it.trim()) }) { p, candidate ->
+            val supplied = explicit ?: key.takeIf { it.isNotBlank() }?.let { SecretValue(it.trim()) }
+            val cleaned = app.settings.save(profile(), supplied) { p, candidate ->
                 app.provider(p.type)!!.validate(p, candidate)
             }
             key = ""; edit = null; adding = false; models = emptyList()
@@ -118,8 +121,11 @@ fun ProviderScreen(onBack: () -> Unit) {
                 name = payload.name.ifBlank { payload.type.label }
                 base = payload.baseUrl
                 model = payload.modelId
-                key = sanitizeKey(payload.apiKey)
-                saveProfile()
+                // The key arrived encrypted and is handed straight to storage. Putting it in the
+                // editing field would make it revealable and screenshot-adjacent for no benefit;
+                // the field stays blank, exactly as it does after a manual save.
+                key = ""
+                saveProfile(SecretValue(sanitizeKey(payload.apiKey)))
             }
         }
         runCatching { server.start() }.onSuccess {
