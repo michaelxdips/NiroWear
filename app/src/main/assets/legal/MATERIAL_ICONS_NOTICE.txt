@@ -1,0 +1,10 @@
+Material Icons by Google, Apache License 2.0.
+License: MATERIAL_ICONS_LICENSE.txt (included alongside this notice in APK assets).
+
+Sources inspected 2026-10-08:
+https://github.com/google/material-design-icons
+https://raw.githubusercontent.com/google/material-design-icons/master/src/hardware/keyboard/materialicons/24px.svg
+https://raw.githubusercontent.com/google/material-design-icons/master/src/av/mic/materialicons/24px.svg
+
+NiroWear modifications: converted SVG paths to Android VectorDrawable XML;
+removed invisible SVG background paths; visible path geometry unchanged.

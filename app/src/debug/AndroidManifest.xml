@@ -1,0 +1,7 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
+    <application android:networkSecurityConfig="@xml/debug_network_security"
+        android:label="${debugAppLabel}" tools:replace="android:label">
+        <activity android:name=".MainActivity" android:taskAffinity="${applicationId}"
+            tools:replace="android:taskAffinity" />
+    </application>
+</manifest>

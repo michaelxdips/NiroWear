@@ -1,0 +1,66 @@
+{
+  "candidate_sha256": "8b29475e2f75550ae16177107870bc8f28ee0fd3db226d4bcc801b775d94af72",
+  "alterations": "None; byte-identical uncropped copies",
+  "screenshots": [
+    {
+      "file": "chat-home.png",
+      "source": "artifacts/final-ship-2026-10-10/active-latest/chat-home.png",
+      "sha256": "c0fb2a75f5fb582f2954bcd5c9f3d2c554e258669f9a9781680ba7341bf96686",
+      "dimensions": [
+        466,
+        466
+      ],
+      "bytes": 21762
+    },
+    {
+      "file": "real-response.png",
+      "source": "artifacts/software-rc-2026-10-09/autonomous-closure/live-final/sky-expanded-corrected/read-004.png",
+      "sha256": "8c18ec730b40c48998e6d2ab969e1f2914098be985b20048abf9d11cfe74e18b",
+      "dimensions": [
+        466,
+        466
+      ],
+      "bytes": 32589
+    },
+    {
+      "file": "streaming-stop.png",
+      "source": "artifacts/software-rc-2026-10-09/autonomous-closure/live-final/T7-video-025.png",
+      "sha256": "93a97f29ebf48f8d640e18a2516a9e7ce736f0d311ba2518655fc7b94c4c72bc",
+      "dimensions": [
+        466,
+        466
+      ],
+      "bytes": 43093
+    },
+    {
+      "file": "table-record.png",
+      "source": "artifacts/software-rc-2026-10-09/autonomous-closure/live-final/structured-content/read-009.png",
+      "sha256": "0631b761b1cde735345e63e2ccbedb9e3b8b2a0b844fbb9c6913ff6696e62bc9",
+      "dimensions": [
+        466,
+        466
+      ],
+      "bytes": 16108
+    },
+    {
+      "file": "code-reader.png",
+      "source": "artifacts/software-rc-2026-10-09/autonomous-closure/live-final/structured-content/read-020.png",
+      "sha256": "5bb903b3389bb1d42216386e4f308d6aaa660cb1e2e250915d05e1a0528d1c83",
+      "dimensions": [
+        466,
+        466
+      ],
+      "bytes": 20416
+    },
+    {
+      "file": "history.png",
+      "source": "artifacts/software-rc-2026-10-09/autonomous-closure/live-final/history-corrected/1.0-history.png",
+      "sha256": "7945227cb285cb91f9c305c689a72aa341913ad51acb9017073de0b201fcf131",
+      "dimensions": [
+        466,
+        466
+      ],
+      "bytes": 25306
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="108" height="108" viewBox="0 0 108 108">
+  <title>NiroWear — Thread</title>
+  <rect width="108" height="108" rx="24" fill="#11171E"/>
+  <!-- Authored at 256 (M58 202 V54 H198 V152, stroke 32) then scaled x0.7679 about 54,54 so the
+       furthest ink corner is r=32.50, inside the 66dp adaptive-icon safe circle. -->
+  <path d="M35.72 73.32 V34.68 H72.28 V60.27" fill="none" stroke="#9BE8D5" stroke-width="8.35"
+        stroke-linecap="square" stroke-linejoin="miter"/>
+</svg>
