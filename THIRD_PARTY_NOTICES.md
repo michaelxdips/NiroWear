@@ -2,15 +2,30 @@
 
 ## Current posture - 2026-10-22
 
-First-party NiroWear application source is licensed **MIT** (see LICENSE).
+First-party NiroWear application source is licensed **MIT** (see `LICENSE`).
 Copyright (c) 2026 Stephen Michael. Third-party components retain their own rights and are
 **not** relicensed by that grant; the sections below remain authoritative for them.
 
-The only non-permissive build-time dependency is `ru.noties:jlatexmath-android:0.2.0`
-(GPL v2-or-later with an independent-module linking exception). It is a `debugImplementation`
-only: it is absent from release builds, which use the source-fallback math renderer, and this
-repository does not redistribute its binaries or sources. Anyone enabling native math in a
-distributed build inherits that dependency's obligations themselves.
+### JLaTeXMath - GPL v2-or-later WITH linking exception (runtime dependency)
+
+`ru.noties:jlatexmath-android:0.2.0` typesets LaTeX in **release and debug** builds. It is
+GPL, not MIT, and is used unmodified.
+
+The upstream LICENSE grants an explicit exception: *"the copyright holders of this library
+give you permission to link this library with independent modules to produce an executable,
+regardless of the license terms of these independent modules, and to copy and distribute the
+resulting executable under terms of your choice."* NiroWear's source is such an independent
+module, so this combination and its distribution are permitted, while the GPL continues to
+govern the JLaTeXMath code.
+
+Obligations discharged: the GPL-2.0 text and the library's own notice, including the exception
+and a corresponding-source pointer, ship inside the app at
+`app/src/main/assets/legal/JLATEXMATH-GPL.txt` and `GPL-2.0.txt`. The library's bundled font
+licences (OFL, Knuth, dsrom, public domain) travel inside its own artifact. The GPL-covered Greek
+font set named upstream is **not** present in 0.2.0 and is not distributed.
+
+Corresponding source: https://github.com/noties/jlatexmath-android (branch `android`), used
+unmodified. AAR SHA-256 `b16824328d45ed86892f7f8aa74a542fc361b8a94004de8ca5ae86113b78a89f`.
 
 APK releases remain at https://github.com/michaelxdips/NiroWear-Beta and carry their own
 notices inside `assets/legal/`. This repository publishes source, not releases.

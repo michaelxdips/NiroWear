@@ -59,7 +59,10 @@ dependencies {
     implementation("org.commonmark:commonmark-ext-gfm-tables:0.24.0")
     implementation("org.commonmark:commonmark-ext-autolink:0.24.0")
     testImplementation("junit:junit:4.13.2")
-    debugImplementation("ru.noties:jlatexmath-android:0.2.0")
+    // GPL v2-or-later WITH an independent-module linking exception: the exception permits linking
+    // with MIT code and distributing the executable under terms of our choice. Notices + source
+    // offer ship in assets/legal; see THIRD_PARTY_NOTICES.md.
+    implementation("ru.noties:jlatexmath-android:0.2.0")
     androidTestImplementation("androidx.test:runner:1.5.0")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
     androidTestImplementation("com.squareup.okhttp3:mockwebserver:5.3.2")

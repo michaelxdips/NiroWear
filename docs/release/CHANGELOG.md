@@ -3,6 +3,17 @@
 Notable changes to NiroWear. Versions follow the published APK releases at
 [NiroWear-Beta](https://github.com/michaelxdips/NiroWear-Beta/releases).
 
+## Unreleased — native math in release builds
+
+- **LaTeX is typeset natively in release builds.** Previously the release variant rendered math as
+  monospace source text and only debug typeset it. `jlatexmath-android` is now a runtime
+  dependency; the release stub that returned `null` is gone.
+- Licensing resolved: JLaTeXMath is GPL v2-or-later **with an independent-module linking
+  exception**, which explicitly permits linking it from MIT code. The GPL text, the exception and
+  a corresponding-source offer ship in `assets/legal/`.
+- Safety behaviour unchanged: file-inclusion macros, macro definitions and unbalanced braces are
+  still refused before the parser, and rendered output is bounds-checked.
+
 ## Unreleased — source published under MIT
 
 - Application source released publicly under the **MIT license**.

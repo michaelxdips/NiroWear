@@ -1,0 +1,114 @@
+JLaTeXMath — licensing notice for a runtime dependency of NiroWear
+==================================================================
+
+NiroWear bundles JLaTeXMath (Maven: ru.noties:jlatexmath-android:0.2.0) to typeset
+LaTeX formulas natively. It is a fork of JMathTeX.
+
+  Upstream:  https://github.com/noties/jlatexmath-android (branch "android")
+  Upstream of the fork: https://github.com/opencollab/jlatexmath
+  Artifact:  ru.noties:jlatexmath-android:0.2.0
+  License:   GNU General Public License, version 2 or later, WITH the
+             independent-module linking exception reproduced below.
+
+
+WHY THIS IS COMPATIBLE WITH NIROWEAR'S MIT LICENSE
+--------------------------------------------------
+The library is GPL, not MIT. NiroWear does not relicense it and does not claim it as
+first-party code. The library's own linking exception grants:
+
+  "As a special exception, the copyright holders of this library give you permission to
+   link this library with independent modules to produce an executable, regardless of the
+   license terms of these independent modules, and to copy and distribute the resulting
+   executable under terms of your choice, provided that you also meet, for each linked
+   independent module, the terms and conditions of the license of that module. An
+   independent module is a module that is not derived from or based on this library."
+
+NiroWear's own source is such an independent module. The exception therefore permits this
+combination and permits distributing the resulting APK under NiroWear's terms, while the
+GPL continues to govern the JLaTeXMath code itself.
+
+The obligation that remains, and which this file and the accompanying notices discharge, is
+to pass on the library's license text and to point to its corresponding source.
+
+
+CORRESPONDING SOURCE
+--------------------
+The complete corresponding source for the bundled version is the upstream repository at the
+tag/commit matching 0.2.0:
+
+  https://github.com/noties/jlatexmath-android  (branch "android")
+  Exact AAR SHA-256: b16824328d45ed86892f7f8aa74a542fc361b8a94004de8ca5ae86113b78a89f
+  Matching source archive SHA-256: e3bccfd6fcc38b0fc85307278e5c9024fd6710311fa172790d2629467670b7cc
+
+The library is used unmodified. NiroWear patches nothing in it, so the upstream source at that
+revision is the exact corresponding source. If you need a copy of that source and cannot
+retrieve it from the URL above, open an issue at
+https://github.com/michaelxdips/NiroWear/issues and one will be provided.
+
+
+BUNDLED FONTS
+-------------
+The library ships font resources with their own terms, reproduced in this directory:
+OFL.txt (SIL Open Font License), Knuth_License.txt, License_for_dsrom.txt, and public-domain
+fonts. The GPL-covered Greek font set listed in the upstream LICENSE (fcmbipg, fcmripg,
+fcmrpg, fcsropg, fcmbpg, fcsbpg, fctrpg, fcsrpg) is NOT present in the 0.2.0 artifact and is
+therefore not distributed with NiroWear.
+
+The upstream LICENSE file also notes that the fonts eufb10.ttf, eufm10.ttf, msam10.ttf and
+msbm10.ttf are under the SIL Open Font License, and that stmary10.ttf and rsfs10.ttf are in the
+public domain. Those are the sets actually bundled here.
+
+
+LICENSE TEXT
+------------
+The full GNU General Public License version 2 follows, preceded by the upstream copyright
+holders and the exception text verbatim.
+
+------------------------------------------------------------------------------
+JLaTeXMath Library - Displays LaTeX commands
+JLateXMath is a fork of JMathTeX with a lot of modifications to support
+many more LaTeX commands, drop of the jdom dependency and easy evolution
+capabilities.
+
+Copyright (C) 2009-2011 DENIZET Calixte
+Copyright (C) Kris Coolsaet
+Copyright (C) Nico Van Cleemput
+Copyright (C) Kurt Vermeulen
+Copyright 2004-2007 Universiteit Gent
+
+
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; either version 2 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; see the file COPYING. If not, write to the
+Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
+MA 02110-1301, USA.
+
+Linking this library statically or dynamically with other modules
+is making a combined work based on this library. Thus, the terms
+and conditions of the GNU General Public License cover the whole
+combination.
+
+As a special exception, the copyright holders of this library give you
+permission to link this library with independent modules to produce
+an executable, regardless of the license terms of these independent
+modules, and to copy and distribute the resulting executable under terms
+of your choice, provided that you also meet, for each linked independent
+module, the terms and conditions of the license of that module.
+An independent module is a module which is not derived from or based
+on this library. If you modify this library, you may extend this exception
+to your version of the library, but you are not obliged to do so.
+If you do not wish to do so, delete this exception statement from your
+version.
+------------------------------------------------------------------------------
+
+The complete GNU General Public License version 2 text is provided in the file
+GPL-2.0.txt in this directory.

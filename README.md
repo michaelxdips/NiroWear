@@ -91,7 +91,7 @@ adb install -r app\build\outputs\apk\debug\app-debug.apk
 
 Then open NiroWear and configure a provider (below).
 
-> The debug variant links an experimental native-math renderer whose upstream licensing is not cleared for redistribution. Build debug for your own device; do not redistribute debug APKs. Release builds use the source-fallback math renderer and are what the published releases are made from.
+> Both variants typeset LaTeX natively through JLaTeXMath, which is GPL v2-or-later **with an independent-module linking exception** — that exception is what permits linking it from MIT code. The GPL text, the exception and a corresponding-source offer ship inside the app under `assets/legal/`. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## Provider setup
 
@@ -154,7 +154,7 @@ Full facts: [PRIVACY.md](docs/release/PRIVACY.md).
 
 Stated plainly, because a README that hides these is useless:
 
-- **Native math typesetting is not in release builds.** LaTeX renders through a source fallback — readable and pannable, not typeset. The native path exists in debug only, pending upstream license clearance.
+- **Native math typesetting is in release builds now**, verified by execution on a release APK (a seeded answer produced `Math:` canvas nodes for a display integral and inline `E = mc^2`). The fallback still exists for input the renderer deliberately refuses: file-inclusion macros, macro definitions, and unbalanced braces.
 - **Physical Xiaomi Watch 2 acceptance is incomplete.** Emulator evidence is extensive; real-device battery, thermals and input are not yet verified.
 - **Voice transcription quality is unaccepted.** The intent launch/return path is tested; recognition accuracy is the platform's.
 - **Link taps** open via the system handler; destination completion on a real paired device is unverified.
@@ -171,6 +171,6 @@ Two rules that matter more than style: **never commit a real API key**, and **do
 
 Application source is **MIT** — see [LICENSE](LICENSE). Copyright © 2026 Stephen Michael.
 
-Third-party dependencies keep their own licenses; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and [docs/licenses](docs/licenses/README.md). The one non-permissive build-time dependency (`jlatexmath-android`, GPL with a linking exception) is debug-only and is not redistributed here.
+Third-party dependencies keep their own licenses; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and [docs/licenses](docs/licenses/README.md). One dependency is non-permissive: `jlatexmath-android` is GPL v2-or-later **with an independent-module linking exception**, which explicitly permits linking it with MIT code and distributing the result under terms of your choice. The GPL text and the library notice ship in `app/src/main/assets/legal/`.
 
 "Wear OS" and "Android" are trademarks of Google LLC. NiroWear is not affiliated with or endorsed by Google, OpenAI, Anthropic, or any model provider.
