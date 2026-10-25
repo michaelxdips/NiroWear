@@ -3,6 +3,28 @@
 Notable changes to NiroWear. Versions follow the published APK releases at
 [NiroWear-Beta](https://github.com/michaelxdips/NiroWear-Beta/releases).
 
+## Unreleased — streaming re-parse coalesced (B3-03)
+
+- **Streaming no longer re-parses the whole answer once per token.** The parse effect restarts on
+  every emission, but a delta arrives far faster than a frame and the parse is non-cooperative once
+  started, so each superseded run still parsed the entire accumulated prefix before discarding its
+  result. A 12k-character answer reprocessed 4.27 million characters across 365 full re-parses. A
+  one-frame throttle before the work lets the restart cancel the pending run first, collapsing a
+  burst of deltas into a single parse.
+- The throttle remembers when the last parse happened, so it is a throttle and not a debounce: a
+  continuous stream still renders progressively instead of waiting for the provider to pause.
+- Nothing is dropped: the final state is always parsed, and partial content still becomes visible
+  within a frame of arriving. Completed conversations skip the wait entirely, because every row hits
+  the memo.
+- Scope, stated honestly: realistic answers already met the 250 ms budget before this change
+  (realistic-long measured 230.1 ms). What was wrong is the wasted work — it was quadratic in delta
+  count — and the synthetic stress cases (1-char deltas 781.8 ms, 64k answer 7620.7 ms) are where
+  that quadratic cost was visible.
+- Why not change the memo key: the same run reports a stable key parsing the identical 365 times, so
+  the key was never the lever.
+- Regression: `StreamingParseCoalescingTest` and `StreamingParseStarvationTest`, the former verified
+  failing against the pre-fix loop and the latter pinning the debounce starvation at 0 parses.
+
 ## Unreleased — native math in release builds
 
 - **LaTeX is typeset natively in release builds.** Previously the release variant rendered math as

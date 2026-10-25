@@ -111,6 +111,15 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+/**
+ * B3-03 coalescing window for streaming re-parses.
+ *
+ * One frame at 60 Hz. Long enough that a burst of token deltas collapses into a single parse,
+ * short enough that partial content still becomes visible within a frame of arriving. See the
+ * comment on the parse effect in [ChatReader] for why this is a delay rather than a memo change.
+ */
+private const val STREAM_PARSE_COALESCE_MS = 16L
+
 @Composable
 private fun ChatReader(fixture: String, initialSection: String?) {
     val chat: ChatViewModel = viewModel()
@@ -144,6 +153,9 @@ private fun ChatReader(fixture: String, initialSection: String?) {
     var parsedRows by remember { mutableStateOf<Map<com.nirowear.data.StoredMessage, List<Pair<Long, ContentBlock>>>>(emptyMap()) }
     var parsedConversation by remember { mutableStateOf<String?>(null) }
     var restoredConversation by remember { mutableStateOf<String?>(null) }
+    // Survives effect restarts, which is what turns the coalescing delay into a throttle rather
+    // than a debounce. See the parse effect below.
+    var lastParseAt by remember { mutableStateOf(0L) }
     var footerHeight by remember { androidx.compose.runtime.mutableIntStateOf(0) }
     val renderedHistory = historyBlocks
     val historyKeys = remember(renderedHistory) {
@@ -156,6 +168,30 @@ private fun ChatReader(fixture: String, initialSection: String?) {
         val id = chatState.conversationId
         val messages = storedMessages
         val previous = parsedRows
+
+        // B3-03: coalesce re-parses, but guarantee progress.
+        //
+        // This effect restarts on every emission, and `ResponseParser.parse` is non-cooperative
+        // once started, so without a suspension point before the work every superseded coroutine
+        // still parsed the whole accumulated prefix and only then discarded its result -- 176
+        // deltas meant 176 full re-parses (see StreamingReparseWorkloadTest).
+        //
+        // A plain debounce is WRONG here: if deltas keep arriving faster than the window, every
+        // run is cancelled before it parses and the answer stays blank until the stream pauses
+        // (measured: 0 parses over 400 ms at a 4 ms cadence, see StreamingParseStarvationTest).
+        // So the wait is skipped when a parse is already overdue. `lastParseAt` is remembered
+        // across restarts, which turns the debounce into a throttle: at most one parse per
+        // STREAM_PARSE_COALESCE_MS, and always at least one, no matter how fast the stream is.
+        //
+        // The renderer only needs the LATEST accumulated text, so the skipped intermediate
+        // snapshots are pure waste. The final state is always parsed.
+        val needsParse = messages.any { it.conversationId == id && previous[it] == null }
+        if (needsParse) {
+            val sinceLastParse = System.currentTimeMillis() - lastParseAt
+            if (sinceLastParse < STREAM_PARSE_COALESCE_MS) {
+                kotlinx.coroutines.delay(STREAM_PARSE_COALESCE_MS - sinceLastParse)
+            }
+        }
 
         val rows = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
             messages.filter { it.conversationId == id }.associateWith { message ->
@@ -170,6 +206,7 @@ private fun ChatReader(fixture: String, initialSection: String?) {
         }
         currentCoroutineContext().ensureActive()
         if (currentSource != (id to messages)) return@LaunchedEffect
+        lastParseAt = System.currentTimeMillis()
         parsedRows = rows   // rebuilt from the live list each time, so deleted rows are dropped
         historyBlocks = rows.values.flatten()
         parsedConversation = id
