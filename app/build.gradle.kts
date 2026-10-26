@@ -2,6 +2,15 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.devtools.ksp")
+    id("org.jlleitschuh.gradle.ktlint")
+}
+
+// Reporting-only for the first pass, so the existing debt can be measured before it is fixed.
+// Task 2.3 flips this to false after the tree is formatted and the flip is proven to fail.
+ktlint {
+    version.set("1.8.0")
+    android.set(true)
+    ignoreFailures.set(true)
 }
 
 android {
