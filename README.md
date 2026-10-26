@@ -46,7 +46,7 @@ The transport itself is plain HTTP and the handshake is not authenticated, so th
 > origin — a design decision, not a patch. **Until then, add providers by typing the key on the
 > watch.**
 
-**Streaming with honest interruption.** Tokens render as they arrive. Scroll up and the view stops following you, with a small `Latest` control to jump back. `Stop` cancels the underlying HTTP request and keeps whatever partial answer had already arrived — it is never replayed automatically.
+**Streaming with honest interruption.** Tokens render as they arrive. Scroll up and the view stops following you, with a small `Latest` control to jump back. `Stop` cancels the underlying HTTP request and keeps whatever partial answer had already arrived — it is never replayed automatically. If the provider had already signalled completion, the answer is kept as complete rather than being relabelled as stopped: a finished answer is never downgraded.
 
 **One linear conversation.** Editing an earlier user message replaces it, deletes everything after it, and regenerates from that point. There are no branches and no alternate-response variants to choose between. Switching provider or model keeps the same history, and each assistant message records which profile and model produced it.
 
