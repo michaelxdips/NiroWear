@@ -20,6 +20,9 @@
 !secrets.properties.example
 !.gitignore
 !.gitattributes
+!.editorconfig
+# CI is published: a workflow nobody can see is not a gate.
+!.github/workflows/*.yml
 
 # 3. Application source (main/debug/release only; never test sets).
 !app/build.gradle.kts

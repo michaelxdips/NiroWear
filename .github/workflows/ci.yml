@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  jvm:
+    name: jvm
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      # gradle/gradle-daemon-jvm.properties pins toolchainVersion=25, so the
+      # runner JVM must be 25 or Gradle downloads a second daemon JVM and the
+      # build time doubles. 21 was the plan's guess; the repo says 25.
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install the platform this project compiles against
+        run: sdkmanager --install "platforms;android-36" "build-tools;36.1.0"
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle.kts', 'gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: gradle-${{ runner.os }}-
+
+      # Test sources are gitignored by policy, so on a fresh clone this task is
+      # NO-SOURCE: it exits 0 having run nothing. It is kept because it is the
+      # correct command the moment tests are published, but it is NOT the gate.
+      # The gate is assemble + lint, which compile every published source file.
+      - name: Unit tests (NO-SOURCE on the published tree, by policy)
+        run: ./gradlew :app:testDebugUnitTest --console=plain
+
+      - name: Assert the unit-test step was not silently empty
+        run: |
+          count=$(find app/build/test-results/testDebugUnitTest -name 'TEST-*.xml' 2>/dev/null | wc -l)
+          echo "test XML files: $count"
+          if [ "$count" -eq 0 ]; then
+            echo "::warning::No unit tests ran: app/src/test is gitignored by policy. Build and lint are the real gate."
+          fi
+
+      - name: Lint
+        run: ./gradlew :app:lintDebug --console=plain
+
+      - name: Assemble debug and release
+        run: ./gradlew :app:assembleDebug :app:assembleRelease --console=plain
+
+      - name: Publish test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: app/build/test-results/testDebugUnitTest/*.xml
+          if-no-files-found: ignore
