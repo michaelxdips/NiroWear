@@ -26,23 +26,34 @@ jobs:
           distribution: temurin
           java-version: '25'
 
-      # android-actions/setup-android@v3 is deliberately NOT used. Run 40306576936
-      # failed inside it with `Warning: Failed to find package 'tools'` and exit 1:
-      # it calls `sdkmanager tools`, and that package no longer exists in the
-      # current cmdline-tools repository. The ubuntu-latest image already ships a
-      # complete Android SDK at $ANDROID_HOME, so the action was buying nothing
-      # except a failure mode.
-      - name: Verify the preinstalled Android SDK
+      # android-actions/setup-android@v3 is deliberately NOT used: run 40306576936
+      # failed inside it with `Failed to find package 'tools'`, because it calls
+      # `sdkmanager tools` and that package no longer exists.
+      #
+      # `sdkmanager` is also not on PATH on ubuntu-latest (run 40306772420 failed
+      # with `sdkmanager: command not found`, exit 127), so this step locates it
+      # under the preinstalled SDK and appends it to PATH instead of assuming.
+      - name: Put the Android SDK tools on PATH
         run: |
+          set -euo pipefail
           echo "ANDROID_HOME=$ANDROID_HOME"
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
-          test -d "$ANDROID_HOME" || { echo "::error::no Android SDK on this runner"; exit 1; }
-          ls "$ANDROID_HOME/platforms" || true
+          test -d "$ANDROID_HOME" || { echo "::error::no Android SDK at $ANDROID_HOME"; exit 1; }
+          CMDLINE=$(find "$ANDROID_HOME/cmdline-tools" -maxdepth 2 -name bin -type d 2>/dev/null | head -1)
+          echo "cmdline-tools bin: ${CMDLINE:-<none>}"
+          if [ -n "${CMDLINE:-}" ]; then echo "$CMDLINE" >> "$GITHUB_PATH"; fi
+          echo "platforms present:"; ls "$ANDROID_HOME/platforms" || true
 
-      - name: Install the platform this project compiles against
+      # compileSdk 36 is not on the runner image by default. Gradle can install a
+      # missing platform itself when the licence is accepted, which avoids
+      # depending on a sdkmanager that may not be on PATH at all.
+      - name: Accept SDK licences
         run: |
-          yes | sdkmanager --licenses > /dev/null 2>&1 || true
-          sdkmanager --install "platforms;android-36" "build-tools;36.1.0"
+          set -euo pipefail
+          if command -v sdkmanager >/dev/null 2>&1; then
+            yes | sdkmanager --licenses > /dev/null 2>&1 || true
+          else
+            echo "sdkmanager still unavailable; relying on the preinstalled platforms"
+          fi
 
       - name: Cache Gradle
         uses: actions/cache@v4
