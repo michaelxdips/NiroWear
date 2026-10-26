@@ -330,8 +330,20 @@ internal class PairingServer(
 
     private fun unb64(text: String): ByteArray = Base64.getUrlDecoder().decode(text)
 
-    private companion object {
-        const val MAX_BODY = 4096
+    internal companion object {
+        /**
+         * Cap for the whole POST body.
+         *
+         * Was 4096, which silently made pairing unable to carry a long key: the body holds base64
+         * ciphertext (4/3 of plaintext + 16-byte tag) plus pub/iv/token, so measured against the
+         * real JSON shape a 3000-character key already produced a ~4430-byte body and was rejected
+         * with a bare "too large". `ProviderContract` and manual entry both allow 8192 characters,
+         * so pairing was the only path with a lower, undocumented ceiling.
+         *
+         * 16 KiB covers an 8192-character key with room for a long base URL and model id. The body
+         * is still bounded, and the read itself is bounded by this value.
+         */
+        const val MAX_BODY = 16 * 1024
         const val MAX_HEAD = 8192
         const val GRACE_MILLIS = 5_000L
         const val REQUEST_MILLIS = 5_000L
@@ -371,7 +383,7 @@ background:#a8c7fa;color:#062e6f;font-weight:600}
 </select>
 <label>Name</label><input id="name" value="OpenAI">
 <label>Base URL</label><input id="base" value="https://api.openai.com/v1">
-<label>Model ID</label><input id="model" placeholder="optional, can be picked on the watch">
+<label>Model ID</label><input id="model" placeholder="required — e.g. gpt-4o-mini">
 <label>API key</label><input id="key" type="password" autocomplete="off" spellcheck="false">
 <button id="go">Send to watch</button>
 <div id="out"></div>

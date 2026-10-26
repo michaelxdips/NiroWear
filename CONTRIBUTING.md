@@ -50,7 +50,7 @@ Instrumentation is destructive — it installs, drives and uninstalls the app. D
 a watch that holds credentials or conversations you care about. Use a dedicated emulator. Verify
 the target is an emulator first: `adb shell getprop ro.kernel.qemu` must print `1`.
 
-**Seven instrumentation tests are excluded from the default run.** They are annotated
+**Six instrumentation tests are excluded from the default run.** They are annotated
 `@com.nirowear.HostDrivenGate`, and `app/build.gradle.kts` sets
 `testInstrumentationRunnerArguments["notAnnotation"]` to that annotation. They need a host script to
 seed state, so `connectedDebugAndroidTest` alone will not run them and will not tell you it skipped
