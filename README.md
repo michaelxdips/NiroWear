@@ -32,7 +32,9 @@ It exists because every other way of reading an AI answer on a watch is a compro
 
 **Bring your own key, stored properly.** Keys are encrypted with AES-GCM under a non-exportable Android Keystore key. Only versioned ciphertext and nonce touch disk; a profile stores a credential *reference*, never the key. A decrypt failure demands re-entry — there is no plaintext fallback, and a saved key is never repopulated into an editing field.
 
-**No typing required for setup.** The watch serves a one-time page on your local network; you open the URL on a phone or laptop and paste the key into a real form. The payload is encrypted end-to-end with ephemeral ECDH P-256 and AES-GCM, so nothing sensitive crosses the LAN in clear text. Manual entry is always available underneath.
+**No typing required for setup.** The watch serves a one-time page on your local network; you open the URL on a phone or laptop and paste the key into a real form. The key payload is encrypted with ephemeral ECDH P-256 and AES-GCM before it leaves the browser, and the session is gated by a 128-bit capability token that only appears on the watch screen. Manual entry is always available underneath.
+
+The transport itself is plain HTTP and the handshake is not authenticated, so this is not "end-to-end encrypted" in the strict sense: an attacker who can both intercept your LAN traffic **and** read the token off the watch screen could impersonate the watch. That is a narrow model, but it is not nothing. If it is not acceptable to you, use manual entry — it never touches the network.
 
 **Streaming with honest interruption.** Tokens render as they arrive. Scroll up and the view stops following you, with a small `Latest` control to jump back. `Stop` cancels the underlying HTTP request and keeps whatever partial answer had already arrived — it is never replayed automatically.
 
