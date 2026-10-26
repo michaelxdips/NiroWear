@@ -131,8 +131,9 @@ fun ProviderScreen(onBack: () -> Unit) {
                 app.settings.save(profile(), supplied) { p, candidate ->
                     // A missing adapter is a configuration error, not a null to assert away:
                     // report it as a validation failure the user can see.
-                    val adapter = app.provider(p.type)
-                        ?: return@save ProviderError.PROTOCOL
+                    val adapter =
+                        app.provider(p.type)
+                            ?: return@save ProviderError.PROTOCOL
                     adapter.validate(p, candidate)
                 }
             key = ""

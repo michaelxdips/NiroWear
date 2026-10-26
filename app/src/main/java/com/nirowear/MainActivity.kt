@@ -75,7 +75,10 @@ import androidx.wear.compose.material3.Button
 import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.Text
 import com.nirowear.chat.ChatViewModel
+import com.nirowear.chat.ReaderAction
 import com.nirowear.chat.ReaderAnchor
+import com.nirowear.chat.coalesceDelayMs
+import com.nirowear.chat.needsParse
 import com.nirowear.data.ProviderSettingsState
 import com.nirowear.renderer.ContentBlock
 import com.nirowear.renderer.DocumentBlock
@@ -196,15 +199,7 @@ private fun ChatReader(
     var lastParseAt by remember { mutableStateOf(0L) }
     var footerHeight by remember { androidx.compose.runtime.mutableIntStateOf(0) }
     val renderedHistory = historyBlocks
-    val historyKeys =
-        remember(renderedHistory) {
-            val counts = mutableMapOf<Long, Int>()
-            renderedHistory.map { (id, _) ->
-                val block = counts[id] ?: 0
-                counts[id] = block + 1
-                "$id:$block"
-            }
-        }
+    val historyKeys = remember(renderedHistory) { historyKeysFor(renderedHistory) }
     val currentSource by rememberUpdatedState(chatState.conversationId to storedMessages)
     // Presentation includes status/error/provenance, not just Markdown. All fields invalidate it.
     LaunchedEffect(storedMessages, chatState.conversationId) {
@@ -228,12 +223,9 @@ private fun ChatReader(
         //
         // The renderer only needs the LATEST accumulated text, so the skipped intermediate
         // snapshots are pure waste. The final state is always parsed.
-        val needsParse = messages.any { it.conversationId == id && previous[it] == null }
-        if (needsParse) {
-            val sinceLastParse = System.currentTimeMillis() - lastParseAt
-            if (sinceLastParse < STREAM_PARSE_COALESCE_MS) {
-                kotlinx.coroutines.delay(STREAM_PARSE_COALESCE_MS - sinceLastParse)
-            }
+        if (needsParse(messages, id, previous)) {
+            val wait = coalesceDelayMs(System.currentTimeMillis(), lastParseAt, STREAM_PARSE_COALESCE_MS)
+            if (wait > 0) kotlinx.coroutines.delay(wait)
         }
 
         val rows =
@@ -244,9 +236,9 @@ private fun ChatReader(
                             if (message.role ==
                                 "USER"
                             ) {
-                                "You · hold to edit"
+                                "You Â· hold to edit"
                             } else {
-                                "${message.providerLabel} · ${message.modelId}"
+                                "${message.providerLabel} Â· ${message.modelId}"
                             }
                         listOf(message.id to ContentBlock.Heading(4, listOf(InlineContent(label)))) +
                             ResponseParser.parse(message.rawContent).map { message.id to it } +
@@ -256,7 +248,7 @@ private fun ChatReader(
                                 listOf(
                                     message.id to
                                         ContentBlock.Paragraph(
-                                            listOf(InlineContent(message.error ?: "Stopped · partial answer kept")),
+                                            listOf(InlineContent(message.error ?: "Stopped Â· partial answer kept")),
                                         ),
                                 )
                             } else {
@@ -830,7 +822,7 @@ private fun ChatReader(
                     if (!renderLab && (chatState.generating || transientStopped)) {
                         item {
                             Text(
-                                if (chatState.generating) "Streaming…" else "Stopped · partial answer kept",
+                                if (chatState.generating) "Streamingâ€¦" else "Stopped Â· partial answer kept",
                                 fontSize = 12.sp,
                             )
                         }
@@ -851,10 +843,10 @@ private fun ChatReader(
             ) {
                 Text(
                     if (renderLab) {
-                        "RenderLab · $section"
+                        "RenderLab Â· $section"
                     } else {
-                        providerState.selected?.let { "${it.displayName} · ${it.selectedModelId}" }
-                            ?: "Add provider · Menu"
+                        providerState.selected?.let { "${it.displayName} Â· ${it.selectedModelId}" }
+                            ?: "Add provider Â· Menu"
                     },
                     modifier = Modifier.height(42.dp).wrapContentHeight(Alignment.Bottom).padding(bottom = 6.dp),
                     fontSize = 12.sp,
@@ -944,58 +936,13 @@ private fun ChatReader(
     }
 }
 
-@Composable
-private fun ReaderAction(
-    retry: Boolean,
-    onClick: () -> Unit,
-) {
-    val color = MaterialTheme.colorScheme.onSurfaceVariant
-    Box(
-        Modifier
-            .size(48.dp)
-            .semantics { contentDescription = if (retry) "Retry response" else "Jump to latest" }
-            .clickable(role = Role.Button, onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Canvas(Modifier.size(18.dp)) {
-            val stroke = 2.dp.toPx()
-            val path = Path()
-            if (retry) {
-                drawArc(
-                    color,
-                    45f,
-                    285f,
-                    false,
-                    topLeft =
-                        androidx.compose.ui.geometry
-                            .Offset(size.width * .15f, size.height * .15f),
-                    size =
-                        androidx.compose.ui.geometry
-                            .Size(size.width * .7f, size.height * .7f),
-                    style = Stroke(stroke),
-                )
-                path.moveTo(size.width * .85f, size.height * .08f)
-                path.lineTo(size.width * .85f, size.height * .36f)
-                path.lineTo(size.width * .57f, size.height * .36f)
-            } else {
-                path.moveTo(size.width * .5f, size.height * .12f)
-                path.lineTo(size.width * .5f, size.height * .85f)
-                path.moveTo(size.width * .2f, size.height * .55f)
-                path.lineTo(size.width * .5f, size.height * .85f)
-                path.lineTo(size.width * .8f, size.height * .55f)
-            }
-            drawPath(path, color, style = Stroke(stroke))
-        }
-    }
-}
-
 /**
  * Mark a clip sensitive so Android 13+ does not show a content preview of a conversation answer on
  * the clipboard overlay. This is a preview/visibility control, NOT encryption: the clipboard still
  * holds plaintext and any app the user pastes into can read it.
  *
- * `EXTRA_IS_SENSITIVE` is `public static final String` — a compile-time constant that is inlined to
- * a literal — so referencing it cannot throw on minSdk 30. The InlinedApi warning is cosmetic and
+ * `EXTRA_IS_SENSITIVE` is `public static final String` â€” a compile-time constant that is inlined to
+ * a literal â€” so referencing it cannot throw on minSdk 30. The InlinedApi warning is cosmetic and
  * is suppressed here, at the one place that uses it, with this reason rather than project-wide.
  */
 @Suppress("InlinedApi")
@@ -1004,4 +951,20 @@ private fun markClipSensitive(clip: android.content.ClipData) {
         android.os.PersistableBundle().apply {
             putBoolean(android.content.ClipDescription.EXTRA_IS_SENSITIVE, true)
         }
+}
+
+/**
+ * Stable LazyColumn keys for the reader, one per (messageId, block) pair, in render order.
+ *
+ * Extracted from the composable so the ordering contract can be pinned by a JVM test before the
+ * list rendering is moved (Task 4.1). The anchor logic indexes into this flat list, so if the order
+ * or the per-message numbering changes, anchors silently point at the wrong block.
+ */
+internal fun historyKeysFor(renderedHistory: List<Pair<Long, com.nirowear.renderer.ContentBlock>>): List<String> {
+    val counts = mutableMapOf<Long, Int>()
+    return renderedHistory.map { (id, _) ->
+        val block = counts[id] ?: 0
+        counts[id] = block + 1
+        "$id:$block"
+    }
 }
