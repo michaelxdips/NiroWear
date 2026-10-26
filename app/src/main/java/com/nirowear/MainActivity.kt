@@ -200,6 +200,11 @@ private fun ChatReader(
     var footerHeight by remember { androidx.compose.runtime.mutableIntStateOf(0) }
     val renderedHistory = historyBlocks
     val historyKeys = remember(renderedHistory) { historyKeysFor(renderedHistory) }
+    // One lookup per message, not one per rendered block. The item body used to call
+    // storedMessages.find { it.id == messageId } for EVERY block, which is O(blocks x messages) on
+    // every recomposition — with a 200-message conversation and several blocks per message that is
+    // thousands of comparisons per frame while streaming.
+    val messageById = remember(storedMessages) { storedMessages.associateBy { it.id } }
     val currentSource by rememberUpdatedState(chatState.conversationId to storedMessages)
     // Presentation includes status/error/provenance, not just Markdown. All fields invalidate it.
     LaunchedEffect(storedMessages, chatState.conversationId) {
@@ -740,7 +745,7 @@ private fun ChatReader(
                             renderedHistory,
                             key = { index, _ -> historyKeys[index] },
                         ) { index, (messageId, block) ->
-                            val message = storedMessages.find { it.id == messageId }
+                            val message = messageById[messageId]
                             val editable = message?.role == "USER" && !chatState.generating
                             val editModifier =
                                 if (editable) {

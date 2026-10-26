@@ -1,0 +1,14 @@
+# Reviewers by area. A single-maintainer project, but naming the owner keeps the
+# responsibility explicit when a second contributor arrives.
+*                       @michaelxdips
+
+# Credential handling, pairing, and anything that touches a key.
+/app/src/main/java/com/nirowear/security/     @michaelxdips
+/app/src/main/java/com/nirowear/settings/     @michaelxdips
+
+# The streaming/protocol layer: a mistake here silently corrupts answers.
+/app/src/main/java/com/nirowear/provider/     @michaelxdips
+
+# Build, signing and release configuration.
+/app/build.gradle.kts   @michaelxdips
+/.github/               @michaelxdips
