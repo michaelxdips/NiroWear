@@ -480,11 +480,10 @@ private fun ChatReader(
                             sectionMenu = false
                             following = true
                             followNewConversation = chatState.conversationId == null
-                            if (editedId !=
-                                null
-                            ) {
+                            val editing = editedId
+                            if (editing != null) {
                                 anchors.remove(chatState.conversationId)
-                                chat.edit(editedId!!, draft)
+                                chat.edit(editing, draft)
                             } else {
                                 chat.send(draft)
                             }
@@ -772,7 +771,7 @@ private fun ChatReader(
                         }
                     }
                     items(blocks) { DocumentBlock(it) }
-                    if (!renderLab && chatState.error != null) item { Text(chatState.error!!, fontSize = 14.sp) }
+                    if (!renderLab) chatState.error?.let { message -> item { Text(message, fontSize = 14.sp) } }
                     if (!renderLab && chatState.unsaved) {
                         item {
                             val context = androidx.compose.ui.platform.LocalContext.current
@@ -782,19 +781,12 @@ private fun ChatReader(
                                         context.getSystemService(
                                             android.content.Context.CLIPBOARD_SERVICE,
                                         ) as android.content.ClipboardManager
-                                    // Mark the clip sensitive so Android 13+ does not show a content preview of a
-                                    // conversation answer on the clipboard overlay. This is a preview/visibility
-                                    // control, NOT encryption: the clipboard still holds plaintext and any app the
-                                    // user pastes into can read it. The notice below states that plainly.
                                     val clip =
                                         android.content.ClipData.newPlainText(
                                             "NiroWear unsaved answer",
                                             chatState.rawMarkdown.orEmpty(),
                                         )
-                                    clip.description.extras =
-                                        android.os.PersistableBundle().apply {
-                                            putBoolean(android.content.ClipDescription.EXTRA_IS_SENSITIVE, true)
-                                        }
+                                    markClipSensitive(clip)
                                     clipboard.setPrimaryClip(clip)
                                     notice = "Unsaved answer copied as sensitive. Clipboard still holds plain text."
                                 }) { Text("Copy unsaved answer") }
@@ -805,7 +797,7 @@ private fun ChatReader(
                             }
                         }
                     }
-                    if (providerState.error != null) item { Text(providerState.error!!, fontSize = 14.sp) }
+                    providerState.error?.let { message -> item { Text(message, fontSize = 14.sp) } }
                     if (!renderLab && storedMessages.isEmpty() && chatState.rawMarkdown == null) {
                         item {
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -995,4 +987,21 @@ private fun ReaderAction(
             drawPath(path, color, style = Stroke(stroke))
         }
     }
+}
+
+/**
+ * Mark a clip sensitive so Android 13+ does not show a content preview of a conversation answer on
+ * the clipboard overlay. This is a preview/visibility control, NOT encryption: the clipboard still
+ * holds plaintext and any app the user pastes into can read it.
+ *
+ * `EXTRA_IS_SENSITIVE` is `public static final String` — a compile-time constant that is inlined to
+ * a literal — so referencing it cannot throw on minSdk 30. The InlinedApi warning is cosmetic and
+ * is suppressed here, at the one place that uses it, with this reason rather than project-wide.
+ */
+@Suppress("InlinedApi")
+private fun markClipSensitive(clip: android.content.ClipData) {
+    clip.description.extras =
+        android.os.PersistableBundle().apply {
+            putBoolean(android.content.ClipDescription.EXTRA_IS_SENSITIVE, true)
+        }
 }

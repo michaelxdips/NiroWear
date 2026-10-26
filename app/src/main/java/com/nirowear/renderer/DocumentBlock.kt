@@ -241,13 +241,14 @@ private fun InlineRichText(
                         textDecoration = if (span.link != null) TextDecoration.Underline else null,
                     )
                 withStyle(style) {
-                    val uri = span.link?.toUri()
-                    if (uri?.scheme?.lowercase() in setOf("https", "http")) {
+                    val link = span.link
+                    val uri = link?.toUri()
+                    if (link != null && uri?.scheme?.lowercase() in setOf("https", "http")) {
                         withLink(
-                            LinkAnnotation.Clickable(span.link!!) {
+                            LinkAnnotation.Clickable(link) {
                                 openHttpLink(
                                     context,
-                                    span.link,
+                                    link,
                                 )?.let { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() }
                             },
                         ) { append(span.text) }

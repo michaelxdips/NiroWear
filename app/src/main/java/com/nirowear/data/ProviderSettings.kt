@@ -96,7 +96,16 @@ class ProviderSettings(
             require(
                 previous == null || newSecret == null || validateReplacement != null,
             ) { "Replacement validation required" }
-            val ref = if (newSecret == null) previous!!.credentialRef else UUID.randomUUID().toString()
+            // The elvis must stay INSIDE the null-secret branch. Hoisting it would throw whenever a
+            // brand-new provider is added (newSecret != null, previous == null), which is a normal
+            // flow, not an unreachable state.
+            val ref =
+                if (newSecret == null) {
+                    val prev = previous ?: error("unreachable: newSecret == null requires previous != null")
+                    prev.credentialRef
+                } else {
+                    UUID.randomUUID().toString()
+                }
             if (newSecret != null) secrets.save(ref, newSecret)
             var promoted = false
             var cleaned = true
@@ -104,10 +113,10 @@ class ProviderSettings(
                 if (newSecret != null) CredentialPromotionProbe.reached("CANDIDATE_WRITTEN")
                 if (newSecret != null) {
                     val candidate = secrets.read(ref)
-                    if (previous !=
-                        null
-                    ) {
-                        validateReplacement!!(profile, candidate)?.let { throw SafeProviderException(it) }
+                    // require() above guarantees a validator exists whenever a previous profile does.
+                    val validate = validateReplacement ?: error("unreachable: guarded by require()")
+                    if (previous != null) {
+                        validate(profile, candidate)?.let { throw SafeProviderException(it) }
                     }
                 }
                 if (newSecret != null) CredentialPromotionProbe.reached("CANDIDATE_VALIDATED")

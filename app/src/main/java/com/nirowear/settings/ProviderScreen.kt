@@ -129,7 +129,11 @@ fun ProviderScreen(onBack: () -> Unit) {
             val supplied = explicit ?: key.takeIf { it.isNotBlank() }?.let { SecretValue(it.trim()) }
             val cleaned =
                 app.settings.save(profile(), supplied) { p, candidate ->
-                    app.provider(p.type)!!.validate(p, candidate)
+                    // A missing adapter is a configuration error, not a null to assert away:
+                    // report it as a validation failure the user can see.
+                    val adapter = app.provider(p.type)
+                        ?: return@save ProviderError.PROTOCOL
+                    adapter.validate(p, candidate)
                 }
             key = ""
             edit = null
@@ -216,8 +220,9 @@ fun ProviderScreen(onBack: () -> Unit) {
                 Text("Back")
             }
         }
-        if (state.error != null) {
-            item { Text(state.error!!, fontSize = 14.sp) }
+        val stateError = state.error
+        if (stateError != null) {
+            item { Text(stateError, fontSize = 14.sp) }
         } else if (!adding && edit == null) {
             items(state.profiles) { p ->
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -398,7 +403,12 @@ fun ProviderScreen(onBack: () -> Unit) {
                         val inputProfileId = edit?.id
                         try {
                             val p = profile()
-                            val result = app.provider(p.type)!!.listModels(p, secret(p))
+                            val adapter = app.provider(p.type)
+                            if (adapter == null) {
+                                message = "This provider type is not available in this build."
+                                return@launch
+                            }
+                            val result = adapter.listModels(p, secret(p))
                             if (input != Triple(type, base, key) || inputProfileId != edit?.id) return@launch
                             when (result) {
                                 is ModelDiscoveryResult.Models -> {
@@ -440,7 +450,12 @@ fun ProviderScreen(onBack: () -> Unit) {
                             val p = profile()
                             val inputKey = key
                             val inputProfileId = edit?.id
-                            val error = app.provider(p.type)!!.validate(p, secret(p))
+                            val adapter = app.provider(p.type)
+                            if (adapter == null) {
+                                message = "This provider type is not available in this build."
+                                return@launch
+                            }
+                            val error = adapter.validate(p, secret(p))
                             if (p.type != type || p.displayName != name.trim() ||
                                 p.baseUrl != Endpoints.normalize(base, BuildConfig.DEBUG) ||
                                 p.selectedModelId != model.trim() ||
@@ -477,12 +492,13 @@ fun ProviderScreen(onBack: () -> Unit) {
                     },
                 ) { Text("Save securely") }
             }
-            if (edit != null) {
+            val deleting = edit
+            if (deleting != null) {
                 item {
                     OutlinedButton(modifier = Modifier.fillMaxWidth(), enabled = !busy, onClick = {
                         scope.launch {
                             try {
-                                app.settings.delete(edit!!.id)
+                                app.settings.delete(deleting.id)
                                 edit = null
                                 key = ""
                                 message =
