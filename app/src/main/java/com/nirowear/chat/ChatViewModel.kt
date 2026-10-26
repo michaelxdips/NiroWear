@@ -326,11 +326,17 @@ class ChatViewModel(
                         checkpoints?.cancelAndJoin()
 
                         fun settleCancellation() {
-                            // Stop during the final save means the user asked to stop before the
-                            // write landed, so the row is STOPPED — that is the contract the
-                            // stopDuringFinalSave test pins, and it is correct: the user's Stop
-                            // arrived before the answer was committed.
-                            if (streamJob.isCancelled) {
+                            // Do NOT downgrade a finished answer. StreamEvent.Completed already set
+                            // terminal = "SUCCESS" (:309) and filled localPhases; a Stop that lands
+                            // between the terminal event and this write must not rewrite it as
+                            // STOPPED, because ChatDao.finish deletes phase records for any
+                            // non-SUCCESS status (:116) — that loses the continuation record of a
+                            // complete answer AND renders "Stopped · partial answer kept" under it.
+                            //
+                            // Stop BEFORE the terminal event is still honoured: terminal is not yet
+                            // SUCCESS there, so the branch below runs and the partial text is kept
+                            // and marked stopped.
+                            if (streamJob.isCancelled && terminal != "SUCCESS") {
                                 terminal = "STOPPED"
                                 failure = null
                                 localPhases = null
