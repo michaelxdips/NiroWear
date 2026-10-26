@@ -168,6 +168,15 @@ Stated plainly, because a README that hides these is useless:
 - **The connected suite (48 tests) is a local gate, not a CI gate.** It needs an emulator, so CI runs
   the JVM tests, lint, ktlint and both assembles only. Run `connectedDebugAndroidTest` before a
   release; nothing will remind you.
+- **Six further instrumentation tests are excluded from the default run.** They carry
+  `@HostDrivenGate` and need a host script to seed state. Run them with
+  `adb shell am instrument -w -r -e annotation com.nirowear.HostDrivenGate com.nirowear.test/androidx.test.runner.AndroidJUnitRunner`.
+- **Known renderer limits, all reproduced on the real parser.** Display math inside a blockquote or
+  list is destroyed rather than shown as source (`> \[x^2\]` loses its delimiters). A fence opened
+  inside a quote can be closed by a `> ``` ` line. An over-wide table row loses cells with no
+  marker. `$$…$$` mid-line leaves a stray `$`. A link with a rejected scheme is still painted as
+  tappable even though tapping does nothing. Tables are capped at 40 rendered rows with an explicit
+  "… N more rows" line. These are documented rather than fixed; each needs a design decision.
 
 ## Contributing
 
