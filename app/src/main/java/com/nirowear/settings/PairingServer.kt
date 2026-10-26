@@ -95,6 +95,13 @@ internal class PairingServer(
                         active = client
                         try {
                             client.use { handle(it) }
+                        } catch (_: java.io.IOException) {
+                            // A single bad client must not kill the listener. Before this catch,
+                            // an idle connection (port scan, browser preconnect, `nc -z`) hit the
+                            // 2s read timeout, threw SocketTimeoutException, unwound past this
+                            // try/finally into the outer `catch (_: Throwable)`, and that catch's
+                            // finally closed the socket — so any scanner could end pairing with no
+                            // token. Keep accepting; only the loop condition ends the session.
                         } finally {
                             active = null
                         }
@@ -396,14 +403,31 @@ document.getElementById('go').onclick=async function(){
   name:document.getElementById('name').value,base:document.getElementById('base').value,
   model:document.getElementById('model').value,key:document.getElementById('key').value});
  try{
-  var ct=await crypto.subtle.encrypt({name:'AES-GCM',iv:ready.iv,additionalData:ready.aad},
+  // A FRESH nonce per send. Reusing ready.iv meant a second Send (the normal recovery path after a
+  // rejected key) encrypted two different plaintexts under the same key and nonce — the one thing
+  // AES-GCM must never see, because it leaks the XOR of the plaintexts and enables forgery.
+  var iv=crypto.getRandomValues(new Uint8Array(12));
+  var ct=await crypto.subtle.encrypt({name:'AES-GCM',iv:iv,additionalData:ready.aad},
    ready.aes,new TextEncoder().encode(body));
   var r=await fetch('/'+CAP+'/pair',{method:'POST',headers:{'Content-Type':'application/json'},
-   body:JSON.stringify({v:1,t:b64u(ready.aad),pub:ready.pub,iv:b64u(ready.iv),ct:b64u(ct)})});
+   body:JSON.stringify({v:1,t:b64u(ready.aad),pub:ready.pub,iv:b64u(iv),ct:b64u(ct)})});
   out.textContent=r.ok?'Sent. Finish on the watch.':'Rejected. Restart pairing on the watch.';
   if(r.ok){document.getElementById('key').value='';}
  }catch(e){out.textContent='Could not send. Restart pairing on the watch.';}
 };
-init().catch(function(){document.getElementById('out').textContent='Handshake failed. Restart pairing on the watch.';});
+init().catch(function(e){
+  // WebCrypto (crypto.subtle) only exists in a secure context: https, file, localhost, 127.0.0.1.
+  // This page is served over plain HTTP from a LAN address, so window.isSecureContext is false and
+  // crypto.subtle is undefined — verified in a real browser (origin http://192.168.8.2, isSecureContext
+  // false, typeof crypto.subtle undefined). The old copy said "Handshake failed. Restart pairing",
+  // which sent the user round a loop that could never succeed.
+  var o=document.getElementById('out');
+  if(!window.isSecureContext || typeof crypto==='undefined' || !crypto.subtle){
+    o.textContent='This browser will not run crypto on a plain-HTTP LAN address, so the key cannot '+
+      'be encrypted here. Enter the key on the watch instead (Cancel pairing below).';
+  } else {
+    o.textContent='Handshake failed. Restart pairing on the watch.';
+  }
+});
 </script></body></html>
 """

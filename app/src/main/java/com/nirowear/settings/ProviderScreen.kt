@@ -173,30 +173,44 @@ fun ProviderScreen(onBack: () -> Unit) {
             pairingNote = "No Wi-Fi address. Turn on Wi-Fi, or enter the key below."
             return
         }
+        // The constructor itself does real work — SecureRandom, a P-256 KeyPairGenerator, and a
+        // ServerSocket bind. Only start() used to be guarded, so a Wi-Fi drop between lanAddress()
+        // and the bind threw BindException out of the Compose onClick and killed the process. Both
+        // are guarded now, and a failed start closes the already-bound socket instead of leaking
+        // the fd until process death.
         val server =
-            PairingServer(host) { payload ->
-                scope.launch {
-                    stopPairing("Key received.")
-                    edit = null
-                    adding = true
-                    reveal = false
-                    validated = false
-                    models = emptyList()
-                    type = payload.type
-                    name = payload.name.ifBlank { payload.type.label }
-                    base = payload.baseUrl
-                    model = payload.modelId
-                    // The key arrived encrypted and is handed straight to storage. Putting it in the
-                    // editing field would make it revealable and screenshot-adjacent for no benefit;
-                    // the field stays blank, exactly as it does after a manual save.
-                    key = ""
-                    saveProfile(SecretValue(sanitizeKey(payload.apiKey)))
+            runCatching {
+                PairingServer(host) { payload ->
+                    scope.launch {
+                        stopPairing("Key received.")
+                        edit = null
+                        adding = true
+                        reveal = false
+                        validated = false
+                        models = emptyList()
+                        type = payload.type
+                        name = payload.name.ifBlank { payload.type.label }
+                        base = payload.baseUrl
+                        model = payload.modelId
+                        // The key arrived encrypted and is handed straight to storage. Putting it in the
+                        // editing field would make it revealable and screenshot-adjacent for no benefit;
+                        // the field stays blank, exactly as it does after a manual save.
+                        key = ""
+                        saveProfile(SecretValue(sanitizeKey(payload.apiKey)))
+                    }
                 }
             }
-        runCatching { server.start() }
-            .onSuccess {
-                pairing = server
-                pairingNote = if (isPrivateAddress(host)) "" else "Not a home network. Cancel if unsure."
+        server
+            .onSuccess { created ->
+                runCatching { created.start() }
+                    .onSuccess {
+                        pairing = created
+                        pairingNote =
+                            if (isPrivateAddress(host)) "" else "Not a home network. Cancel if unsure."
+                    }.onFailure {
+                        runCatching { created.close() }
+                        pairingNote = "Pairing unavailable. Enter the key below."
+                    }
             }.onFailure { pairingNote = "Pairing unavailable. Enter the key below." }
     }
 
