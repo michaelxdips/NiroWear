@@ -150,7 +150,7 @@ compiler/test/JS/Wasm dependencies are not claimed as Android runtime components
 
 | Component | Resolved version | License / attribution evidence |
 |---|---|---|
-| `com.squareup.okhttp3:okhttp`, `okhttp-android` | 5.3.2 | [Apache 2.0](docs/licenses/KOTLIN-LICENSE.txt); exact cached source headers retain Square, Block, Android Open Source Project, Twitter and ASF notices |
+| `com.squareup.okhttp3:okhttp`, `okhttp-android` | 5.5.1 | [Apache 2.0](docs/licenses/KOTLIN-LICENSE.txt); exact cached source headers retain Square, Block, Android Open Source Project, Twitter and ASF notices |
 | `com.squareup.okio:okio`, `okio-jvm` | 3.16.4 | [Apache 2.0](docs/licenses/KOTLIN-LICENSE.txt); Square/other cached notices preserved |
 | `org.jetbrains:annotations` | 23.0.0 | [Apache 2.0](docs/licenses/JETBRAINS-ANNOTATIONS-LICENSE.txt); Copyright 2000-2020/2021 JetBrains s.r.o. in exact sources |
 | `org.jspecify:jspecify` | 1.0.0 | [Apache 2.0](docs/licenses/KOTLIN-LICENSE.txt); Copyright 2018-2020 / 2022 The JSpecify Authors in exact sources |

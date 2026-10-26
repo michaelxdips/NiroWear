@@ -68,15 +68,28 @@ jobs:
       # NO-SOURCE: it exits 0 having run nothing. It is kept because it is the
       # correct command the moment tests are published, but it is NOT the gate.
       # The gate is assemble + lint, which compile every published source file.
+      # Test sources are gitignored by policy, so on a fresh clone this task is NO-SOURCE and exits
+      # 0 having run nothing. That is stated rather than hidden: a green run must not be
+      # indistinguishable from a run that executed zero tests.
       - name: Unit tests (NO-SOURCE on the published tree, by policy)
         run: ./gradlew :app:testDebugUnitTest --console=plain
 
-      - name: Assert the unit-test step was not silently empty
+      # The assertion is CONDITIONAL on purpose. If test sources are present, results are required
+      # and their absence fails the job. If they are absent, the job says so and continues — failing
+      # there would just be a permanently red CI for a policy decision, and warning there without
+      # checking the other branch would let a broken test run pass silently.
+      - name: Verify the test step matches reality
         run: |
-          count=$(find app/build/test-results/testDebugUnitTest -name 'TEST-*.xml' 2>/dev/null | wc -l)
-          echo "test XML files: $count"
-          if [ "$count" -eq 0 ]; then
-            echo "::warning::No unit tests ran: app/src/test is gitignored by policy. Build and lint are the real gate."
+          set -euo pipefail
+          sources=$(find app/src/test -name '*.kt' 2>/dev/null | wc -l)
+          results=$(find app/build/test-results/testDebugUnitTest -name 'TEST-*.xml' 2>/dev/null | wc -l)
+          echo "test sources: $sources   result XML files: $results"
+          if [ "$sources" -gt 0 ] && [ "$results" -eq 0 ]; then
+            echo "::error::$sources test sources exist but no results were produced"
+            exit 1
+          fi
+          if [ "$sources" -eq 0 ]; then
+            echo "::warning::No test sources are published (app/src/test is gitignored by policy), so this job ran no tests. Build, lint and style are the real gate."
           fi
 
       - name: Lint

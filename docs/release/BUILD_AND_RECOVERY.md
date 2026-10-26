@@ -2,7 +2,7 @@
 
 ## Toolchain
 
-Single Android application module. Gradle wrapper 9.6.0; Android Gradle plugin 9.4.1; Kotlin Compose plugin 2.3.21; KSP 2.3.9. `gradle/gradle-daemon-jvm.properties` requests JDK 25. Application Java source/target compatibility is 17. Android SDK compile/target36, min30. SDK location belongs in ignored `local.properties`, never committed.
+Single Android application module. Gradle wrapper 9.6.0; Android Gradle plugin 9.4.1; Kotlin Compose plugin 2.3.21; KSP 2.3.9. `gradle/gradle-daemon-jvm.properties` requests JDK 25. Application Java source/target compatibility is 17. Android SDK compile/target37, min30. SDK location belongs in ignored `local.properties`, never committed.
 
 ```powershell
 .\gradlew.bat --version

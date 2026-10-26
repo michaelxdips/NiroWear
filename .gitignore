@@ -23,6 +23,9 @@
 !.editorconfig
 # CI is published: a workflow nobody can see is not a gate.
 !.github/workflows/*.yml
+!.github/workflows/*.yaml
+# A release workflow is often spelled .yaml; the blanket * would drop it silently.
+!gradle/libs.versions.toml
 # Repo infrastructure. The allowlist's blanket `*` silently swallowed these, which made
 # "add Dependabot / SECURITY.md / CODEOWNERS" impossible without knowing to edit this file.
 # Verified with: git check-ignore -v --no-index .github/dependabot.yml
@@ -111,7 +114,12 @@ docs/release/BETA3_*
 docs/release/CLEANUP_MANIFEST.md
 artifacts/
 artifactsbeta3-uiux-2026-10-18before/
-scripts/
+scripts/*
+# A negation cannot re-include a file inside an excluded DIRECTORY, so the directory pattern is
+# narrowed to its contents first. These two are the gate runners CONTRIBUTING and the PR template
+# tell contributors to use; they contain no credentials or local paths.
+!scripts/disposable-instrumentation.ps1
+!scripts/test-clean-wear.py
 .private/
 build/
 .gradle/

@@ -83,7 +83,7 @@ Uncropped 466 × 466 captures from the app running against a real HTTPS endpoint
 |---|---|
 | Device | Wear OS 3 or newer (API 30+), round display recommended |
 | Build JDK | 25 (the Gradle daemon toolchain pins it; app bytecode targets Java 17) |
-| Android SDK | Platform 36, build-tools matching |
+| Android SDK | Platform 37, build-tools 36.1.0 |
 | Gradle | Provided by the checked-in wrapper — do not install separately |
 
 NiroWear is a **standalone** Wear app: it does not require a phone companion and works over the watch's own Wi-Fi or its Bluetooth bridge.
