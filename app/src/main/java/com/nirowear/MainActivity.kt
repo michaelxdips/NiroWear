@@ -561,7 +561,11 @@ private fun ChatReader(
             LaunchedEffect(
                 blocks,
                 historyBlocks,
-                blockHeights.toMap(),
+                // blockHeights is deliberately NOT a key. It is written once per rendered block from
+                // onSizeChanged, and `blockHeights.toMap()` produced a new map on every write, so
+                // every measurement restarted this effect and re-ran the whole scroll decision. The
+                // map is read inside the effect instead, where it is a snapshot read, so new heights
+                // are seen without relaunching.
                 following,
                 renderLab,
                 sectionMenu,
