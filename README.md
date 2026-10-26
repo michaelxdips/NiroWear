@@ -160,6 +160,12 @@ Stated plainly, because a README that hides these is useless:
 - **Link taps** open via the system handler; destination completion on a real paired device is unverified.
 - **Live smoke tests** are documented against controlled endpoints and one third-party Responses endpoint — not against every official provider with production credentials.
 - **TalkBack audio** acceptance is incomplete.
+- **There is no stable release channel.** `releases/latest` returns 404; every published build is a
+  prerelease, because the signing identity is still the Android debug key. Shipping a stable build
+  needs a production keystore, which is an owner decision, not a code change.
+- **The connected suite (48 tests) is a local gate, not a CI gate.** It needs an emulator, so CI runs
+  the JVM tests, lint, ktlint and both assembles only. Run `connectedDebugAndroidTest` before a
+  release; nothing will remind you.
 
 ## Contributing
 
