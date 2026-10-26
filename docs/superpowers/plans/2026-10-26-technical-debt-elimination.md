@@ -26,14 +26,14 @@
 
 | Metric | Value | Source |
 |---|---|---|
-| HEAD | `28ff519` + uncommitted site/plan work | `git log --oneline -1` |
-| JVM tests | **124 / 0 fail / 24 suites**, XML `2026-10-26 16:46` | `app/build/test-results/testDebugUnitTest/` |
+| HEAD | `efcf8e5` (plan commit; `origin/main` matches), clean tree | `git log --oneline -1` |
+| JVM tests | **124 / 0 fail / 24 suites**, XML `2026-10-26 17:03:50` | `app/build/test-results/testDebugUnitTest/` |
 | Connected tests | **48 tests / 1 fail**, XML `2026-10-25T13:24:17` | `artifacts/b303-2026-10-25/connected-final.xml` |
-| Lint | **0 errors / 4 warnings** (2× InlinedApi, 2× GradleDependency) | `app/build/reports/lint-results-debug.xml` |
-| Tracked files | 145 (68 app, 59 docs, 12 root, 3 gradle, 3 fixtures) | `git ls-files` |
+| Lint | **0 errors / 20 issues** (2× InlinedApi, 10× GradleDependency, 7× NewerVersionAvailable, 1× AutoboxingStateCreation hint) — see correction note | `app/build/reports/lint-results-debug.xml` |
+| Tracked files | 146 (68 app, 60 docs, 3 gradle, 3 fixtures, 12 root) | `git ls-files` |
 | Repo on disk | **1,843 MB**, of which **1,635 MB is `artifacts/`** | directory sum |
 | Lines >120 chars in main | **163** (max 340) | `artifacts/audit-2026-10-26/linelen.py` |
-| `!!` non-null assertions in main | **10+** across 5 files | `findstr "!!"` |
+| `!!` non-null assertions in main | **12** across 5 files (ProviderScreen 5, MainActivity 3, ProviderSettings 2, DocumentBlock 1, ChatViewModel 1) | `findstr "!!"` |
 | TODO/FIXME/HACK markers | **0** | `findstr` |
 | Dead code | `ChatDao.rename` — declared, never called | `findstr rename` |
 | CI | **none** (no `.github/`) | directory check |
@@ -928,7 +928,7 @@ The campaign is done when **all** of these are literally true:
 - [ ] `ktlintCheck` is enforcing (`ignoreFailures = false`) and passes.
 - [ ] JVM tests pass with a count read from XML, and that count is ≥ the baseline 124.
 - [ ] Connected tests: `tests="48" failures="0"`, read from XML.
-- [ ] Lint: `0 errors`, and the only remaining warnings are the two `GradleDependency` advisories.
+- [ ] Lint: `0 errors`, and every remaining warning is either a dependency-freshness advisory or one of the two documented `InlinedApi` cosmetic ones. (Amended 2026-10-26: the original wording — "only the two `GradleDependency` advisories" — was based on a 4-warning baseline that does not reproduce; a real run reports 17 freshness advisories.)
 - [ ] `cmd /c findstr /s /c:"TODO" app\src\main\java\*.kt` returns nothing.
 - [ ] `ChatDao.rename` no longer exists.
 - [ ] `KNOWN_ISSUES.md` lists every remaining item with a reason it was accepted.
