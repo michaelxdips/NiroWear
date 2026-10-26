@@ -36,6 +36,16 @@ It exists because every other way of reading an AI answer on a watch is a compro
 
 The transport itself is plain HTTP and the handshake is not authenticated, so this is not "end-to-end encrypted" in the strict sense: an attacker who can both intercept your LAN traffic **and** read the token off the watch screen could impersonate the watch. That is a narrow model, but it is not nothing. If it is not acceptable to you, use manual entry — it never touches the network.
 
+> **Pairing does not currently work in a browser, and the page now says so.** Browsers only expose
+> the Web Crypto API (`crypto.subtle`) on a secure origin — `https`, `file`, `localhost`,
+> `127.0.0.1`. The pairing page is served over plain HTTP from a LAN address, which is not one, so
+> the API is absent and the page cannot encrypt anything. Measured directly: from a page served the
+> way the watch serves it, `window.isSecureContext` was `false` and `typeof crypto.subtle` was
+> `undefined`. Rather than loop on "Handshake failed", the page now tells you this and points at
+> manual entry. Fixing it properly needs a pure-JavaScript crypto implementation served on that
+> origin — a design decision, not a patch. **Until then, add providers by typing the key on the
+> watch.**
+
 **Streaming with honest interruption.** Tokens render as they arrive. Scroll up and the view stops following you, with a small `Latest` control to jump back. `Stop` cancels the underlying HTTP request and keeps whatever partial answer had already arrived — it is never replayed automatically.
 
 **One linear conversation.** Editing an earlier user message replaces it, deletes everything after it, and regenerates from that point. There are no branches and no alternate-response variants to choose between. Switching provider or model keeps the same history, and each assistant message records which profile and model produced it.
