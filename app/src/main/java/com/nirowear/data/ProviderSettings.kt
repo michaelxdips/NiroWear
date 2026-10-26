@@ -113,9 +113,14 @@ class ProviderSettings(
                 if (newSecret != null) CredentialPromotionProbe.reached("CANDIDATE_WRITTEN")
                 if (newSecret != null) {
                     val candidate = secrets.read(ref)
-                    // require() above guarantees a validator exists whenever a previous profile does.
-                    val validate = validateReplacement ?: error("unreachable: guarded by require()")
+                    // Only a REPLACEMENT needs validation against the previous profile. Adding a
+                    // brand-new provider has previous == null and legitimately passes no validator,
+                    // so requiring one unconditionally crashes the normal add-provider path.
+                    // The require() above only guarantees a validator when previous != null.
                     if (previous != null) {
+                        val validate =
+                            validateReplacement
+                                ?: error("unreachable: require() guarantees a validator when previous != null")
                         validate(profile, candidate)?.let { throw SafeProviderException(it) }
                     }
                 }

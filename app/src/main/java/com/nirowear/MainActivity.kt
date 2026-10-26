@@ -236,9 +236,9 @@ private fun ChatReader(
                             if (message.role ==
                                 "USER"
                             ) {
-                                "You Â· hold to edit"
+                                "You · hold to edit"
                             } else {
-                                "${message.providerLabel} Â· ${message.modelId}"
+                                "${message.providerLabel} · ${message.modelId}"
                             }
                         listOf(message.id to ContentBlock.Heading(4, listOf(InlineContent(label)))) +
                             ResponseParser.parse(message.rawContent).map { message.id to it } +
@@ -248,7 +248,7 @@ private fun ChatReader(
                                 listOf(
                                     message.id to
                                         ContentBlock.Paragraph(
-                                            listOf(InlineContent(message.error ?: "Stopped Â· partial answer kept")),
+                                            listOf(InlineContent(message.error ?: "Stopped · partial answer kept")),
                                         ),
                                 )
                             } else {
@@ -822,7 +822,7 @@ private fun ChatReader(
                     if (!renderLab && (chatState.generating || transientStopped)) {
                         item {
                             Text(
-                                if (chatState.generating) "Streamingâ€¦" else "Stopped Â· partial answer kept",
+                                if (chatState.generating) "Streaming…" else "Stopped · partial answer kept",
                                 fontSize = 12.sp,
                             )
                         }
@@ -843,10 +843,10 @@ private fun ChatReader(
             ) {
                 Text(
                     if (renderLab) {
-                        "RenderLab Â· $section"
+                        "RenderLab · $section"
                     } else {
-                        providerState.selected?.let { "${it.displayName} Â· ${it.selectedModelId}" }
-                            ?: "Add provider Â· Menu"
+                        providerState.selected?.let { "${it.displayName} · ${it.selectedModelId}" }
+                            ?: "Add provider · Menu"
                     },
                     modifier = Modifier.height(42.dp).wrapContentHeight(Alignment.Bottom).padding(bottom = 6.dp),
                     fontSize = 12.sp,
