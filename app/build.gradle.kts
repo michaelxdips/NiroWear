@@ -72,7 +72,7 @@ dependencies {
     implementation("androidx.datastore:datastore-preferences:1.2.1")
     implementation("androidx.room:room-runtime:2.8.4")
     ksp("androidx.room:room-compiler:2.8.4")
-    implementation("com.squareup.okhttp3:okhttp:5.3.2")
+    implementation("com.squareup.okhttp3:okhttp:5.5.1")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")
     implementation("org.commonmark:commonmark:0.24.0")
     implementation("org.commonmark:commonmark-ext-gfm-tables:0.24.0")
@@ -84,8 +84,8 @@ dependencies {
     implementation("ru.noties:jlatexmath-android:0.2.0")
     androidTestImplementation("androidx.test:runner:1.5.0")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
-    androidTestImplementation("com.squareup.okhttp3:mockwebserver:5.3.2")
-    testImplementation("com.squareup.okhttp3:mockwebserver:5.3.2")
+    androidTestImplementation("com.squareup.okhttp3:mockwebserver:5.5.1")
+    testImplementation("com.squareup.okhttp3:mockwebserver:5.5.1")
 }
 
 ksp { arg("room.schemaLocation", "$projectDir/schemas") }
