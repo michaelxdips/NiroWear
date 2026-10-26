@@ -941,8 +941,8 @@ private fun ChatReader(
  * the clipboard overlay. This is a preview/visibility control, NOT encryption: the clipboard still
  * holds plaintext and any app the user pastes into can read it.
  *
- * `EXTRA_IS_SENSITIVE` is `public static final String` â€” a compile-time constant that is inlined to
- * a literal â€” so referencing it cannot throw on minSdk 30. The InlinedApi warning is cosmetic and
+ * `EXTRA_IS_SENSITIVE` is `public static final String` — a compile-time constant that is inlined to
+ * a literal — so referencing it cannot throw on minSdk 30. The InlinedApi warning is cosmetic and
  * is suppressed here, at the one place that uses it, with this reason rather than project-wide.
  */
 @Suppress("InlinedApi")

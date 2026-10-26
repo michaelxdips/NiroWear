@@ -1163,6 +1163,127 @@ html[data-theme="dark"] .chip-table .chip-t{color:#9BE8D5}
 .latest.on{display:block}
 .latest:hover{border-color:#9BE8D5;color:#9BE8D5}
 
+/* ---------- live stream demo ---------- */
+
+.stream{border-top:1px solid var(--hair)}
+
+.stream-grid{
+  display:grid;
+  grid-template-columns:minmax(0,466px) minmax(0,1fr);
+  gap:32px;
+  align-items:start;
+  margin-top:28px;
+}
+
+.stream-stage{min-width:0}
+
+.stream-frame{
+  position:relative;
+  inset:auto;
+  width:100%;
+  aspect-ratio:1;
+  border-radius:50%;
+  overflow:hidden;
+  border:1px solid var(--hair);
+}
+
+.stream-frame .dial-in{
+  position:absolute;
+  inset:0;
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  /* A circle inscribes less width than its bounding box, and much less near the top and bottom of
+     the arc. The generous top/bottom padding is what keeps a line from being clipped by the bezel
+     at either end of the scroll. No mask: fading the text would fight the whole point of a page
+     about readability. */
+  padding:74px 42px;
+  scrollbar-width:none;
+}
+.stream-frame .dial-in::-webkit-scrollbar{display:none}
+/* Wide content pans inside the dial rather than escaping the circle, with a thin scrollbar so it
+   reads as "this pans" rather than as a browser artefact. */
+.stream-frame .dial-in .d-code{max-width:100%;overflow-x:auto;scrollbar-width:thin}
+.stream-frame .dial-in .d-code::-webkit-scrollbar{height:3px}
+.stream-frame .dial-in .d-code::-webkit-scrollbar-thumb{background:var(--hair);border-radius:2px}
+
+.stream-cap{
+  display:flex;
+  justify-content:space-between;
+  gap:12px;
+  font-family:var(--util);
+  font-size:10px;
+  letter-spacing:.1em;
+  text-transform:uppercase;
+  color:var(--steel);
+  padding-top:11px;
+}
+.stream-cap .tnum{font-variant-numeric:tabular-nums}
+#streamState.is-live{color:#9BE8D5}
+#streamState.is-stopped{color:#E8C29B}
+
+.stream-side{display:flex;flex-direction:column;gap:18px;min-width:0}
+
+.stream-controls{display:flex;flex-wrap:wrap;gap:0;border:1px solid var(--hair)}
+
+.sbtn{
+  appearance:none;
+  background:none;
+  border:0;
+  border-right:1px solid var(--hair);
+  color:var(--steel);
+  font-family:var(--util);
+  font-size:10px;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+  padding:11px 15px;
+  cursor:pointer;
+  flex:1 1 auto;
+}
+.sbtn:last-child{border-right:0}
+.sbtn:hover:not(:disabled){color:var(--ink);background:color-mix(in srgb, var(--ink) 4%, transparent)}
+.sbtn:disabled{opacity:.38;cursor:not-allowed}
+/* The primary button must stay legible in both themes. --paper and --ink swap meaning between
+   light and dark, so a hard-coded pair is safer than a variable pair here. */
+.sbtn-primary{color:#0E1012;background:#9BE8D5;font-weight:500}
+.sbtn-primary:hover:not(:disabled){background:#B6F0E1;color:#0E1012}
+.sbtn-primary:disabled{background:color-mix(in srgb, #9BE8D5 40%, var(--paper));color:#0E1012}
+
+.stream-presets{display:flex;flex-wrap:wrap;gap:0;border:1px solid var(--hair)}
+
+.stream-facts{margin:0;display:grid;gap:9px}
+.stream-facts > div{
+  display:grid;
+  grid-template-columns:minmax(0,88px) minmax(0,1fr);
+  gap:12px;
+  border-top:1px solid var(--hair);
+  padding-top:9px;
+}
+.stream-facts dt{
+  font-family:var(--util);
+  font-size:9.5px;
+  letter-spacing:.1em;
+  text-transform:uppercase;
+  color:var(--cobalt);
+}
+.stream-facts dd{margin:0;font-size:13px;line-height:1.5;color:var(--steel)}
+.stream-facts b{color:var(--ink);font-weight:400}
+
+.stream-note{
+  font-size:12.5px;
+  line-height:1.6;
+  color:var(--steel);
+  border-left:2px solid var(--hair);
+  padding-left:12px;
+}
+.stream-note b{color:var(--ink);font-weight:400}
+
+.stream-frame .latest{bottom:22px}
+
+@media (max-width:860px){
+  .stream-grid{grid-template-columns:minmax(0,1fr);gap:24px}
+  .stream-frame{max-width:466px;margin:0 auto}
+}
+
 /* ---------- story: scroll-driven dial ---------- */
 
 .story{
@@ -2158,6 +2279,76 @@ A failed decrypt is a generic rejection: the caller learns that the payload is n
           <span class="tnum"><span id="ordinarySize">466</span> px · one node</span>
         </div>
         <p class="bench-verdict" id="ordinaryVerdict">Truncated to fit.</p>
+      </div>
+
+    </div>
+
+  </div>
+</section>
+
+<!-- ============ LIVE STREAM DEMO ============ -->
+<section class="stream" id="stream">
+  <div class="wrap">
+
+    <div class="bench-lede">
+      <div class="rail"><span class="num">01</span></div>
+      <div>
+        <h2>Watch it arrive.</h2>
+        <p class="lede">
+          Streaming is the product's defining behaviour, so here it is rather than a paragraph about
+          it. The answer below is delivered one token at a time and parsed into blocks as it lands —
+          a heading becomes a heading the moment its line completes, a fence holds a code block open
+          until it closes. Scroll up while it runs and following stops; a <b>Latest</b> control
+          appears instead of the page yanking you back down.
+        </p>
+        <p class="disclaimer">
+          The text is a recorded answer, replayed at a realistic cadence. There is no model call:
+          this page has no backend and never sends your input anywhere. Stop is real — it abandons
+          the replay and keeps exactly what had arrived, which is what the app does with a live
+          request.
+        </p>
+      </div>
+    </div>
+
+    <div class="stream-grid">
+
+      <div class="stream-stage">
+        <div class="dial-frame stream-frame">
+          <div class="dial-in" id="streamDial" tabindex="0" role="region"
+               aria-label="A recorded answer streaming into a 466 pixel round watch face"></div>
+          <div class="dial-fade top" aria-hidden="true"></div>
+          <div class="dial-fade bottom" aria-hidden="true"></div>
+          <button class="latest" type="button" id="streamLatest" hidden>Latest ↓</button>
+        </div>
+        <div class="stream-cap">
+          <span class="tnum" id="streamState" aria-live="polite">Ready</span>
+          <span class="tnum" id="streamMeter">0 blocks · 0 chars</span>
+        </div>
+      </div>
+
+      <div class="stream-side">
+        <div class="stream-controls">
+          <button class="sbtn sbtn-primary" type="button" id="streamPlay">Stream this answer</button>
+          <button class="sbtn" type="button" id="streamStop" disabled>Stop</button>
+          <button class="sbtn" type="button" id="streamReset" disabled>Reset</button>
+        </div>
+
+        <div class="stream-presets" role="group" aria-label="Answers to stream">
+          <button class="preset" type="button" data-stream="0" aria-pressed="true">Streaming + Stop</button>
+          <button class="preset" type="button" data-stream="1" aria-pressed="false">Code + math</button>
+          <button class="preset" type="button" data-stream="2" aria-pressed="false">Table + list</button>
+        </div>
+
+        <dl class="stream-facts">
+          <div><dt>Parse cadence</dt><dd>throttled to one parse per frame, never a debounce</dd></div>
+          <div><dt>On Stop</dt><dd>partial text stays visible and is persisted, marked stopped</dd></div>
+          <div><dt>Scroll up</dt><dd>following stops; <b>Latest</b> returns you to the end</dd></div>
+          <div><dt>Interrupted</dt><dd>nothing is replayed automatically — you decide to retry</dd></div>
+        </dl>
+
+        <p class="stream-note" id="streamNote" aria-live="polite">
+          Press <b>Stream this answer</b>. Scroll inside the dial while it runs to see following stop.
+        </p>
       </div>
 
     </div>
@@ -3458,11 +3649,280 @@ if (typeof module !== "undefined" && module.exports) {
     measureDials();
   }
 
+  /* ---------- live stream demo ----------
+     Replays a recorded answer token by token through the SAME tokenize()/blocksToHtml() the bench
+     uses, so what you see is this page's parser, not a video. No network: the text is a literal.
+     Stop cancels the timer and keeps exactly the text that had arrived, which mirrors the app's
+     Stop semantics. Scroll-up detection is real: if you move the dial away from the bottom, the
+     follow behaviour stops and a Latest control appears instead of yanking you back. */
+
+  var STREAM_ANSWERS = [
+    [
+      "## Why streaming changes the renderer",
+      "",
+      "A chat client that waits for the last token can render once, at the end. One that shows",
+      "tokens as they arrive cannot: every delta invalidates the text you already drew.",
+      "",
+      "So the answer is parsed into blocks while it is still arriving. A heading becomes a",
+      "heading the moment its line completes. A fence holds a code block open until it closes,",
+      "because a half-typed fence is still a fence.",
+      "",
+      "```kotlin",
+      "val blocks = parse(raw)      // runs on every frame that has new text",
+      "val memo   = blocks.associateBy { it.id }",
+      "```",
+      "",
+      "Two rules keep that honest. Parsing is throttled to at most one pass per frame, and the",
+      "final state is always parsed even if the stream is interrupted — otherwise the last",
+      "paragraph would never appear.",
+      "",
+      "Press **Stop** while this is running. The partial text stays, marked as stopped, and",
+      "nothing is resent on your behalf."
+    ].join("\n"),
+
+    [
+      "## Deriving the shared secret",
+      "",
+      "The watch and the phone agree on a key without either sending one. Each side generates an",
+      "ephemeral P-256 pair, they exchange public halves, and both derive the same secret.",
+      "",
+      "$$K = \\mathrm{ECDH}(d_{watch}, Q_{phone})$$",
+      "",
+      "The capability token from the URL is bound in as associated data, so a payload encrypted",
+      "for one session cannot be replayed into another:",
+      "",
+      "```kotlin",
+      "val cipher = Cipher.getInstance(\"AES/GCM/NoPadding\")",
+      "cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(128, iv))",
+      "cipher.updateAAD(token)",
+      "```",
+      "",
+      "Only a payload that actually decrypts consumes the session. Marking it used before",
+      "decryption would let one garbage body burn the two-minute window."
+    ].join("\n"),
+
+    [
+      "## What each adapter must prove",
+      "",
+      "Four providers, four different ideas of \"finished\". End of stream is not one of them.",
+      "",
+      "| Provider | Terminal event |",
+      "| --- | --- |",
+      "| OpenAI Responses | response.completed |",
+      "| Anthropic | message_stop |",
+      "| Gemini | finishReason STOP |",
+      "| Chat Completions | [DONE] |",
+      "",
+      "A stream that stops without its terminal event is a **failure**, not a short answer:",
+      "",
+      "- the socket dropped mid-answer, or",
+      "- the provider rejected the request after headers were sent.",
+      "",
+      "Treating EOF as success would show a truncated answer as if it were complete, which is",
+      "the one failure mode a chat client must never have."
+    ].join("\n")
+  ];
+
+  var streamDial = document.getElementById("streamDial");
+  var streamPlay = document.getElementById("streamPlay");
+  var streamStop = document.getElementById("streamStop");
+  var streamReset = document.getElementById("streamReset");
+  var streamState = document.getElementById("streamState");
+  var streamMeter = document.getElementById("streamMeter");
+  var streamLatest = document.getElementById("streamLatest");
+  var streamNote = document.getElementById("streamNote");
+
+  var streamTimer = null;
+  var streamFull = "";
+  var streamPos = 0;
+  var streamIndex = 0;
+  var streamFollowing = true;
+  var streamRunning = false;
+  var lastParseAt = 0;
+
+  function streamAnswer() {
+    return STREAM_ANSWERS[streamIndex] || STREAM_ANSWERS[0];
+  }
+
+  function streamSetState(text, cls) {
+    if (!streamState) return;
+    streamState.textContent = text;
+    streamState.className = "tnum" + (cls ? " " + cls : "");
+  }
+
+  // The Latest button carries the `hidden` attribute in markup, which wins over any class. Drive
+  // both so it is laid out AND announced to assistive tech, and so the state is never ambiguous.
+  function streamShowLatest(show) {
+    if (!streamLatest) return;
+    streamLatest.hidden = !show;
+    if (show) streamLatest.classList.add("on");
+    else streamLatest.classList.remove("on");
+  }
+
+  function streamNearBottom() {
+    if (!streamDial) return true;
+    return streamDial.scrollHeight - streamDial.scrollTop - streamDial.clientHeight < 28;
+  }
+
+  function streamPaint() {
+    if (!streamDial) return;
+    var partial = streamFull.slice(0, streamPos);
+    // Same parser as the bench: the demo shows real block structure, not a styled blob.
+    var blocks = tokenize(partial);
+    // innerHTML rebuilds the subtree, which resets scrollTop to 0. Capture where the reader was
+    // BEFORE the write, so an upward scroll survives the next token. Without this, follow-behaviour
+    // re-pins to the bottom on every paint and the user can never scroll up at all — which is the
+    // opposite of the contract this demo exists to show.
+    var prevTop = streamDial.scrollTop;
+    var wasNearBottom = streamNearBottom();
+    streamDial.innerHTML = blocksToHtml(blocks);
+    if (streamMeter) {
+      streamMeter.textContent = blocks.length + (blocks.length === 1 ? " block · " : " blocks · ") +
+        partial.length + " chars";
+    }
+    if (streamFollowing && wasNearBottom) {
+      streamDial.scrollTop = streamDial.scrollHeight;
+    } else {
+      // Keep the reader exactly where they were, measured from the bottom so growing content above
+      // does not drift the view.
+      streamDial.scrollTop = Math.max(0, prevTop);
+    }
+  }
+
+  function streamTick() {
+    if (!streamRunning) return;
+    // Advance a variable chunk so it reads like tokens, not a typewriter.
+    var step = 2 + Math.floor(Math.random() * 7);
+    streamPos = Math.min(streamFull.length, streamPos + step);
+    var now = Date.now();
+    // Throttle: at most one parse per frame. This is the same rule the app uses, and it is why
+    // a fast stream does not parse thousands of times.
+    if (now - lastParseAt >= 16) {
+      lastParseAt = now;
+      streamPaint();
+    }
+    if (streamPos >= streamFull.length) {
+      streamPaint();
+      streamFinish(true);
+      return;
+    }
+    // ~28-70ms per chunk: fast enough to feel live, slow enough that a 900-character answer takes
+    // several seconds and Stop is actually reachable. A demo you cannot interrupt does not show
+    // what Stop does.
+    streamTimer = window.setTimeout(streamTick, 28 + Math.random() * 42);
+  }
+
+  function streamFinish(completed) {
+    streamRunning = false;
+    if (streamTimer) { window.clearTimeout(streamTimer); streamTimer = null; }
+    if (completed) {
+      streamSetState("Complete", "");
+      if (streamNote) {
+        streamNote.innerHTML = "Parsed into blocks as it arrived, never as one text node. " +
+          "The same answer took <b>" + tokenize(streamFull).length + " blocks</b>.";
+      }
+    } else {
+      streamSetState("Stopped · partial kept", "is-stopped");
+      if (streamNote) {
+        streamNote.innerHTML = "Stopped with <b>" + streamPos + " of " + streamFull.length +
+          "</b> characters kept. In the app this partial text is persisted and marked stopped; " +
+          "nothing is resent automatically.";
+      }
+    }
+    if (streamPlay) streamPlay.disabled = false;
+    if (streamStop) streamStop.disabled = true;
+    if (streamReset) streamReset.disabled = false;
+  }
+
+  function streamStart() {
+    if (streamRunning) return;
+    if (streamPos >= streamFull.length) streamPos = 0;
+    streamFull = streamAnswer();
+    streamRunning = true;
+    streamFollowing = true;
+    streamShowLatest(false);
+    streamSetState("Streaming", "is-live");
+    if (streamNote) {
+      streamNote.innerHTML = "Streaming. Scroll inside the dial while it runs — following stops " +
+        "and <b>Latest</b> appears.";
+    }
+    if (streamPlay) streamPlay.disabled = true;
+    if (streamStop) streamStop.disabled = false;
+    if (streamReset) streamReset.disabled = false;
+    streamTick();
+  }
+
+  function streamStopNow() {
+    if (!streamRunning) return;
+    streamFinish(false);
+  }
+
+  function streamResetNow() {
+    if (streamTimer) { window.clearTimeout(streamTimer); streamTimer = null; }
+    streamRunning = false;
+    streamFull = streamAnswer();
+    streamPos = 0;
+    streamFollowing = true;
+    if (streamDial) streamDial.innerHTML = "";
+    streamShowLatest(false);
+    streamSetState("Ready", "");
+    if (streamMeter) streamMeter.textContent = "0 blocks · 0 chars";
+    if (streamPlay) streamPlay.disabled = false;
+    if (streamStop) streamStop.disabled = true;
+    if (streamReset) streamReset.disabled = true;
+    if (streamNote) {
+      streamNote.innerHTML = "Press <b>Stream this answer</b>. Scroll inside the dial while it " +
+        "runs to see following stop.";
+    }
+  }
+
+  if (streamPlay) streamPlay.addEventListener("click", streamStart);
+  if (streamStop) streamStop.addEventListener("click", streamStopNow);
+  if (streamReset) streamReset.addEventListener("click", streamResetNow);
+
+  if (streamDial) {
+    // Leaving the bottom surfaces Latest whether or not the stream is still running: a finished
+    // answer is exactly when you most want to scroll back up and then return to the end. The
+    // earlier version returned early when !streamRunning, so Latest never appeared after
+    // completion — the control existed but was unreachable.
+    streamDial.addEventListener("scroll", function () {
+      if (!streamFull) return;
+      var atBottom = streamNearBottom();
+      if (!atBottom) {
+        streamFollowing = false;
+        streamShowLatest(true);
+      } else {
+        streamFollowing = true;
+        streamShowLatest(false);
+      }
+    }, { passive: true });
+  }
+
+  if (streamLatest) {
+    streamLatest.addEventListener("click", function () {
+      streamFollowing = true;
+      if (streamDial) streamDial.scrollTop = streamDial.scrollHeight;
+      streamShowLatest(false);
+    });
+  }
+
+  Array.prototype.forEach.call(document.querySelectorAll("[data-stream]"), function (btn) {
+    btn.addEventListener("click", function () {
+      streamIndex = parseInt(btn.getAttribute("data-stream"), 10) || 0;
+      Array.prototype.forEach.call(document.querySelectorAll("[data-stream]"), function (b) {
+        b.setAttribute("aria-pressed", b === btn ? "true" : "false");
+      });
+      streamFull = streamAnswer();
+      streamResetNow();
+    });
+  });
+
+  streamFull = streamAnswer();
+
   function updateCut() {
     if (!ordinaryDial) return;
     var truncate = document.getElementById("truncate");
-    var on = truncate ? truncate.checked : true;
-    ordinaryDial.classList.toggle("is-cut", on);
+    var on = truncate ? truncate.checked : true;    ordinaryDial.classList.toggle("is-cut", on);
     ordinaryDial.scrollTop = 0;
 
     var hidden = countUnreachable();

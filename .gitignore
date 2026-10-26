@@ -23,6 +23,15 @@
 !.editorconfig
 # CI is published: a workflow nobody can see is not a gate.
 !.github/workflows/*.yml
+# Repo infrastructure. The allowlist's blanket `*` silently swallowed these, which made
+# "add Dependabot / SECURITY.md / CODEOWNERS" impossible without knowing to edit this file.
+# Verified with: git check-ignore -v --no-index .github/dependabot.yml
+!.github/dependabot.yml
+!.github/ISSUE_TEMPLATE/**
+!.github/PULL_REQUEST_TEMPLATE.md
+!.github/CODEOWNERS
+!SECURITY.md
+!CODEOWNERS
 
 # 3. Application source (main/debug/release only; never test sets).
 !app/build.gradle.kts
