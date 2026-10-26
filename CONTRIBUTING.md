@@ -29,9 +29,16 @@ Read these, in order:
 # Compile and run the unit suite
 .\gradlew.bat :app:assembleDebug :app:testDebugUnitTest
 
+# Style — this is a gate, not advice; CI fails on it
+.\gradlew.bat :app:ktlintCheck
+
 # Lint
 .\gradlew.bat :app:lintDebug
 ```
+
+`ktlintFormat` fixes most style violations automatically. It cannot fix wildcard imports, long
+lines, or naming, so those are manual. **Run `ktlintCheck` before every push** — CI runs it, and a
+green compile does not imply a green style gate.
 
 Instrumentation tests need a Wear OS emulator or device on API 30+:
 
@@ -39,9 +46,19 @@ Instrumentation tests need a Wear OS emulator or device on API 30+:
 .\gradlew.bat :app:connectedDebugAndroidTest
 ```
 
-Instrumentation is destructive — it installs, drives and uninstalls the app. Do not run it against a watch that holds credentials or conversations you care about. Use a dedicated emulator.
+Instrumentation is destructive — it installs, drives and uninstalls the app. Do not run it against
+a watch that holds credentials or conversations you care about. Use a dedicated emulator. Verify
+the target is an emulator first: `adb shell getprop ro.kernel.qemu` must print `1`.
 
-Reference device for layout work is **466 × 466 @ 320 dpi, round**. If a change looks fine at another size, check it there before claiming it works.
+**Seven instrumentation tests are excluded from the default run.** They are annotated
+`@com.nirowear.HostDrivenGate`, and `app/build.gradle.kts` sets
+`testInstrumentationRunnerArguments["notAnnotation"]` to that annotation. They need a host script to
+seed state, so `connectedDebugAndroidTest` alone will not run them and will not tell you it skipped
+them. Run them explicitly via `scripts/disposable-instrumentation.ps1` or
+`scripts/test-clean-wear.py` when you touch lifecycle, credential promotion, or acceptance seeding.
+
+Reference device for layout work is **466 × 466 @ 320 dpi, round**. If a change looks fine at
+another size, check it there before claiming it works.
 
 ## Pull requests
 
