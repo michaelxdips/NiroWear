@@ -11,23 +11,55 @@ package com.nirowear.renderer
  * formula is a cosmetic loss; an admitted hostile one is a crash or a huge allocation.
  */
 internal object NativeMathGuard {
-
     // Longest names first: the regex engine takes the first alternative that matches at a position,
     // so `newenvironment` would otherwise match inside `renewenvironment` and leave the `re`
     // unmatched, letting the whole command through.
-    private val FORBIDDEN = Regex(
-        "\\\\(?:" + listOf(
-            // file access
-            "includegraphics", "includeonly", "include", "input", "openin", "openout", "read",
-            // definitions and redefinitions, longest first
-            "renewenvironment", "newenvironment", "providecommand", "renewcommand", "newcommand",
-            "DeclareMathSizes", "jlmExternalFont", "jlmDynamic", "jlmXML",
-            "newcount", "newdimen", "gdef", "edef", "xdef", "def", "let", "csname",
-            // boxes and transforms that can force arbitrary size or layout
-            "reflectbox", "resizebox", "rotatebox", "scalebox", "raisebox", "colorbox",
-            "hspace", "vspace", "hskip", "vskip", "kern", "rule", "magnification",
-        ).joinToString("|") + ")"
-    )
+    private val FORBIDDEN =
+        Regex(
+            "\\\\(?:" +
+                listOf(
+                    // file access
+                    "includegraphics",
+                    "includeonly",
+                    "include",
+                    "input",
+                    "openin",
+                    "openout",
+                    "read",
+                    // definitions and redefinitions, longest first
+                    "renewenvironment",
+                    "newenvironment",
+                    "providecommand",
+                    "renewcommand",
+                    "newcommand",
+                    "DeclareMathSizes",
+                    "jlmExternalFont",
+                    "jlmDynamic",
+                    "jlmXML",
+                    "newcount",
+                    "newdimen",
+                    "gdef",
+                    "edef",
+                    "xdef",
+                    "def",
+                    "let",
+                    "csname",
+                    // boxes and transforms that can force arbitrary size or layout
+                    "reflectbox",
+                    "resizebox",
+                    "rotatebox",
+                    "scalebox",
+                    "raisebox",
+                    "colorbox",
+                    "hspace",
+                    "vspace",
+                    "hskip",
+                    "vskip",
+                    "kern",
+                    "rule",
+                    "magnification",
+                ).joinToString("|") + ")",
+        )
 
     private const val MAX_SOURCE = 4096
     private const val MAX_GROUPS = 128

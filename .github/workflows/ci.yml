@@ -82,6 +82,9 @@ jobs:
       - name: Lint
         run: ./gradlew :app:lintDebug --console=plain
 
+      - name: Style
+        run: ./gradlew :app:ktlintCheck --console=plain
+
       - name: Assemble debug and release
         run: ./gradlew :app:assembleDebug :app:assembleRelease --console=plain
 

@@ -50,8 +50,11 @@ internal class PairingServer(
     private val onPayload: (PairingPayload) -> Unit,
 ) : Closeable {
     private val token = ByteArray(16).also { SecureRandom().nextBytes(it) }
-    private val pair = KeyPairGenerator.getInstance("EC")
-        .apply { initialize(ECGenParameterSpec("secp256r1")) }.generateKeyPair()
+    private val pair =
+        KeyPairGenerator
+            .getInstance("EC")
+            .apply { initialize(ECGenParameterSpec("secp256r1")) }
+            .generateKeyPair()
     private val deadline = System.currentTimeMillis() + ttlMillis
 
     // Bound to the address we advertise, not the wildcard: the listener must not be reachable on a
@@ -59,7 +62,9 @@ internal class PairingServer(
     private val socket = ServerSocket(0, 1, InetAddress.getByName(host))
 
     @Volatile private var consumed = false
+
     @Volatile private var closed = false
+
     @Volatile private var active: Socket? = null
     private var worker: Thread? = null
 
@@ -75,22 +80,36 @@ internal class PairingServer(
     fun start() {
         if (worker != null) return
         socket.soTimeout = 500
-        worker = Thread({
-            try {
-                // Accepts for a short grace past the deadline so an expired attempt still gets the
-                // explicit 410 instead of a bare connection reset, then self-closes.
-                while (!socket.isClosed && System.currentTimeMillis() < deadline + GRACE_MILLIS) {
-                    val client = try { socket.accept() } catch (_: java.net.SocketTimeoutException) { continue }
-                    active = client
-                    try { client.use { handle(it) } } finally { active = null }
+        worker =
+            Thread({
+                try {
+                    // Accepts for a short grace past the deadline so an expired attempt still gets the
+                    // explicit 410 instead of a bare connection reset, then self-closes.
+                    while (!socket.isClosed && System.currentTimeMillis() < deadline + GRACE_MILLIS) {
+                        val client =
+                            try {
+                                socket.accept()
+                            } catch (_: java.net.SocketTimeoutException) {
+                                continue
+                            }
+                        active = client
+                        try {
+                            client.use { handle(it) }
+                        } finally {
+                            active = null
+                        }
+                    }
+                } catch (_: Throwable) {
+                    // Close, timeout and the UI stopping the screen all land here. Nothing to report.
+                } finally {
+                    close()
                 }
-            } catch (_: Throwable) {
-                // Close, timeout and the UI stopping the screen all land here. Nothing to report.
-            } finally {
-                close()
+            }, "nirowear-pairing").apply {
+                isDaemon = true
+                start()
             }
-        }, "nirowear-pairing").apply { isDaemon = true; start() }
     }
+
     override fun close() {
         if (closed) return
         closed = true
@@ -112,11 +131,20 @@ internal class PairingServer(
         if (parts.size < 2) return respond(client, 400, TEXT, "bad request")
         val method = parts[0]
         val path = parts[1].substringBefore('?')
-        val declared = lines.drop(1).firstOrNull { it.startsWith("Content-Length:", ignoreCase = true) }
-            ?.substringAfter(':')?.trim()?.toIntOrNull() ?: 0
+        val declared =
+            lines
+                .drop(1)
+                .firstOrNull { it.startsWith("Content-Length:", ignoreCase = true) }
+                ?.substringAfter(':')
+                ?.trim()
+                ?.toIntOrNull() ?: 0
         if (declared > MAX_BODY) return respond(client, 400, TEXT, "too large")
-        val body = if (declared > 0) readExactly(input, declared) ?: return respond(client, 400, TEXT, "short body")
-        else ByteArray(0)
+        val body =
+            if (declared > 0) {
+                readExactly(input, declared) ?: return respond(client, 400, TEXT, "short body")
+            } else {
+                ByteArray(0)
+            }
         // The whole session lives under an unguessable prefix. A caller without the capability gets
         // 404 on every route, which is also the honest answer: there is nothing here for them.
         val prefix = "/${b64(token)}"
@@ -134,22 +162,31 @@ internal class PairingServer(
      * the caller already had to know in order to reach this route, and echoing it back would hand
      * the session to anyone who could merely connect.
      */
-    private fun handshake(): String =
-        """{"v":1,"pub":"${b64(uncompressed(pair.public as ECPublicKey))}"}"""
+    private fun handshake(): String = """{"v":1,"pub":"${b64(uncompressed(pair.public as ECPublicKey))}"}"""
 
-    private fun pair(client: Socket, body: ByteArray) {
+    private fun pair(
+        client: Socket,
+        body: ByteArray,
+    ) {
         // Expiry is checked before the token so a late request cannot burn the session's only use.
         if (System.currentTimeMillis() > deadline) return respond(client, 410, JSON, """{"ok":false}""")
         if (consumed) return respond(client, 401, JSON, """{"ok":false}""")
-        val root = runCatching { Json.parseToJsonElement(String(body, Charsets.UTF_8)).jsonObject }.getOrNull()
-            ?: return respond(client, 400, JSON, """{"ok":false}""")
+        val root =
+            runCatching { Json.parseToJsonElement(String(body, Charsets.UTF_8)).jsonObject }.getOrNull()
+                ?: return respond(client, 400, JSON, """{"ok":false}""")
         val presented = runCatching { unb64(root.getValue("t").jsonPrimitive.content) }.getOrNull()
         // Constant-time, before any crypto work: a wrong token must not even reach ECDH.
-        if (presented == null || !MessageDigest.isEqual(token, presented))
+        if (presented == null || !MessageDigest.isEqual(token, presented)) {
             return respond(client, 401, JSON, """{"ok":false}""")
+        }
         // Only a payload that actually decrypts consumes the session. Marking it consumed before
         // decryption let one garbage body burn the remaining TTL and block the real phone.
-        val payload = try { decrypt(root) } catch (_: Exception) { null }
+        val payload =
+            try {
+                decrypt(root)
+            } catch (_: Exception) {
+                null
+            }
         // One generic 400 for every failure: a decrypt error must not tell an attacker which byte was
         // wrong, and a rejected payload must never leave a half-written profile behind.
         if (payload == null) return respond(client, 400, JSON, """{"ok":false}""")
@@ -170,42 +207,54 @@ internal class PairingServer(
         agreement.init(pair.private)
         agreement.doPhase(browserKey, true)
         val shared = agreement.generateSecret()
-        val plain = try {
-            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-            cipher.init(Cipher.DECRYPT_MODE, SecretKeySpec(shared, "AES"), GCMParameterSpec(128, iv))
-            cipher.updateAAD(token)
-            cipher.doFinal(ciphertext)
+        val plain =
+            try {
+                val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+                cipher.init(Cipher.DECRYPT_MODE, SecretKeySpec(shared, "AES"), GCMParameterSpec(128, iv))
+                cipher.updateAAD(token)
+                cipher.doFinal(ciphertext)
+            } finally {
+                shared.fill(0)
+            }
+        return try {
+            toPayload(String(plain, Charsets.UTF_8))
         } finally {
-            shared.fill(0)
+            plain.fill(0)
         }
-        return try { toPayload(String(plain, Charsets.UTF_8)) } finally { plain.fill(0) }
     }
 
-    private fun toPayload(json: String): PairingPayload? = runCatching {
-        val root = Json.parseToJsonElement(json).jsonObject
-        fun field(name: String, max: Int): String {
-            val value = root.getValue(name).jsonPrimitive.content
-            require(value.length <= max) { "field too long" }
-            return value
-        }
-        val type = ProviderType.valueOf(field("type", 32))
-        val apiKey = field("key", 8192)
-        SecretValue(apiKey) // Storage contract stays the gate: throws on non-printable or blank.
-        PairingPayload(
-            type = type,
-            name = field("name", 100).trim(),
-            baseUrl = field("base", 2048).trim(),
-            modelId = field("model", 256).trim(),
-            apiKey = apiKey,
-        )
-    }.getOrNull()
+    private fun toPayload(json: String): PairingPayload? =
+        runCatching {
+            val root = Json.parseToJsonElement(json).jsonObject
+
+            fun field(
+                name: String,
+                max: Int,
+            ): String {
+                val value = root.getValue(name).jsonPrimitive.content
+                require(value.length <= max) { "field too long" }
+                return value
+            }
+            val type = ProviderType.valueOf(field("type", 32))
+            val apiKey = field("key", 8192)
+            SecretValue(apiKey) // Storage contract stays the gate: throws on non-printable or blank.
+            PairingPayload(
+                type = type,
+                name = field("name", 100).trim(),
+                baseUrl = field("base", 2048).trim(),
+                modelId = field("model", 256).trim(),
+                apiKey = apiKey,
+            )
+        }.getOrNull()
 
     private fun decodePoint(raw: ByteArray): ECPublicKey? {
         if (raw.size != 65 || raw[0] != 4.toByte()) return null
         val params = (pair.public as ECPublicKey).params
         val x = java.math.BigInteger(1, raw.copyOfRange(1, 33))
         val y = java.math.BigInteger(1, raw.copyOfRange(33, 65))
-        return runCatching { KeyFactory.getInstance("EC").generatePublic(ECPublicKeySpec(ECPoint(x, y), params)) as ECPublicKey }.getOrNull()
+        return runCatching {
+            KeyFactory.getInstance("EC").generatePublic(ECPublicKeySpec(ECPoint(x, y), params)) as ECPublicKey
+        }.getOrNull()
     }
 
     private fun uncompressed(key: ECPublicKey): ByteArray {
@@ -220,20 +269,31 @@ internal class PairingServer(
         return byteArrayOf(4) + fixed(key.w.affineX) + fixed(key.w.affineY)
     }
 
-    private fun respond(client: Socket, code: Int, type: String, body: String) {
+    private fun respond(
+        client: Socket,
+        code: Int,
+        type: String,
+        body: String,
+    ) {
         val bytes = body.toByteArray(Charsets.UTF_8)
-        val header = "HTTP/1.1 $code ${if (code == 200) "OK" else "Error"}\r\n" +
-            "Content-Type: $type\r\nContent-Length: ${bytes.size}\r\n" +
-            "Cache-Control: no-store\r\nConnection: close\r\n\r\n"
+        val header =
+            "HTTP/1.1 $code ${if (code == 200) "OK" else "Error"}\r\n" +
+                "Content-Type: $type\r\nContent-Length: ${bytes.size}\r\n" +
+                "Cache-Control: no-store\r\nConnection: close\r\n\r\n"
         runCatching {
             client.getOutputStream().apply {
-                write(header.toByteArray(Charsets.US_ASCII)); write(bytes); flush()
+                write(header.toByteArray(Charsets.US_ASCII))
+                write(bytes)
+                flush()
             }
         }
     }
 
     /** Reads until the blank line that ends the request headers. Cap and wall clock keep a peer bounded. */
-    private fun readHead(input: InputStream, deadline: Long): String? {
+    private fun readHead(
+        input: InputStream,
+        deadline: Long,
+    ): String? {
         val out = StringBuilder()
         while (out.length < MAX_HEAD) {
             if (System.currentTimeMillis() > deadline) return null
@@ -245,7 +305,10 @@ internal class PairingServer(
         return null
     }
 
-    private fun readExactly(input: InputStream, length: Int): ByteArray? {
+    private fun readExactly(
+        input: InputStream,
+        length: Int,
+    ): ByteArray? {
         val buffer = ByteArray(length)
         var offset = 0
         while (offset < length) {
@@ -256,8 +319,7 @@ internal class PairingServer(
         return buffer
     }
 
-    private fun b64(bytes: ByteArray): String =
-        Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
+    private fun b64(bytes: ByteArray): String = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
 
     private fun unb64(text: String): ByteArray = Base64.getUrlDecoder().decode(text)
 

@@ -14,19 +14,23 @@ import com.nirowear.provider.label
 internal fun sanitizeKey(raw: String): String = raw.filter { it.code in 33..126 }
 
 /** Provider implied by a key prefix, or null when the prefix is not distinctive. */
-internal fun providerForKey(key: String): ProviderType? = when {
-    key.startsWith("sk-ant-") -> ProviderType.ANTHROPIC
-    key.startsWith("sk-proj-") || key.startsWith("sk-") -> ProviderType.OPENAI
-    key.startsWith("AIza") -> ProviderType.GEMINI
-    else -> null
-}
+internal fun providerForKey(key: String): ProviderType? =
+    when {
+        key.startsWith("sk-ant-") -> ProviderType.ANTHROPIC
+        key.startsWith("sk-proj-") || key.startsWith("sk-") -> ProviderType.OPENAI
+        key.startsWith("AIza") -> ProviderType.GEMINI
+        else -> null
+    }
 
 /**
  * Advisory hint when a key's shape contradicts the selected provider. Pasting a key into the wrong
  * preset is the most common setup error, and the generic "Check URL, model and API key" message
  * cannot name it. Never blocks a save: compatible endpoints legitimately use any format.
  */
-internal fun keyMismatchHint(key: String, type: ProviderType): String? {
+internal fun keyMismatchHint(
+    key: String,
+    type: ProviderType,
+): String? {
     val implied = providerForKey(key) ?: return null
     if (implied == type || type == ProviderType.OPENAI_COMPATIBLE) return null
     return "Key looks like ${implied.label}. Check provider."
@@ -48,8 +52,14 @@ internal fun remoteTypingHint(enabledImePackages: Set<String>): String? =
 
 internal fun enabledImePackages(context: android.content.Context): Set<String> =
     runCatching {
-        (context.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager)
-            ?.enabledInputMethodList?.map { it.packageName }?.toSet().orEmpty()
+        (
+            context.getSystemService(
+                android.content.Context.INPUT_METHOD_SERVICE,
+            ) as? android.view.inputmethod.InputMethodManager
+        )?.enabledInputMethodList
+            ?.map { it.packageName }
+            ?.toSet()
+            .orEmpty()
     }.getOrDefault(emptySet())
 
 internal val REMOTE_INPUT_IMES = setOf("com.google.android.inputmethod.latin")

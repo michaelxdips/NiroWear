@@ -3,9 +3,9 @@ package com.nirowear.renderer
 import android.graphics.Color
 import android.graphics.drawable.Drawable
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import ru.noties.jlatexmath.JLatexMathDrawable
 
 /**
@@ -25,23 +25,32 @@ import ru.noties.jlatexmath.JLatexMathDrawable
 object NativeMathRenderer : MathRenderer {
     private val mutex = Mutex() // JLaTeXMath maintains shared parser/font state.
 
-    override suspend fun render(source: String, textSizePx: Float): Drawable? = withContext(Dispatchers.Default) {
-        if (!NativeMathGuard.isSafe(source)) return@withContext null
+    override suspend fun render(
+        source: String,
+        textSizePx: Float,
+    ): Drawable? =
+        withContext(Dispatchers.Default) {
+            if (!NativeMathGuard.isSafe(source)) return@withContext null
 
-        mutex.withLock {
-            try {
-                JLatexMathDrawable.builder(source).textSize(textSizePx).color(Color.WHITE)
-                    .padding(4).build().takeIf {
-                        // Bounds are checked after layout because the library computes them there;
-                        // the guard above is what keeps the input small enough to be worth laying out.
-                        it.intrinsicWidth in 1..8192 && it.intrinsicHeight in 1..2048
-                    }
-            } catch (_: RuntimeException) {
-                null
-            } catch (_: StackOverflowError) {
-                // A pathological formula must degrade to source text, not take the app down.
-                null
+            mutex.withLock {
+                try {
+                    JLatexMathDrawable
+                        .builder(source)
+                        .textSize(textSizePx)
+                        .color(Color.WHITE)
+                        .padding(4)
+                        .build()
+                        .takeIf {
+                            // Bounds are checked after layout because the library computes them there;
+                            // the guard above is what keeps the input small enough to be worth laying out.
+                            it.intrinsicWidth in 1..8192 && it.intrinsicHeight in 1..2048
+                        }
+                } catch (_: RuntimeException) {
+                    null
+                } catch (_: StackOverflowError) {
+                    // A pathological formula must degrade to source text, not take the app down.
+                    null
+                }
             }
         }
-    }
 }

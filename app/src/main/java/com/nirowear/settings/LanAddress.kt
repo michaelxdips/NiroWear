@@ -10,14 +10,17 @@ import java.net.NetworkInterface
  * and the manifest stays at `INTERNET` only. Link-local (169.254.x.x) and loopback addresses are
  * useless to a phone browser, so they are filtered out rather than printed.
  */
-internal fun lanAddress(): String? = runCatching {
-    NetworkInterface.getNetworkInterfaces().asSequence()
-        .filter { it.isUp && !it.isLoopback }
-        .flatMap { it.inetAddresses.asSequence() }
-        .filterIsInstance<Inet4Address>()
-        .map { it.hostAddress.orEmpty() }
-        .firstOrNull { it.isNotBlank() && !it.startsWith("169.254.") && !it.startsWith("127.") }
-}.getOrNull()
+internal fun lanAddress(): String? =
+    runCatching {
+        NetworkInterface
+            .getNetworkInterfaces()
+            .asSequence()
+            .filter { it.isUp && !it.isLoopback }
+            .flatMap { it.inetAddresses.asSequence() }
+            .filterIsInstance<Inet4Address>()
+            .map { it.hostAddress.orEmpty() }
+            .firstOrNull { it.isNotBlank() && !it.startsWith("169.254.") && !it.startsWith("127.") }
+    }.getOrNull()
 
 /** True only for RFC1918 / link-local space. A public address earns an extra warning, not a block. */
 internal fun isPrivateAddress(host: String): Boolean =
