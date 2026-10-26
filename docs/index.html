@@ -1220,6 +1220,31 @@ html[data-theme="dark"] .chip-table .chip-t{color:#9BE8D5}
 .stream-cap .tnum{font-variant-numeric:tabular-nums}
 #streamState.is-live{color:#9BE8D5}
 #streamState.is-stopped{color:#E8C29B}
+#streamState.is-failed{color:#E8A6A6}
+
+/* Telemetry is measured from the replay itself — counters incremented by the code that does the
+   work, not prose about what the code does. Tabular figures so the numbers do not jitter. */
+.stream-telemetry{
+  margin:0;
+  display:grid;
+  gap:0;
+  border:1px solid var(--hair);
+  font-family:var(--util);
+  font-size:10px;
+  letter-spacing:.06em;
+}
+.stream-telemetry > div{
+  display:flex;
+  justify-content:space-between;
+  gap:12px;
+  padding:7px 11px;
+  border-bottom:1px solid var(--hair);
+}
+.stream-telemetry > div:last-child{border-bottom:0}
+.tel-k{color:var(--steel);text-transform:uppercase}
+.tel-v{color:var(--ink);font-variant-numeric:tabular-nums;text-align:right}
+.tel-v.is-bad{color:#E8A6A6}
+.tel-v.is-good{color:#9BE8D5}
 
 .stream-side{display:flex;flex-direction:column;gap:18px;min-width:0}
 
@@ -2330,7 +2355,17 @@ A failed decrypt is a generic rejection: the caller learns that the payload is n
         <div class="stream-controls">
           <button class="sbtn sbtn-primary" type="button" id="streamPlay">Stream this answer</button>
           <button class="sbtn" type="button" id="streamStop" disabled>Stop</button>
+          <button class="sbtn" type="button" id="streamCut" disabled>Cut the connection</button>
           <button class="sbtn" type="button" id="streamReset" disabled>Reset</button>
+        </div>
+
+        <div class="stream-telemetry">
+          <div><span class="tel-k">Deltas received</span><span class="tel-v tnum" id="telDeltas">0</span></div>
+          <div><span class="tel-k">Parses (one per frame max)</span><span class="tel-v tnum" id="telParses">0</span></div>
+          <div><span class="tel-k">Coalesced into a pending frame</span><span class="tel-v tnum" id="telSkipped">0</span></div>
+          <div><span class="tel-k">Elapsed</span><span class="tel-v tnum" id="telElapsed">0.0 s</span></div>
+          <div><span class="tel-k">Arrival rate</span><span class="tel-v tnum" id="telRate">—</span></div>
+          <div><span class="tel-k">Last block to change</span><span class="tel-v" id="telChange">—</span></div>
         </div>
 
         <div class="stream-presets" role="group" aria-label="Answers to stream">
@@ -2342,12 +2377,15 @@ A failed decrypt is a generic rejection: the caller learns that the payload is n
         <dl class="stream-facts">
           <div><dt>Parse cadence</dt><dd>throttled to one parse per frame, never a debounce</dd></div>
           <div><dt>On Stop</dt><dd>partial text stays visible and is persisted, marked stopped</dd></div>
+          <div><dt>On a cut</dt><dd>no terminal event is a <b>failure</b>, not a short answer; partial text is still kept</dd></div>
           <div><dt>Scroll up</dt><dd>following stops; <b>Latest</b> returns you to the end</dd></div>
           <div><dt>Interrupted</dt><dd>nothing is replayed automatically — you decide to retry</dd></div>
         </dl>
 
         <p class="stream-note" id="streamNote" aria-live="polite">
-          Press <b>Stream this answer</b>. Scroll inside the dial while it runs to see following stop.
+          Press <b>Stream this answer</b>. Scroll inside the dial while it runs to see following
+          stop, or press <b>Cut the connection</b> to see what a stream that ends without its
+          terminal event does.
         </p>
       </div>
 
@@ -2848,7 +2886,7 @@ adb install -r NiroWear-0.1.0-beta.6.apk</pre>
             </tr>
             <tr>
               <td>Renderer emits semantic blocks, never one text node</td>
-              <td><span class="pill pill-source">Source</span> <span class="pill pill-device">JVM</span> 118 tests / 22 suites, 0 failures, 0 errors, 0 skipped.</td>
+              <td><span class="pill pill-source">Source</span> <span class="pill pill-device">JVM</span> 155 tests / 30 suites, 0 failures, 0 errors, 0 skipped.</td>
               <td>ContentBlock.kt; app/build/test-results/testDebugUnitTest/</td>
             </tr>
             <tr>
@@ -2863,7 +2901,7 @@ adb install -r NiroWear-0.1.0-beta.6.apk</pre>
             </tr>
             <tr>
               <td>Static analysis is clean</td>
-              <td><span class="pill pill-device">JVM</span> lintDebug: 0 errors, 4 warnings (2 GradleDependency, 2 InlinedApi), both pre-existing.</td>
+              <td><span class="pill pill-device">JVM</span> lintDebug: 0 errors, 14 issues — 9 GradleDependency, 4 NewerVersionAvailable, 1 AutoboxingStateCreation. Dependency-freshness notices only; nothing in the app's own code.</td>
               <td>app/build/reports/lint-results-debug.xml</td>
             </tr>
             <tr>
@@ -3732,13 +3770,28 @@ if (typeof module !== "undefined" && module.exports) {
   var streamLatest = document.getElementById("streamLatest");
   var streamNote = document.getElementById("streamNote");
 
+  var streamCut = document.getElementById("streamCut");
+  var telParses = document.getElementById("telParses");
+  var telSkipped = document.getElementById("telSkipped");
+  var telElapsed = document.getElementById("telElapsed");
+  var telRate = document.getElementById("telRate");
+  var telChange = document.getElementById("telChange");
+
   var streamTimer = null;
   var streamFull = "";
   var streamPos = 0;
   var streamIndex = 0;
   var streamFollowing = true;
   var streamRunning = false;
-  var lastParseAt = 0;
+  // Telemetry counters. Each is incremented by the code path that actually performs the work, so
+  // the numbers on screen are a measurement of this replay, not a description of the app.
+  var telParseCount = 0;
+  var telCoalesced = 0;
+  var telDeltaCount = 0;
+  var telStartAt = 0;
+  var telLastSig = "";
+  var framePending = false;
+  var frameWatchdog = null;
 
   function streamAnswer() {
     return STREAM_ANSWERS[streamIndex] || STREAM_ANSWERS[0];
@@ -3764,11 +3817,64 @@ if (typeof module !== "undefined" && module.exports) {
     return streamDial.scrollHeight - streamDial.scrollTop - streamDial.clientHeight < 28;
   }
 
+  // A block's identity for "what just changed" purposes: type, size, and the first few characters.
+  // Two consecutive parses almost always differ only in the LAST block, which is exactly the one
+  // still being typed — and that is the one worth naming.
+  function blockSignature(b) {
+    if (!b) return "";
+    var body = b.text || (b.items && b.items.join("|")) ||
+      (b.rows && b.rows.map(function (r) { return r.join("|"); }).join(";")) ||
+      (b.head && b.head.join("|")) || "";
+    return b.type + ":" + String(body).length + ":" + String(body).slice(0, 24);
+  }
+
+  function blockLabel(b) {
+    if (!b) return "—";
+    if (b.type === "heading") return "heading h" + b.level;
+    if (b.type === "code") return "code fence" + (b.lang ? " (" + b.lang + ")" : "");
+    if (b.type === "math") return b.open ? "math, still open" : "math";
+    if (b.type === "table") return "table record";
+    if (b.type === "list") return (b.ordered ? "ordered" : "bulleted") + " list";
+    return b.type;
+  }
+
+  function streamTelemetry(blocks) {
+    if (telParses) telParses.textContent = String(telParseCount);
+    if (telSkipped) telSkipped.textContent = String(telCoalesced);
+    if (telDeltas) telDeltas.textContent = String(telDeltaCount);
+    if (telElapsed) {
+      var secs = telStartAt ? (Date.now() - telStartAt) / 1000 : 0;
+      telElapsed.textContent = secs.toFixed(1) + " s";
+    }
+    if (telRate) {
+      var secs2 = telStartAt ? (Date.now() - telStartAt) / 1000 : 0;
+      telRate.textContent = secs2 > 0.4
+        ? Math.round(streamPos / secs2) + " chars/s"
+        : "—";
+    }
+    if (telChange) {
+      var last = blocks[blocks.length - 1];
+      var sig = blockSignature(last);
+      if (sig !== telLastSig) {
+        telLastSig = sig;
+        telChange.textContent = last ? blockLabel(last) : "—";
+        telChange.className = "tel-v";
+        // Restart the highlight so it reads as an event rather than a permanent colour.
+        telChange.style.transition = "none";
+        telChange.style.color = "#9BE8D5";
+        void telChange.offsetWidth;
+        telChange.style.transition = "color .5s ease-out";
+        telChange.style.color = "";
+      }
+    }
+  }
+
   function streamPaint() {
     if (!streamDial) return;
     var partial = streamFull.slice(0, streamPos);
     // Same parser as the bench: the demo shows real block structure, not a styled blob.
     var blocks = tokenize(partial);
+    telParseCount++;
     // innerHTML rebuilds the subtree, which resets scrollTop to 0. Capture where the reader was
     // BEFORE the write, so an upward scroll survives the next token. Without this, follow-behaviour
     // re-pins to the bottom on every paint and the user can never scroll up at all — which is the
@@ -3780,6 +3886,7 @@ if (typeof module !== "undefined" && module.exports) {
       streamMeter.textContent = blocks.length + (blocks.length === 1 ? " block · " : " blocks · ") +
         partial.length + " chars";
     }
+    streamTelemetry(blocks);
     if (streamFollowing && wasNearBottom) {
       streamDial.scrollTop = streamDial.scrollHeight;
     } else {
@@ -3789,37 +3896,62 @@ if (typeof module !== "undefined" && module.exports) {
     }
   }
 
-  function streamTick() {
+  // Deltas arrive the way a provider actually sends them: a burst of tokens, then a pause while the
+  // next chunk is generated. The burst is faster than a frame, so the parse genuinely coalesces;
+  // the pause is what keeps the whole replay long enough to interrupt and watch. A uniform 8-22 ms
+  // cadence finished the answer in ~2 s, which made Stop and Cut unreachable and looked nothing
+  // like a model.
+  function streamDeliver() {
     if (!streamRunning) return;
-    // Advance a variable chunk so it reads like tokens, not a typewriter.
-    var step = 2 + Math.floor(Math.random() * 7);
-    streamPos = Math.min(streamFull.length, streamPos + step);
-    var now = Date.now();
-    // Throttle: at most one parse per frame. This is the same rule the app uses, and it is why
-    // a fast stream does not parse thousands of times.
-    if (now - lastParseAt >= 16) {
-      lastParseAt = now;
-      streamPaint();
+    // One burst: 2-6 deltas of 2-5 characters. Small on purpose — a burst that dumps 100+ characters
+    // finishes the answer before a viewer can reach Stop or Cut, which is the opposite of a demo
+    // about interrupting a stream.
+    var burst = 2 + Math.floor(Math.random() * 5);
+    for (var i = 0; i < burst && streamPos < streamFull.length; i++) {
+      streamPos = Math.min(streamFull.length, streamPos + 2 + Math.floor(Math.random() * 4));
+      telDeltaCount++;
+      if (framePending) {
+        telCoalesced++;
+      } else {
+        framePending = true;
+        // A hidden or occluded tab throttles requestAnimationFrame to a crawl (measured: ~2 Hz in a
+        // background tab), which would leave the demo visually frozen while the counters raced
+        // ahead. The watchdog repaints at the normal cadence if no frame arrives; when frames are
+        // healthy it never fires, so coalescing is unchanged in the case that matters.
+        frameWatchdog = window.setTimeout(streamFrame, 120);
+        window.requestAnimationFrame(streamFrame);
+      }
     }
     if (streamPos >= streamFull.length) {
-      streamPaint();
-      streamFinish(true);
+      streamTimer = window.setTimeout(function () {
+        if (streamRunning) streamFinish(true);
+      }, 120);
       return;
     }
-    // ~28-70ms per chunk: fast enough to feel live, slow enough that a 900-character answer takes
-    // several seconds and Stop is actually reachable. A demo you cannot interrupt does not show
-    // what Stop does.
-    streamTimer = window.setTimeout(streamTick, 28 + Math.random() * 42);
+    // The gap between bursts. Long enough that the run takes ~10-20 s, so the controls are usable.
+    streamTimer = window.setTimeout(streamDeliver, 110 + Math.random() * 190);
+  }
+
+  function streamFrame() {
+    if (frameWatchdog) { window.clearTimeout(frameWatchdog); frameWatchdog = null; }
+    if (!framePending) return;
+    framePending = false;
+    streamPaint();
   }
 
   function streamFinish(completed) {
     streamRunning = false;
     if (streamTimer) { window.clearTimeout(streamTimer); streamTimer = null; }
+    // One parse here, counted like every other, because the telemetry row claims to count the
+    // parses this replay performed. The block total the note reports comes from this same result
+    // rather than a second uncounted tokenize() call.
+    var finalBlocks = tokenize(streamFull.slice(0, streamPos));
+    telParseCount++;
     if (completed) {
       streamSetState("Complete", "");
       if (streamNote) {
         streamNote.innerHTML = "Parsed into blocks as it arrived, never as one text node. " +
-          "The same answer took <b>" + tokenize(streamFull).length + " blocks</b>.";
+          "The same answer took <b>" + finalBlocks.length + " blocks</b>.";
       }
     } else {
       streamSetState("Stopped · partial kept", "is-stopped");
@@ -3829,8 +3961,33 @@ if (typeof module !== "undefined" && module.exports) {
           "nothing is resent automatically.";
       }
     }
+    streamTelemetry(finalBlocks);
     if (streamPlay) streamPlay.disabled = false;
     if (streamStop) streamStop.disabled = true;
+    if (streamCut) streamCut.disabled = true;
+    if (streamReset) streamReset.disabled = false;
+  }
+
+  // The failure the app exists to prevent: the socket dies with no terminal event. This is NOT
+  // the same as Stop. Stop is the user ending a request they still own; a cut is the transport
+  // ending one they do not, and the app treats it as a failure with the partial text preserved.
+  function streamCutNow() {
+    if (!streamRunning) return;
+    streamRunning = false;
+    if (streamTimer) { window.clearTimeout(streamTimer); streamTimer = null; }
+    streamSetState("Failed · no terminal event", "is-failed");
+    if (streamNote) {
+      streamNote.innerHTML = "The connection died after <b>" + streamPos + " of " +
+        streamFull.length + "</b> characters with no terminal event. EOF is not success: the app " +
+        "keeps the partial text, marks it <b>failed</b>, and shows the protocol error rather than " +
+        "presenting a truncated answer as complete.";
+    }
+    var blocks = tokenize(streamFull.slice(0, streamPos));
+    telParseCount++;
+    streamTelemetry(blocks);
+    if (streamPlay) streamPlay.disabled = false;
+    if (streamStop) streamStop.disabled = true;
+    if (streamCut) streamCut.disabled = true;
     if (streamReset) streamReset.disabled = false;
   }
 
@@ -3840,16 +3997,25 @@ if (typeof module !== "undefined" && module.exports) {
     streamFull = streamAnswer();
     streamRunning = true;
     streamFollowing = true;
+    telParseCount = 0;
+    telCoalesced = 0;
+    telDeltaCount = 0;
+    framePending = false;
+    if (frameWatchdog) { window.clearTimeout(frameWatchdog); frameWatchdog = null; }
+    telStartAt = Date.now();
+    telLastSig = "";
     streamShowLatest(false);
     streamSetState("Streaming", "is-live");
     if (streamNote) {
       streamNote.innerHTML = "Streaming. Scroll inside the dial while it runs — following stops " +
-        "and <b>Latest</b> appears.";
+        "and <b>Latest</b> appears. <b>Cut the connection</b> kills the transport with no terminal " +
+        "event, which is the failure the app refuses to call a short answer.";
     }
     if (streamPlay) streamPlay.disabled = true;
     if (streamStop) streamStop.disabled = false;
+    if (streamCut) streamCut.disabled = false;
     if (streamReset) streamReset.disabled = false;
-    streamTick();
+    streamDeliver();
   }
 
   function streamStopNow() {
@@ -3863,21 +4029,37 @@ if (typeof module !== "undefined" && module.exports) {
     streamFull = streamAnswer();
     streamPos = 0;
     streamFollowing = true;
+    telParseCount = 0;
+    telCoalesced = 0;
+    telDeltaCount = 0;
+    framePending = false;
+    if (frameWatchdog) { window.clearTimeout(frameWatchdog); frameWatchdog = null; }
+    telStartAt = 0;
+    telLastSig = "";
+    if (telParses) telParses.textContent = "0";
+    if (telDeltas) telDeltas.textContent = "0";
+    if (telSkipped) telSkipped.textContent = "0";
+    if (telElapsed) telElapsed.textContent = "0.0 s";
+    if (telRate) telRate.textContent = "—";
+    if (telChange) telChange.textContent = "—";
     if (streamDial) streamDial.innerHTML = "";
     streamShowLatest(false);
     streamSetState("Ready", "");
     if (streamMeter) streamMeter.textContent = "0 blocks · 0 chars";
     if (streamPlay) streamPlay.disabled = false;
     if (streamStop) streamStop.disabled = true;
+    if (streamCut) streamCut.disabled = true;
     if (streamReset) streamReset.disabled = true;
     if (streamNote) {
       streamNote.innerHTML = "Press <b>Stream this answer</b>. Scroll inside the dial while it " +
-        "runs to see following stop.";
+        "runs to see following stop, or press <b>Cut the connection</b> to see what a stream that " +
+        "ends without its terminal event does.";
     }
   }
 
   if (streamPlay) streamPlay.addEventListener("click", streamStart);
   if (streamStop) streamStop.addEventListener("click", streamStopNow);
+  if (streamCut) streamCut.addEventListener("click", streamCutNow);
   if (streamReset) streamReset.addEventListener("click", streamResetNow);
 
   if (streamDial) {
