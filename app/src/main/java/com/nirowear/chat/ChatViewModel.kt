@@ -326,7 +326,11 @@ class ChatViewModel(
                         checkpoints?.cancelAndJoin()
 
                         fun settleCancellation() {
-                            if (streamJob.isCancelled) {
+                            // Never downgrade a completed answer. If the terminal event already
+                            // arrived, the answer is complete and a later Stop must not rewrite it
+                            // as STOPPED — that would also delete its phase record, because
+                            // ChatDao.finish drops phases for any non-SUCCESS status.
+                            if (streamJob.isCancelled && terminal != "SUCCESS") {
                                 terminal = "STOPPED"
                                 failure = null
                                 localPhases = null
@@ -335,12 +339,14 @@ class ChatViewModel(
                         try {
                             assistantId?.let {
                                 ChatStorageProbe.finishing()
+                                // Decide the status ONCE, before the write. The previous version
+                                // settled cancellation, wrote, then checked again and rewrote the
+                                // row if cancellation had arrived in between. That second write
+                                // turned a SUCCESS into STOPPED and, because ChatDao.finish deletes
+                                // phase records for any non-SUCCESS status, destroyed the
+                                // continuation data of a fully completed answer.
                                 settleCancellation()
                                 dao.finish(it, text.toString(), terminal, failure, localPhases)
-                                if (streamJob.isCancelled && terminal != "STOPPED") {
-                                    settleCancellation()
-                                    dao.finish(it, text.toString(), terminal, failure, localPhases)
-                                }
                             }
                         } catch (_: Exception) {
                             settleCancellation()

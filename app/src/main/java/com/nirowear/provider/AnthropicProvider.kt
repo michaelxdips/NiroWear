@@ -201,6 +201,9 @@ internal class AnthropicStreamDecoder {
     private var reason: String? = null
     private var hasText = false
 
+    /** Indices of blocks we deliberately do not render (thinking, tool_use, ...). */
+    private val skipped = mutableSetOf<Int>()
+
     fun accept(payload: String): List<StreamEvent> =
         try {
             val root = Json.parseToJsonElement(payload).jsonObject
@@ -225,31 +228,53 @@ internal class AnthropicStreamDecoder {
                     val index = root.getValue("index").jsonPrimitive.int
                     require(index == nextIndex++)
                     val content = root.getValue("content_block").jsonObject
-                    require(content.getValue("type").jsonPrimitive.content == "text")
-                    block = index
-                    val text = requireNotNull(content["text"].stringOrNull())
-                    if (text.isNotEmpty()) {
-                        hasText = true
-                        listOf(StreamEvent.TextDelta(text))
-                    } else {
+                    // A gateway with extended thinking or tools enabled sends thinking,
+                    // redacted_thinking, tool_use or server_tool_use blocks. The old code required
+                    // every block to be text, so the first such block aborted a perfectly good
+                    // answer. Track the block index and skip non-text blocks instead: message_stop
+                    // is still the only thing that proves success.
+                    if (content.getValue("type").jsonPrimitive.content != "text") {
+                        skipped.add(index)
                         emptyList()
+                    } else {
+                        block = index
+                        val text = requireNotNull(content["text"].stringOrNull())
+                        if (text.isNotEmpty()) {
+                            hasText = true
+                            listOf(StreamEvent.TextDelta(text))
+                        } else {
+                            emptyList()
+                        }
                     }
                 }
 
                 "content_block_delta" -> {
-                    require(started && block != null && root.getValue("index").jsonPrimitive.int == block)
-                    val delta = root.getValue("delta").jsonObject
-                    require(delta.getValue("type").jsonPrimitive.content == "text_delta")
-                    val text = delta.getValue("text").jsonPrimitive
-                    require(text.isString)
-                    if (text.content.isNotEmpty()) hasText = true
-                    listOf(StreamEvent.TextDelta(text.content))
+                    val index = root.getValue("index").jsonPrimitive.int
+                    // Deltas for a skipped (non-text) block are expected; ignore them rather than
+                    // failing the stream.
+                    if (index in skipped) {
+                        emptyList()
+                    } else {
+                        require(started && block != null && index == block)
+                        val delta = root.getValue("delta").jsonObject
+                        require(delta.getValue("type").jsonPrimitive.content == "text_delta")
+                        val text = delta.getValue("text").jsonPrimitive
+                        require(text.isString)
+                        if (text.content.isNotEmpty()) hasText = true
+                        listOf(StreamEvent.TextDelta(text.content))
+                    }
                 }
 
                 "content_block_stop" -> {
-                    require(block != null && root.getValue("index").jsonPrimitive.int == block)
-                    block = null
-                    emptyList()
+                    val index = root.getValue("index").jsonPrimitive.int
+                    if (index in skipped) {
+                        skipped.remove(index)
+                        emptyList()
+                    } else {
+                        require(block != null && index == block)
+                        block = null
+                        emptyList()
+                    }
                 }
 
                 "message_delta" -> {

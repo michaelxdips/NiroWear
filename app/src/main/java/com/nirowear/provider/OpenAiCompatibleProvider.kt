@@ -343,7 +343,17 @@ class CompatibleStreamDecoder {
     fun accept(payload: String): List<StreamEvent> =
         try {
             if (payload == "[DONE]") {
-                listOf(StreamEvent.Failure(ProviderError.PROTOCOL))
+                // `[DONE]` IS the documented terminator for Chat Completions, so treating it as a
+                // protocol error made a compliant gateway unable to ever succeed: its answer would
+                // be saved as ERROR with "Stream interrupted". Success still requires text — an
+                // empty stream ending in [DONE] is a real failure, just not the same one.
+                listOf(
+                    if (hasText) {
+                        StreamEvent.Completed
+                    } else {
+                        StreamEvent.Failure(ProviderError.PROTOCOL)
+                    },
+                )
             } else {
                 val root = Json.parseToJsonElement(payload).jsonObject
                 if (root["error"] != null) return listOf(StreamEvent.Failure(ProviderError.HTTP))
@@ -365,7 +375,13 @@ class CompatibleStreamDecoder {
                             .firstOrNull { (it["index"] as? JsonPrimitive)?.intOrNull == 0 }
                             ?: choices.first().jsonObject
                     val delta = choice.getValue("delta").jsonObject
-                    require(delta["tool_calls"] == null && delta["function_call"] == null)
+                    // JsonNull is not Kotlin null. A gateway that serialises absent optionals as
+                    // explicit nulls (`"tool_calls": null`) is emitting legal JSON, but the old
+                    // `== null` check threw on the very first chunk and turned the whole answer
+                    // into "Stream interrupted". The next require already used the right form.
+                    require(
+                        listOf(delta["tool_calls"], delta["function_call"]).all { it == null || it == JsonNull },
+                    )
                     require(
                         listOf(delta["content"], delta["refusal"], choice["finish_reason"]).all {
                             it == null || it == JsonNull || it.stringOrNull() != null

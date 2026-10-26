@@ -39,6 +39,15 @@ internal class ProviderHttp(
     // Native completion repeats accepted text; JSON escaping can use six wire bytes per unit.
     private val maxFrameBytes = 6L * MAX_RESPONSE_CHARS + 256 * 1024
 
+    /**
+     * How long the stream may be silent before it is treated as dead.
+     *
+     * `readTimeout` cannot do this job: it is per read and resets on every byte, so a server that
+     * sends one keepalive every 89 seconds holds the socket — and on a watch, the radio — forever.
+     * This bounds silence, not total duration, so a long answer that keeps arriving is never cut.
+     */
+    private val streamIdleTimeoutMs = 120_000L
+
     suspend fun fetch(request: Request): String =
         suspendCancellableCoroutine { continuation ->
             val call = client.newCall(request)
@@ -147,6 +156,12 @@ internal class ProviderHttp(
                                                     event == StreamEvent.Completed
                                             }
                                         }
+                                        // Idle deadline. readTimeout is per read and resets on every
+                                        // byte, so a server that drips a keepalive every 89s holds
+                                        // the socket — and the watch radio — forever. This bounds
+                                        // silence, not total duration: a legitimately long answer
+                                        // keeps arriving and is never cut off.
+                                        var lastFrameAt = System.currentTimeMillis()
                                         while (isActive && !source.exhausted()) {
                                             val line =
                                                 try {
@@ -162,13 +177,18 @@ internal class ProviderHttp(
                                                 }
                                             if (line.isEmpty()) {
                                                 if (dispatch()) return@launch
+                                                lastFrameAt = System.currentTimeMillis()
                                             } else if (line.startsWith("data:")) {
                                                 frame.append(line.removePrefix("data:").removePrefix(" ")).append('\n')
+                                                lastFrameAt = System.currentTimeMillis()
                                                 if (frame.length >
                                                     maxFrameBytes
                                                 ) {
                                                     throw SafeProviderException(ProviderError.RESPONSE_TOO_LARGE)
                                                 }
+                                            }
+                                            if (System.currentTimeMillis() - lastFrameAt > streamIdleTimeoutMs) {
+                                                throw SafeProviderException(ProviderError.TIMEOUT)
                                             }
                                         }
                                         if (!dispatch()) send(StreamEvent.Failure(ProviderError.PROTOCOL))
