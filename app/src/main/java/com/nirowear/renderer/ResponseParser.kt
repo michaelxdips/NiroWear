@@ -89,6 +89,12 @@ object ResponseParser {
     /** Block nesting allowed before the subtree is flattened. Deep enough for real answers. */
     private const val MAX_DEPTH = 24
 
+    /**
+     * Recursion cap for inline styling. Much lower than [MAX_DEPTH] because inline nesting is
+     * pathological past a handful of levels, and each level costs several stack frames.
+     */
+    private const val MAX_INLINE_DEPTH = 32
+
     /** Container depth the Markdown library may build. Beyond this it flattens instead of recursing. */
     private const val MAX_CONTAINER_DEPTH = 48
 
@@ -388,23 +394,40 @@ object ResponseParser {
         }
     }
 
+    /**
+     * Inline runs, flattened to styled text.
+     *
+     * `depth` exists because this function is recursive and had no bound. `appendBlocks` was
+     * already capped at [MAX_DEPTH], but a 6 KB run of `*` or `_` nests emphasis thousands deep and
+     * blew the stack with `StackOverflowError` — which is an `Error`, not an `Exception`, so nothing
+     * in the app caught it and the process died. Verified at a 1 MB stack (the Android worker
+     * default): 2000 stars survive, 3000 throw.
+     *
+     * At the cap the remaining subtree is emitted as plain text rather than dropped, so a
+     * pathological answer degrades instead of vanishing or crashing.
+     */
     private fun inlines(
         node: Node,
         style: InlineContent = InlineContent(""),
+        depth: Int = 0,
     ): List<InlineContent> =
-        children(node)
-            .flatMap { child ->
-                when (child) {
-                    is Text -> listOf(style.copy(text = child.literal))
-                    is MathInline -> listOf(style.copy(text = child.source, math = true))
-                    is Code -> listOf(style.copy(text = child.literal, code = true))
-                    is StrongEmphasis -> inlines(child, style.copy(bold = true))
-                    is Emphasis -> inlines(child, style.copy(italic = true))
-                    is Link -> inlines(child, style.copy(link = child.destination))
-                    is SoftLineBreak -> listOf(style.copy(text = " "))
-                    is HardLineBreak -> listOf(style.copy(text = "\n"))
-                    is HtmlInline -> listOf(style.copy(text = child.literal))
-                    else -> inlines(child, style)
-                }.asSequence()
-            }.toList()
+        if (depth >= MAX_INLINE_DEPTH) {
+            listOf(style.copy(text = flattenText(node)))
+        } else {
+            children(node)
+                .flatMap { child ->
+                    when (child) {
+                        is Text -> listOf(style.copy(text = child.literal))
+                        is MathInline -> listOf(style.copy(text = child.source, math = true))
+                        is Code -> listOf(style.copy(text = child.literal, code = true))
+                        is StrongEmphasis -> inlines(child, style.copy(bold = true), depth + 1)
+                        is Emphasis -> inlines(child, style.copy(italic = true), depth + 1)
+                        is Link -> inlines(child, style.copy(link = child.destination), depth + 1)
+                        is SoftLineBreak -> listOf(style.copy(text = " "))
+                        is HardLineBreak -> listOf(style.copy(text = "\n"))
+                        is HtmlInline -> listOf(style.copy(text = child.literal))
+                        else -> inlines(child, style, depth + 1)
+                    }.asSequence()
+                }.toList()
+        }
 }

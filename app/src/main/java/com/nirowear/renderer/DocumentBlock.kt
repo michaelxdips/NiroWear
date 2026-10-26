@@ -66,6 +66,12 @@ internal fun openHttpLink(
     }
 }
 
+/**
+ * Rows a single table may render. A table composes inside one LazyColumn item, so its cost is paid
+ * in full on every measure; 40 rows is already more than fits on a 466 px watch face.
+ */
+private const val MAX_TABLE_ROWS = 40
+
 @Composable
 fun DocumentBlock(block: ContentBlock) {
     when (block) {
@@ -109,9 +115,15 @@ fun DocumentBlock(block: ContentBlock) {
         }
 
         is ContentBlock.Table -> {
+            // A table is ONE LazyColumn item, so every row composes and measures in a single pass.
+            // A 1000x4 table from a model becomes ~8000 Text nodes at once — seconds of main-thread
+            // work and an ANR candidate on a watch. Cap the rendered rows and say so explicitly;
+            // silently dropping rows would read as "the table ended here", which is worse.
+            val shown = block.rows.take(MAX_TABLE_ROWS)
+            val hidden = block.rows.size - shown.size
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (block.rows.isEmpty()) block.headers.forEach { RichText(it, heading = 4) }
-                block.rows.forEach { cells ->
+                shown.forEach { cells ->
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         cells.forEachIndexed { index, cell ->
                             val label = block.headers.getOrNull(index).orEmpty()
@@ -120,6 +132,13 @@ fun DocumentBlock(block: ContentBlock) {
                         }
                     }
                     Box(Modifier.fillMaxWidth().height(1.dp).background(Color.DarkGray))
+                }
+                if (hidden > 0) {
+                    val noun = if (hidden == 1) "row" else "rows"
+                    RichText(
+                        listOf(InlineContent("… $hidden more $noun. The table was cut to keep the reader responsive.")),
+                        heading = 4,
+                    )
                 }
             }
         }

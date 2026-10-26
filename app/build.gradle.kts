@@ -59,6 +59,16 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+
+    // Run unit tests with a 1 MB thread stack, matching the Android worker-thread default. The JVM
+    // default is larger, which let a real StackOverflowError in the Markdown parser pass the JVM
+    // suite while it would crash on device. A recursion test that only passes because the test JVM
+    // has a bigger stack is not testing the thing that breaks.
+    testOptions {
+        unitTests.all {
+            it.jvmArgs("-Xss1m")
+        }
+    }
 }
 
 dependencies {
