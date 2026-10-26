@@ -52,6 +52,10 @@
 !docs/screenshots/**
 !docs/index.html
 !docs/changelog.html
+# Implementation plans are published: they document how the repo is built and
+# maintained, and a plan nobody can read is not a plan.
+!docs/superpowers/plans/**
+!docs/superpowers/plans
 !docs/.nojekyll
 !fixtures/MATERIAL_ICONS_LICENSE.txt
 !fixtures/MATERIAL_ICONS_NOTICE.txt
