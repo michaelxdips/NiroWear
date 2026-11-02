@@ -422,6 +422,7 @@ fun ProviderScreen(onBack: () -> Unit) {
                 OutlinedButton(modifier = Modifier.fillMaxWidth(), enabled = !busy, onClick = {
                     scope.launch {
                         busy = true
+                        message = ""
                         val input = Triple(type, base, key)
                         val inputProfileId = edit?.id
                         try {
@@ -455,6 +456,7 @@ fun ProviderScreen(onBack: () -> Unit) {
                         } finally {
                             busy = false
                         }
+                        if (message.isNotBlank()) listState.scrollToItem(listState.layoutInfo.totalItemsCount - 1)
                     }
                 }) { Text("Discover models") }
             }
@@ -470,6 +472,7 @@ fun ProviderScreen(onBack: () -> Unit) {
                     scope.launch {
                         busy = true
                         validated = false
+                        message = ""
                         try {
                             val p = profile()
                             val inputKey = key
@@ -500,8 +503,15 @@ fun ProviderScreen(onBack: () -> Unit) {
                         } finally {
                             busy = false
                         }
+                        if (message.isNotBlank()) listState.scrollToItem(listState.layoutInfo.totalItemsCount - 1)
                     }
                 }) { Text("Validate · uses API") }
+            }
+            // One shared result row, right after the action buttons. It used to sit at the list
+            // tail below Save/Delete, so Validate/Discover output was invisible without a long
+            // scroll and taps looked dead on the watch during live testing.
+            item {
+                if (message.isNotBlank()) Text(message, fontSize = 14.sp, color = Color(0xFFFFD28A))
             }
             item {
                 Button(
@@ -539,7 +549,6 @@ fun ProviderScreen(onBack: () -> Unit) {
                 }
             }
         }
-        if (message.isNotBlank()) item { Text(message, fontSize = 14.sp) }
         if (busy) item { Text("Working…", fontSize = 14.sp) }
     }
 }
