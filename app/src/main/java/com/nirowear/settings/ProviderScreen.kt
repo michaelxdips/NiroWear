@@ -456,7 +456,6 @@ fun ProviderScreen(onBack: () -> Unit) {
                         } finally {
                             busy = false
                         }
-                        if (message.isNotBlank()) listState.scrollToItem(listState.layoutInfo.totalItemsCount - 1)
                     }
                 }) { Text("Discover models") }
             }
@@ -503,7 +502,6 @@ fun ProviderScreen(onBack: () -> Unit) {
                         } finally {
                             busy = false
                         }
-                        if (message.isNotBlank()) listState.scrollToItem(listState.layoutInfo.totalItemsCount - 1)
                     }
                 }) { Text("Validate · uses API") }
             }
