@@ -66,6 +66,10 @@ class SecretStore(
 
     @Synchronized
     fun read(ref: String): SecretValue {
+        // A missing payload (rotated-away or deleted ref) says nothing about the key: an
+        // in-flight reader holding a stale ref must not nuke the live Keystore entry that
+        // siblings still decrypt with. Only crypto failure invalidates.
+        if (!file(ref).baseFile.exists()) throw CredentialUnavailable()
         try {
             val payload = file(ref).readFully()
             require(payload.size in 30..16384 && payload[0] == 1.toByte())
