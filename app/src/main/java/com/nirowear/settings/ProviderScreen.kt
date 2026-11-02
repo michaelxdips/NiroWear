@@ -245,6 +245,11 @@ fun ProviderScreen(onBack: () -> Unit) {
         if (stateError != null) {
             item { Text(stateError, fontSize = 14.sp) }
         } else if (!adding && edit == null) {
+            // Save lands here (adding=false). The confirmation must survive the mode flip:
+            // keep the same visible result row in list mode so "Saved securely." stays on screen.
+            if (message.isNotBlank()) {
+                item { Text(message, fontSize = 14.sp, color = Color(0xFFFFD28A)) }
+            }
             items(state.profiles) { p ->
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = {
