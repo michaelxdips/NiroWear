@@ -17,8 +17,8 @@ Notable changes to NiroWear. Versions follow the published APK releases at
 - **Site demo is a watch.** `docs/index.html` wraps the replay in a 466×466 round frame with
   STOPPED copy, Retry, model switch, and a measured follow/scroll readout — zero console
   errors in Edge.
-- Measured: JVM 176/176, ktlint 0 errors, connected suite 48/48
-  (XML ts=2026-11-02T06:58:50, per Task 2 report).
+- Measured: JVM 176/176, ktlint 0 errors, connected suite 48/48 on emulator
+  (XML ts=2026-11-02T06:58:50, per Task 2 report; not re-run after Tasks 3-5).
 
 ## Unreleased — streaming re-parse coalesced (B3-03)
 
