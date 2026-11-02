@@ -3,6 +3,23 @@
 Notable changes to NiroWear. Versions follow the published APK releases at
 [NiroWear-Beta](https://github.com/michaelxdips/NiroWear-Beta/releases).
 
+## 0.1.0-beta.7 — 2026-11-02
+
+- **Renderer keeps content the parser silently dropped.** Display math inside a quote or list
+  now emits a Math block with delimiters preserved; container stripping skips fenced lines;
+  flattening preserves document order and keeps code/math nodes; over-wide rows get an
+  explicit "… N more" marker; mid-line `$$` is literal unless line-start or post-whitespace.
+- **Security hardening.** Keystore-entry deletion on rotation failure (fail-closed, recreate
+  cleanly); pairing screen states the real threat model (same-Wi-Fi, ECDH+AES-GCM payload,
+  unauthenticated handshake, manual entry avoids the network).
+- **Bounded reads and memory.** Pairing body read rejects short streams and enforces the
+  deadline inside the loop; per-conversation parse memo is LRU-capped at 3 conversations.
+- **Site demo is a watch.** `docs/index.html` wraps the replay in a 466×466 round frame with
+  STOPPED copy, Retry, model switch, and a measured follow/scroll readout — zero console
+  errors in Edge.
+- Measured: JVM 176/176, ktlint 0 errors, connected suite 48/48 on emulator
+  (XML ts=2026-11-02T06:58:50, per Task 2 report; not re-run after Tasks 3-5).
+
 ## Unreleased — streaming re-parse coalesced (B3-03)
 
 - **Streaming no longer re-parses the whole answer once per token.** The parse effect restarts on

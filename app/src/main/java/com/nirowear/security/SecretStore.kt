@@ -141,9 +141,14 @@ class SecretStore(
         }
     }
 
-    /** Drop the cached handle so the next read re-loads from the KeyStore. Called on crypto failure. */
+    /** Drop the cached handle AND the Keystore entry. Called on crypto failure. */
     private fun invalidateKey() {
-        synchronized(this) { cachedKey = null }
+        synchronized(this) {
+            cachedKey = null
+            runCatching {
+                KeyStore.getInstance("AndroidKeyStore").apply { load(null) }.deleteEntry(keyAlias)
+            }
+        }
     }
 
     companion object {

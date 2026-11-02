@@ -206,7 +206,13 @@ fun ProviderScreen(onBack: () -> Unit) {
                     .onSuccess {
                         pairing = created
                         pairingNote =
-                            if (isPrivateAddress(host)) "" else "Not a home network. Cancel if unsure."
+                            if (isPrivateAddress(host)) {
+                                "Same Wi-Fi only. Encrypted with ECDH P-256 + AES-GCM, but the " +
+                                    "handshake is unauthenticated — confirm the URL on the watch " +
+                                    "matches. Prefer manual entry on untrusted networks."
+                            } else {
+                                "Not a home network. Cancel if unsure."
+                            }
                     }.onFailure {
                         runCatching { created.close() }
                         pairingNote = "Pairing unavailable. Enter the key below."
@@ -351,7 +357,9 @@ fun ProviderScreen(onBack: () -> Unit) {
                     pairing?.let { server ->
                         Text(server.url, fontSize = 14.sp, color = Color(0xFFA8C7FA))
                         Text(
-                            "Open that on your phone. Expires in 2 minutes.",
+                            "Same Wi-Fi only. Encrypted with ECDH P-256 + AES-GCM, but the " +
+                                "handshake is unauthenticated — confirm the URL on the watch " +
+                                "matches. Prefer manual entry on untrusted networks.",
                             fontSize = 13.sp,
                             color = Color(0xFFB8BDC6),
                         )

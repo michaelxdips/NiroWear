@@ -19,6 +19,25 @@ internal fun needsParse(
 ): Boolean = messages.any { it.conversationId == conversationId && previous[it] == null }
 
 /**
+ * The parse memo keeps raw content plus the block tree per message, so it must not grow across
+ * every conversation ever opened. The open screen only shows one conversation, and the memo is
+ * rebuilt from the live Room list on each switch, so keeping the last few is enough.
+ */
+internal const val MAX_RETAINED_CONVERSATIONS = 3
+
+/**
+ * Drops memo entries whose conversation fell out of the retained set. Pure so it is testable
+ * without Compose; the caller owns the recency list.
+ */
+internal fun evictStaleConversations(
+    previous: Map<StoredMessage, List<Pair<Long, ContentBlock>>>,
+    retained: Collection<String>,
+): Map<StoredMessage, List<Pair<Long, ContentBlock>>> {
+    if (previous.keys.all { it.conversationId in retained }) return previous
+    return previous.filterKeys { it.conversationId in retained }
+}
+
+/**
  * Milliseconds to wait before parsing. 0 means "parse now".
  *
  * A negative elapsed time means the clock moved backwards (wall clock adjustment, NTP step). The

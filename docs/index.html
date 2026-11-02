@@ -1261,6 +1261,8 @@ html[data-theme="dark"] .chip-table .chip-t{color:#9BE8D5}
 .stream-telemetry > div:last-child{border-bottom:0}
 .tel-k{color:var(--steel);text-transform:uppercase}
 .tel-v{color:var(--ink);font-variant-numeric:tabular-nums;text-align:right}
+.tel-v.is-follow-on{color:#9BE8D5}
+.tel-v.is-follow-off{color:#E8C29B}
 .tel-v.is-bad{color:#E8A6A6}
 .tel-v.is-good{color:#9BE8D5}
 
@@ -1320,7 +1322,70 @@ html[data-theme="dark"] .chip-table .chip-t{color:#9BE8D5}
 }
 .stream-note b{color:var(--ink);font-weight:400}
 
-.stream-frame .latest{bottom:22px}
+.stream-frame .latest{bottom:64px}
+
+/* Watch chrome inside the stream dial: status masthead + input row, as in the app.
+   Both sit inside the circle over the dial padding, so the answer scrolls underneath. */
+.stream-frame .watch-top{
+  position:absolute;
+  top:0;
+  left:0;
+  right:0;
+  z-index:3;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:36px 112px 0;
+  font-family:var(--util);
+  font-size:10px;
+  letter-spacing:.12em;
+  text-transform:uppercase;
+  color:var(--dial-dim);
+  pointer-events:none;
+  white-space:nowrap;
+}
+.stream-frame .watch-top .wt{color:var(--dial-ink);font-variant-numeric:tabular-nums}
+.stream-frame .watch-input{
+  position:absolute;
+  left:0;
+  right:0;
+  bottom:0;
+  z-index:3;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:10px;
+  padding-bottom:30px;
+  pointer-events:none;
+}
+.stream-frame .watch-input button{
+  appearance:none;
+  background:rgba(10,12,14,.72);
+  border:1px solid #3A4348;
+  color:#D7DEDA;
+  font-family:var(--util);
+  font-size:9px;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  padding:6px 11px;
+  border-radius:999px;
+  cursor:pointer;
+  pointer-events:auto;
+}
+.stream-frame .watch-input button:hover{border-color:#9BE8D5;color:#9BE8D5}
+
+/* Banner appended after Stop: the app's exact STOPPED copy (MainActivity reads the STOPPED
+   row; ChatDao persists the partial text). */
+.dial-in .d-stopped{
+  font-family:var(--util);
+  font-size:.83em;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  color:#E8C29B;
+  border-top:1px dashed #4A5252;
+  padding-top:.7em;
+  margin:0 0 .9em;
+}
 
 @media (max-width:860px){
   .stream-grid{grid-template-columns:minmax(0,1fr);gap:24px}
@@ -2361,6 +2426,8 @@ A failed decrypt is a generic rejection: the caller learns that the payload is n
                aria-label="A recorded answer streaming into a 466 pixel round watch face"></div>
           <div class="dial-fade top" aria-hidden="true"></div>
           <div class="dial-fade bottom" aria-hidden="true"></div>
+          <div class="watch-top" aria-hidden="true"><span class="wt" id="watchTime">09:41</span><span id="watchModel">Aurora · 128k</span></div>
+          <div class="watch-input" aria-hidden="true"><button type="button" id="watchKeys" tabindex="-1">Keyboard</button><button type="button" id="watchMic" tabindex="-1">Voice</button></div>
           <button class="latest" type="button" id="streamLatest" hidden>Latest ↓</button>
         </div>
         <div class="stream-cap">
@@ -2374,6 +2441,7 @@ A failed decrypt is a generic rejection: the caller learns that the payload is n
           <button class="sbtn sbtn-primary" type="button" id="streamPlay">Stream this answer</button>
           <button class="sbtn" type="button" id="streamStop" disabled>Stop</button>
           <button class="sbtn" type="button" id="streamCut" disabled>Cut the connection</button>
+          <button class="sbtn" type="button" id="streamRetry" disabled>Retry</button>
           <button class="sbtn" type="button" id="streamReset" disabled>Reset</button>
         </div>
 
@@ -2383,18 +2451,20 @@ A failed decrypt is a generic rejection: the caller learns that the payload is n
           <div><span class="tel-k">Coalesced into a pending frame</span><span class="tel-v tnum" id="telSkipped">0</span></div>
           <div><span class="tel-k">Elapsed</span><span class="tel-v tnum" id="telElapsed">0.0 s</span></div>
           <div><span class="tel-k">Arrival rate</span><span class="tel-v tnum" id="telRate">—</span></div>
+          <div><span class="tel-k">Follow state</span><span class="tel-v tnum" id="telFollow">follow:true, offset:0px</span></div>
           <div><span class="tel-k">Last block to change</span><span class="tel-v" id="telChange">—</span></div>
         </div>
 
-        <div class="stream-presets" role="group" aria-label="Answers to stream">
-          <button class="preset" type="button" data-stream="0" aria-pressed="true">Streaming + Stop</button>
-          <button class="preset" type="button" data-stream="1" aria-pressed="false">Code + math</button>
-          <button class="preset" type="button" data-stream="2" aria-pressed="false">Table + list</button>
+        <div class="stream-presets" role="group" aria-label="Watch model — fixture length">
+          <button class="preset" type="button" data-stream="0" aria-pressed="true">Model A · 875 chars</button>
+          <button class="preset" type="button" data-stream="1" aria-pressed="false">Model B · 695 chars</button>
+          <button class="preset" type="button" data-stream="2" aria-pressed="false">Model C · 619 chars</button>
         </div>
 
         <dl class="stream-facts">
           <div><dt>Parse cadence</dt><dd>throttled to one parse per frame, never a debounce</dd></div>
-          <div><dt>On Stop</dt><dd>partial text stays visible and is persisted, marked stopped</dd></div>
+          <div><dt>On Stop</dt><dd>the answer keeps the exact app copy <b>Stopped · partial answer kept</b>, persisted and never replayed automatically</dd></div>
+          <div><dt>On Retry</dt><dd>the same fixture replays from the start — the app regenerates a continuation instead; neither replays visible output as a new answer</dd></div>
           <div><dt>On a cut</dt><dd>no terminal event is a <b>failure</b>, not a short answer; partial text is still kept</dd></div>
           <div><dt>Scroll up</dt><dd>following stops; <b>Latest</b> returns you to the end</dd></div>
           <div><dt>Interrupted</dt><dd>nothing is replayed automatically — you decide to retry</dd></div>
@@ -3915,10 +3985,29 @@ if (typeof module !== "undefined" && module.exports) {
     if (streamFollowing && wasNearBottom) {
       streamDial.scrollTop = streamDial.scrollHeight;
     } else {
-      // Keep the reader exactly where they were, measured from the bottom so growing content above
-      // does not drift the view.
+      // Keep the reader exactly where they were, measured BEFORE the write so growing content
+      // above does not drift the view.
       streamDial.scrollTop = Math.max(0, prevTop);
     }
+    updateFollowTel();
+  }
+
+  // Retry and Reset share one cancellation so an old delivery loop can never append after a
+  // new run starts. Measured: a Retry issued mid-run left both loops alive and counters raced.
+  function streamCancelFlight() {
+    if (streamTimer) { window.clearTimeout(streamTimer); streamTimer = null; }
+    if (frameWatchdog) { window.clearTimeout(frameWatchdog); frameWatchdog = null; }
+    framePending = false;
+    streamRunning = false;
+  }
+
+  // Follow-state readout: the real scroll handler updates this on every paint and every scroll.
+  // No invented numbers — follow flag plus the live pixel offset of the dial.
+  function updateFollowTel() {
+    if (!telFollow || !streamDial) return;
+    var off = Math.max(0, streamDial.scrollHeight - streamDial.scrollTop - streamDial.clientHeight);
+    telFollow.textContent = "follow:" + (streamFollowing ? "true" : "false") + ", offset:" + Math.round(off) + "px";
+    telFollow.className = "tel-v tnum " + (streamFollowing ? "is-follow-on" : "is-follow-off");
   }
 
   // Deltas arrive the way a provider actually sends them: a burst of tokens, then a pause while the
@@ -3976,6 +4065,15 @@ if (typeof module !== "undefined" && module.exports) {
     // not re-add it. Without this the final frame keeps the caret, and a finished answer looks
     // like it is still arriving.
     if (streamDial) streamDial.innerHTML = blocksToHtml(finalBlocks);
+    if (!completed && streamDial) {
+      // Repeat the visible status inside the dial, exactly as the app does: MainActivity renders
+      // the STOPPED row's literal status text as the final line of the answer, then reports the
+      // measured counts in the notice above. Banner text is verbatim, not derived.
+      var stoppedBanner = document.createElement("p");
+      stoppedBanner.setAttribute("data-banner", "stopped");
+      stoppedBanner.textContent = "Stopped · partial answer kept";
+      streamDial.appendChild(stoppedBanner);
+    }
     if (completed) {
       streamSetState("Complete", "");
       if (streamNote) {
@@ -3983,18 +4081,31 @@ if (typeof module !== "undefined" && module.exports) {
           "The same answer took <b>" + finalBlocks.length + " blocks</b>.";
       }
     } else {
-      streamSetState("Stopped · partial kept", "is-stopped");
+      streamSetState("Stopped · partial answer kept", "is-stopped");
       if (streamNote) {
         streamNote.innerHTML = "Stopped with <b>" + streamPos + " of " + streamFull.length +
           "</b> characters kept. In the app this partial text is persisted and marked stopped; " +
           "nothing is resent automatically.";
       }
+      // The stopped banner already landed in streamFinish; do not duplicate it here.
     }
     streamTelemetry(finalBlocks);
-    if (streamPlay) streamPlay.disabled = false;
+    if (streamRetry) streamRetry.disabled = false;
+    if (streamPlay) streamPlay.disabled = true;
     if (streamStop) streamStop.disabled = true;
     if (streamCut) streamCut.disabled = true;
     if (streamReset) streamReset.disabled = false;
+  }
+
+  // Retry replays the same fixture from the start — the app's retry regenerates a new
+  // continuation rather than replaying visible output, and this demo replays the same
+  // recorded answer for the same reason: never present a truncated run as complete.
+  // streamStart rewinds on every run, including a Retry issued mid-run, so the pre-stop
+  // position can never leak into the new run.
+  function streamRetryNow() {
+    streamFull = streamAnswer();
+    streamPos = 0;
+    streamStart();
   }
 
   // The failure the app exists to prevent: the socket dies with no terminal event. This is NOT
@@ -4018,7 +4129,8 @@ if (typeof module !== "undefined" && module.exports) {
     // text still looked like it was arriving. Measured: .is-streaming was still present after a cut.
     if (streamDial) streamDial.innerHTML = blocksToHtml(blocks);
     streamTelemetry(blocks);
-    if (streamPlay) streamPlay.disabled = false;
+    if (streamRetry) streamRetry.disabled = false;
+    if (streamPlay) streamPlay.disabled = true;
     if (streamStop) streamStop.disabled = true;
     if (streamCut) streamCut.disabled = true;
     if (streamReset) streamReset.disabled = false;
@@ -4026,8 +4138,13 @@ if (typeof module !== "undefined" && module.exports) {
 
   function streamStart() {
     if (streamRunning) return;
-    if (streamPos >= streamFull.length) streamPos = 0;
+    // A new run from Ready or after Retry/Reset always starts from a clean slate: cancel any
+    // in-flight timer/frame and rewind. The old code only rewound when streamPos was past the
+    // end, so Retry after Stop re-armed streamRunning but left the kept position in place —
+    // measured: Retry after Stop resumed mid-answer instead of replaying from the start.
+    streamCancelFlight();
     streamFull = streamAnswer();
+    streamPos = 0;
     streamRunning = true;
     streamFollowing = true;
     telParseCount = 0;
@@ -4047,6 +4164,7 @@ if (typeof module !== "undefined" && module.exports) {
     if (streamPlay) streamPlay.disabled = true;
     if (streamStop) streamStop.disabled = false;
     if (streamCut) streamCut.disabled = false;
+    if (streamRetry) streamRetry.disabled = true;
     if (streamReset) streamReset.disabled = false;
     streamDeliver();
   }
@@ -4057,16 +4175,15 @@ if (typeof module !== "undefined" && module.exports) {
   }
 
   function streamResetNow() {
-    if (streamTimer) { window.clearTimeout(streamTimer); streamTimer = null; }
-    streamRunning = false;
+    // Same shared cancellation as Retry: a reset issued mid-run must not leave the old
+    // delivery loop alive behind the fresh state.
+    streamCancelFlight();
     streamFull = streamAnswer();
     streamPos = 0;
     streamFollowing = true;
     telParseCount = 0;
     telCoalesced = 0;
     telDeltaCount = 0;
-    framePending = false;
-    if (frameWatchdog) { window.clearTimeout(frameWatchdog); frameWatchdog = null; }
     telStartAt = 0;
     telLastSig = "";
     if (telParses) telParses.textContent = "0";
@@ -4075,6 +4192,7 @@ if (typeof module !== "undefined" && module.exports) {
     if (telElapsed) telElapsed.textContent = "0.0 s";
     if (telRate) telRate.textContent = "—";
     if (telChange) telChange.textContent = "—";
+    updateFollowTel();
     if (streamDial) streamDial.innerHTML = "";
     streamShowLatest(false);
     streamSetState("Ready", "");
@@ -4082,6 +4200,7 @@ if (typeof module !== "undefined" && module.exports) {
     if (streamPlay) streamPlay.disabled = false;
     if (streamStop) streamStop.disabled = true;
     if (streamCut) streamCut.disabled = true;
+    if (streamRetry) streamRetry.disabled = true;
     if (streamReset) streamReset.disabled = true;
     if (streamNote) {
       streamNote.innerHTML = "Press <b>Stream this answer</b>. Scroll inside the dial while it " +
@@ -4093,6 +4212,18 @@ if (typeof module !== "undefined" && module.exports) {
   if (streamPlay) streamPlay.addEventListener("click", streamStart);
   if (streamStop) streamStop.addEventListener("click", streamStopNow);
   if (streamCut) streamCut.addEventListener("click", streamCutNow);
+  var streamRetry = document.getElementById("streamRetry");
+  var telFollow = document.getElementById("telFollow");
+  var watchModel = document.getElementById("watchModel");
+  var watchTime = document.getElementById("watchTime");
+  if (watchTime) {
+    // Masthead time is the only ambient number: real clock, set once, not part of the replay.
+    var now = new Date();
+    var hh = now.getHours(), mm = now.getMinutes(), ap = hh >= 12 ? "PM" : "AM";
+    hh = hh % 12; if (hh === 0) hh = 12;
+    watchTime.textContent = hh + ":" + (mm < 10 ? "0" + mm : mm) + " " + ap;
+  }
+  if (streamRetry) streamRetry.addEventListener("click", streamRetryNow);
   if (streamReset) streamReset.addEventListener("click", streamResetNow);
 
   if (streamDial) {
@@ -4110,6 +4241,7 @@ if (typeof module !== "undefined" && module.exports) {
         streamFollowing = true;
         streamShowLatest(false);
       }
+      updateFollowTel();
     }, { passive: true });
   }
 
@@ -4118,15 +4250,21 @@ if (typeof module !== "undefined" && module.exports) {
       streamFollowing = true;
       if (streamDial) streamDial.scrollTop = streamDial.scrollHeight;
       streamShowLatest(false);
+      updateFollowTel();
     });
   }
 
+  // Model switch: fixtures have measured lengths (875 / 695 / 619 chars from node t6measure).
+  // Switching resets the replay and updates the masthead model. For a physical check, run the
+  // long fixture, scroll up to surface Latest, then confirm tapping Latest returns to the end.
+  var MODEL_NAMES = ["Model A · 128k", "Model B · 200k", "Model C · 32k"];
   Array.prototype.forEach.call(document.querySelectorAll("[data-stream]"), function (btn) {
     btn.addEventListener("click", function () {
       streamIndex = parseInt(btn.getAttribute("data-stream"), 10) || 0;
       Array.prototype.forEach.call(document.querySelectorAll("[data-stream]"), function (b) {
         b.setAttribute("aria-pressed", b === btn ? "true" : "false");
       });
+      if (watchModel) watchModel.textContent = MODEL_NAMES[streamIndex] || MODEL_NAMES[0];
       streamFull = streamAnswer();
       streamResetNow();
     });
