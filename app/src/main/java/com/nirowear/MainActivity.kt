@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -778,7 +779,13 @@ private fun ChatReader(
                         }
                     }
                     items(blocks) { DocumentBlock(it) }
-                    if (!renderLab) chatState.error?.let { message -> item { Text(message, fontSize = 14.sp) } }
+                    // One copy of the transient failure only. The same string also renders on
+                    // the persisted assistant row (:255-266), so a bare `error?.let` prints it
+                    // twice once the row exists. Cleared history (edit/retry/new chat) keeps the
+                    // transient row as the only copy.
+                    if (!renderLab && storedMessages.none { it.error == chatState.error }) {
+                        chatState.error?.let { message -> item { Text(message, fontSize = 14.sp) } }
+                    }
                     if (!renderLab && chatState.unsaved) {
                         item {
                             val context = androidx.compose.ui.platform.LocalContext.current
@@ -885,6 +892,7 @@ private fun ChatReader(
                     ) {
                         if (chatState.generating && !renderLab) {
                             if (chatState.generating) {
+                                if (!following) Spacer(Modifier.width(48.dp))
                                 Button(onClick = {
                                     chat.stop()
                                 }, modifier = Modifier.width(72.dp).height(48.dp)) { Text("Stop", fontSize = 12.sp) }

@@ -462,6 +462,7 @@ fun ProviderScreen(onBack: () -> Unit) {
                 Button(onClick = {
                     model = id
                     validated = false
+                    models = emptyList()
                 }, modifier = Modifier.fillMaxWidth()) { Text(id, fontSize = 14.sp) }
             }
             item {
