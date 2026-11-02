@@ -75,9 +75,11 @@ import androidx.wear.compose.material3.Button
 import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.Text
 import com.nirowear.chat.ChatViewModel
+import com.nirowear.chat.MAX_RETAINED_CONVERSATIONS
 import com.nirowear.chat.ReaderAction
 import com.nirowear.chat.ReaderAnchor
 import com.nirowear.chat.coalesceDelayMs
+import com.nirowear.chat.evictStaleConversations
 import com.nirowear.chat.needsParse
 import com.nirowear.data.ProviderSettingsState
 import com.nirowear.renderer.ContentBlock
@@ -193,6 +195,9 @@ private fun ChatReader(
         mutableStateOf<Map<com.nirowear.data.StoredMessage, List<Pair<Long, ContentBlock>>>>(emptyMap())
     }
     var parsedConversation by remember { mutableStateOf<String?>(null) }
+    // Task 5: recency for the parse-memo bound. The memo keeps raw content plus the block tree
+    // per message, so only the last few conversations are retained.
+    var recentConversations by remember { mutableStateOf(emptyList<String>()) }
     var restoredConversation by remember { mutableStateOf<String?>(null) }
     // Survives effect restarts, which is what turns the coalescing delay into a throttle rather
     // than a debounce. See the parse effect below.
@@ -210,7 +215,7 @@ private fun ChatReader(
     LaunchedEffect(storedMessages, chatState.conversationId) {
         val id = chatState.conversationId
         val messages = storedMessages
-        val previous = parsedRows
+        val previous = evictStaleConversations(parsedRows, recentConversations + listOfNotNull(id))
 
         // B3-03: coalesce re-parses, but guarantee progress.
         //
@@ -265,7 +270,8 @@ private fun ChatReader(
         currentCoroutineContext().ensureActive()
         if (currentSource != (id to messages)) return@LaunchedEffect
         lastParseAt = System.currentTimeMillis()
-        parsedRows = rows // rebuilt from the live list each time, so deleted rows are dropped
+        if (id != null) recentConversations = (recentConversations - id + id).takeLast(MAX_RETAINED_CONVERSATIONS)
+        parsedRows = evictStaleConversations(rows, recentConversations + listOfNotNull(id))
         historyBlocks = rows.values.flatten()
         parsedConversation = id
     }
@@ -313,7 +319,7 @@ private fun ChatReader(
             val a = anchors[id]
             following = a?.following ?: (chatState.generating || followNewConversation)
             val position =
-                a?.resolve(historyBlocks, storedMessages.associate { it.id to it.rawContent.hashCode() }) ?: (0 to 0)
+                a?.resolve(historyBlocks, messageById.mapValues { it.value.rawContent.hashCode() }) ?: (0 to 0)
             listState.scrollToItem(position.first + if (notice.isNotEmpty()) 1 else 0, position.second)
             restoredConversation = id
             followNewConversation = false

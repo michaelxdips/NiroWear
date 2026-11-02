@@ -151,7 +151,7 @@ internal class PairingServer(
         if (declared > MAX_BODY) return respond(client, 400, TEXT, "too large")
         val body =
             if (declared > 0) {
-                readExactly(input, declared) ?: return respond(client, 400, TEXT, "short body")
+                readExactly(input, declared, requestDeadline) ?: return respond(client, 400, TEXT, "short body")
             } else {
                 ByteArray(0)
             }
@@ -315,19 +315,16 @@ internal class PairingServer(
         return null
     }
 
+    /**
+     * Bounded body read: the length is one header integer from an unauthenticated peer, so the
+     * cap is enforced here as well as at the call site, and the request wall clock is checked
+     * inside the loop so a trickling sender cannot hold the single worker past it.
+     */
     private fun readExactly(
         input: InputStream,
         length: Int,
-    ): ByteArray? {
-        val buffer = ByteArray(length)
-        var offset = 0
-        while (offset < length) {
-            val read = input.read(buffer, offset, length - offset)
-            if (read < 0) return null
-            offset += read
-        }
-        return buffer
-    }
+        deadline: Long,
+    ): ByteArray? = readBounded(input, length, deadline)
 
     private fun b64(bytes: ByteArray): String = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
 
@@ -353,6 +350,28 @@ internal class PairingServer(
         const val HTML = "text/html; charset=utf-8"
         const val JSON = "application/json"
         const val TEXT = "text/plain; charset=utf-8"
+
+        /**
+         * Bounded body read: the length is one header integer from an unauthenticated peer, so the
+         * cap is enforced here as well as at the call site, and the request wall clock is checked
+         * inside the loop so a trickling sender cannot hold the single worker past it.
+         */
+        internal fun readBounded(
+            input: InputStream,
+            length: Int,
+            deadline: Long,
+        ): ByteArray? {
+            if (length <= 0 || length > MAX_BODY) return null
+            val buffer = ByteArray(length)
+            var offset = 0
+            while (offset < length) {
+                if (System.currentTimeMillis() > deadline) return null
+                val read = input.read(buffer, offset, length - offset)
+                if (read < 0) return null
+                offset += read
+            }
+            return buffer
+        }
     }
 }
 
