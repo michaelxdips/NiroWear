@@ -127,15 +127,51 @@ p:last-child{margin-bottom:0}
       Every published build, in order, with the numbers that identify it. Each entry records what was
       actually executed for that release — not what was intended.
     </p>
-    <p class="meta">Generated from git history and the NiroWear-Beta release API · 2026-10-22</p>
+    <p class="meta">Generated from git history and the NiroWear-Beta release API · 2026-11-02</p>
   </div>
+
+  <!-- beta.7 -->
+  <article class="release">
+    <div class="rside">
+      <span class="rver">beta.7</span>
+      <span class="rdate">2026-11-02</span>
+      <span class="rbadge latest">Latest</span>
+    </div>
+    <div class="rbody">
+      <h2>Finish campaign: renderer, hardening, watch-frame demo</h2>
+      <p>
+        The response parser no longer drops content silently; pairing reads and the parse
+        memo are bounded; the site demo sits in a 466 px round frame with stop, retry and
+        model-switch states.
+      </p>
+      <ul>
+        <li><strong>Renderer keeps dropped content.</strong> Display math in quotes/lists, fenced lines in containers, code/math nodes in flattening, over-wide table rows and mid-line <code>$$</code> all keep their content.</li>
+        <li><strong>Hardening.</strong> Keystore entry deleted on rotation failure; pairing screen states the unauthenticated-handshake threat model; body reads enforce the deadline; parse memo LRU-capped at 3 conversations.</li>
+        <li><strong>Site demo is a watch.</strong> 466×466 round frame, STOPPED copy, Retry, model switch, measured follow/scroll readout; zero console errors in Edge.</li>
+      </ul>
+      <dl class="ident">
+        <div><dt>versionCode</dt><dd>8</dd></div>
+        <div><dt>size</dt><dd>pending signed publish</dd></div>
+        <div><dt>sha256</dt><dd>pending signed publish</dd></div>
+        <div><dt>certificate</dt><dd>7d4e6e99…abe3</dd></div>
+      </dl>
+      <table class="gate">
+        <thead><tr><th>Check</th><th>Result</th></tr></thead>
+        <tbody>
+          <tr><td>JVM unit tests</td><td>176 / 176, 0 failures</td></tr>
+          <tr><td>ktlint</td><td>0 errors</td></tr>
+          <tr><td>Connected suite (emulator)</td><td>48 / 48 (2026-11-02T06:58:50, per task reports)</td></tr>
+          <tr><td>assembleDebug + assembleRelease</td><td>pass (unsigned release 3,582,786 B)</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </article>
 
   <!-- beta.6 -->
   <article class="release">
     <div class="rside">
       <span class="rver">beta.6</span>
       <span class="rdate">2026-10-22</span>
-      <span class="rbadge latest">Latest</span>
     </div>
     <div class="rbody">
       <h2>Native LaTeX in release builds</h2>
