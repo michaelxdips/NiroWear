@@ -124,6 +124,9 @@ internal class PairingServer(
         // Closing the listener alone leaves the worker blocked in read() on an accepted client, so
         // the socket would outlive the screen. Closing the active client unblocks it.
         runCatching { active?.close() }
+        // Join the worker so close() proves the listener is dead: without this, a held client can
+        // keep the thread blocked in readHead through its wall-clock deadline after the screen left.
+        runCatching { worker?.join(5000) }
     }
 
     private fun handle(client: Socket) {
@@ -374,6 +377,7 @@ background:#a8c7fa;color:#062e6f;font-weight:600}
 </style></head><body>
 <h1>NiroWear</h1>
 <p>Send this provider to your watch. It is encrypted before it leaves this page.</p>
+<p>Same Wi-Fi only. Encrypted with ECDH P-256 + AES-GCM, but the handshake is unauthenticated — confirm the URL on the watch matches. Prefer manual entry on untrusted networks.</p>
 <label>Provider</label>
 <select id="type">
 <option value="OPENAI">OpenAI</option>
