@@ -5,8 +5,8 @@ audited concepts.
 
 ## Design record
 
-Three bounded directions were built and audited before selection; all three are retained under
-`artifacts/beta4-2026-10-21/logo/` with renders, an audit score, and a nine-slide board.
+Three bounded directions were built and audited before selection; the working
+renders were purged 2026-11-02 with the other superseded evidence.
 
 | concept | type | strokes | `svg_audit.py` | outcome |
 | --- | --- | --- | --- | --- |
@@ -90,6 +90,6 @@ Google Material keyboard and microphone icons remain separate Apache-2.0 compone
 `app/src/main/res/drawable/ic_keyboard.xml` and `ic_mic.xml`, not reclassified as first-party.
 
 First-party project material, MIT-licensed source; (c) 2026 Stephen Michael, attribution limited to applicable
-first-party rights, not blanket third-party or generated exclusivity. The Folded Signal mark remains
-in git-less historical artifacts (`artifacts/beta2-2026-10-11/`, `icon-preview-2026-10-08/`) and in
-the published beta.1/beta.2 APKs, which are immutable.
+first-party rights, not blanket third-party or generated exclusivity. The Folded Signal mark survives
+only in the published beta.1/beta.2 APKs, which are immutable; its working files were purged
+2026-11-02 with the other superseded evidence (kept: `software-rc-2026-10-09`, `final-ship-2026-10-10`).
