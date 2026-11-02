@@ -141,14 +141,11 @@ class SecretStore(
         }
     }
 
-    /** Drop the cached handle AND the Keystore entry. Called on crypto failure. */
+    /** Drop the cached handle so the next read re-loads from the Keystore. Called on crypto
+     * failure. Never delete the Keystore entry here: a corrupt payload is not a dead key, and
+     * siblings encrypted under the same alias must keep decrypting. */
     private fun invalidateKey() {
-        synchronized(this) {
-            cachedKey = null
-            runCatching {
-                KeyStore.getInstance("AndroidKeyStore").apply { load(null) }.deleteEntry(keyAlias)
-            }
-        }
+        synchronized(this) { cachedKey = null }
     }
 
     companion object {
