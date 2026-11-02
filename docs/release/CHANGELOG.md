@@ -3,7 +3,23 @@
 Notable changes to NiroWear. Versions follow the published APK releases at
 [NiroWear-Beta](https://github.com/michaelxdips/NiroWear-Beta/releases).
 
-## 0.1.0-beta.7 — 2026-11-02
+## 0.1.0 — stable cut, 2026-11-03
+
+Stable cut from green tree `1b389a4` (versionCode 10). Signed with the beta
+lineage identity (cert SHA-256
+`7D:4E:6E:99:82:1D:90:4F:23:90:0B:D4:E0:CA:D5:B6:4B:1A:27:33:A2:82:43:DC:C8:AB:9D:6E:27:68:AB:E3`).
+
+Measured on the stable tree: JVM suite green, release assemble clean, connected
+suite 48/48 green on emulator (same tree as beta.8 verdict, versionCode bump
+only).
+
+Honest remaining gates (disclosed, not blocking): live provider smoke skipped
+per owner order (no owner-typed key on emulator; route to `kenari.id` proven
+reachable via TLS at smoke time); owner BETA7 sheet hardware steps pending;
+TalkBack pass open; native-math licence review open (JLaTeXMath exception
+ships in `assets/legal/`).
+
+## 0.1.0-beta.8 — 2026-11-02
 
 - **Renderer keeps content the parser silently dropped.** Display math inside a quote or list
   now emits a Math block with delimiters preserved; container stripping skips fenced lines;
