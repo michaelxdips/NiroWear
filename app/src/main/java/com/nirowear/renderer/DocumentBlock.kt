@@ -21,6 +21,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -140,6 +141,18 @@ fun DocumentBlock(block: ContentBlock) {
                         heading = 4,
                     )
                 }
+                if (block.droppedCells > 0) {
+                    val noun = if (block.droppedCells == 1) "cell" else "cells"
+                    RichText(
+                        listOf(
+                            InlineContent(
+                                "… ${block.droppedCells} more $noun. " +
+                                    "The table was cut to keep the reader responsive.",
+                            ),
+                        ),
+                        heading = 4,
+                    )
+                }
             }
         }
 
@@ -170,30 +183,34 @@ private fun RichText(
         }
     BoxWithConstraints(modifier.fillMaxWidth()) {
         val width = with(density) { maxWidth.toPx() }
+        // ponytail: memoize per (content, maxWidth); recompute only when spans, width, or
+        // heading size change, instead of re-measuring on every recomposition.
         val wide =
-            content.indices.filter { index ->
-                content[index].math && (
-                    math[index]?.intrinsicWidth?.toFloat()
-                        ?: measurer
-                            .measure(
-                                content[index].text,
-                                TextStyle(
-                                    fontSize = fallbackSize,
-                                    fontStyle = FontStyle.Italic,
-                                    fontWeight =
-                                        if (content[index].bold ||
-                                            heading != null
-                                        ) {
-                                            FontWeight.Bold
-                                        } else {
-                                            null
-                                        },
-                                ),
-                                softWrap = false,
-                            ).size.width
-                            .toFloat()
-                ) >
-                    width
+            remember(content, width, heading) {
+                content.indices.filter { index ->
+                    content[index].math && (
+                        math[index]?.intrinsicWidth?.toFloat()
+                            ?: measurer
+                                .measure(
+                                    content[index].text,
+                                    TextStyle(
+                                        fontSize = fallbackSize,
+                                        fontStyle = FontStyle.Italic,
+                                        fontWeight =
+                                            if (content[index].bold ||
+                                                heading != null
+                                            ) {
+                                                FontWeight.Bold
+                                            } else {
+                                                null
+                                            },
+                                    ),
+                                    softWrap = false,
+                                ).size.width
+                                .toFloat()
+                    ) >
+                        width
+                }
             }
         if (wide.isEmpty()) {
             InlineRichText(content, math, heading)

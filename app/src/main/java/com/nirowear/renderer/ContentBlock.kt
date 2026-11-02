@@ -42,6 +42,7 @@ sealed interface ContentBlock {
     data class Table(
         val headers: List<List<InlineContent>>,
         val rows: List<List<List<InlineContent>>>,
+        val droppedCells: Int = 0,
     ) : ContentBlock
 
     data object Divider : ContentBlock

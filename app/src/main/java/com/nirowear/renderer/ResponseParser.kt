@@ -85,6 +85,8 @@ object ResponseParser {
     // Hoisted out of the per-line loop: the pattern is constant, so building a Regex for every
     // line of every streamed answer was pure overhead. One instance, reused.
     private val FENCE = Regex("^ {0,3}(`{3,}|~{3,})(.*)$")
+    private val DEEP_QUOTE = Regex("^\\s*(?:>\\s*)+")
+    private val DELIMITER_CELL = Regex(":?-{1,}:?")
 
     /** Block nesting allowed before the subtree is flattened. Deep enough for real answers. */
     private const val MAX_DEPTH = 24
@@ -108,6 +110,10 @@ object ResponseParser {
      * real answer uses but keeps the text.
      */
     private fun capContainers(line: String): String {
+        // A fence run owns the line: rewriting container bytes around it once mangled the opening
+        // fence of a deeply quoted code block, so the fence check below never fired and the code
+        // vanished into prose. The library handles deep nesting from here (see MAX_DEPTH).
+        if (line.contains("```") || line.contains("~~~")) return line
         var index = 0
         var depth = 0
         while (index < line.length) {
@@ -214,6 +220,64 @@ object ResponseParser {
         return -1
     }
 
+    /** Splits a GFM table row on unescaped pipes, ignoring the outer pipes. */
+    private fun splitTableRow(line: String): List<String> {
+        var row = line.trim()
+        if (row.startsWith("|")) row = row.substring(1)
+        if (row.endsWith("|")) row = row.substring(0, row.length - 1)
+        val cells = mutableListOf<String>()
+        val cell = StringBuilder()
+        var index = 0
+        while (index < row.length) {
+            val char = row[index]
+            if (char == '\\' && index + 1 < row.length && row[index + 1] == '|') {
+                cell.append('|')
+                index += 2
+            } else if (char == '|') {
+                cells += cell.toString()
+                cell.clear()
+                index++
+            } else {
+                cell.append(char)
+                index++
+            }
+        }
+        cells += cell.toString()
+        return cells
+    }
+
+    private fun isDelimiterRow(line: String): Boolean {
+        val cells = splitTableRow(line)
+        return cells.isNotEmpty() &&
+            cells.all { cell -> cell.trim().matches(DELIMITER_CELL) }
+    }
+
+    /**
+     * Cells the GFM parser will silently drop: body rows wider than the header are clamped to the
+     * header width by the library, so count the overflow here and report it explicitly instead.
+     * One entry per table region, in document order.
+     */
+    private fun scanTableOverflow(markdown: String): ArrayDeque<Int> {
+        val dropped = ArrayDeque<Int>()
+        val lines = markdown.split('\n')
+        var index = 0
+        while (index < lines.size) {
+            if (!lines[index].contains('|') || index + 1 >= lines.size || !isDelimiterRow(lines[index + 1])) {
+                index++
+                continue
+            }
+            val width = splitTableRow(lines[index]).size
+            var total = 0
+            index += 2
+            while (index < lines.size && lines[index].contains('|') && !isDelimiterRow(lines[index])) {
+                total += (splitTableRow(lines[index]).size - width).coerceAtLeast(0)
+                index++
+            }
+            dropped.addLast(total)
+        }
+        return dropped
+    }
+
     fun parse(source: String): List<ContentBlock> {
         val blocks = mutableListOf<ContentBlock>()
         val markdown = StringBuilder()
@@ -221,9 +285,31 @@ object ResponseParser {
         var closing = ""
         var fence: Char? = null
         var fenceLength = 0
+        var mathPrefix = ""
+
+        /**
+         * Lines of the currently open fence, fed raw so CommonMark sees the exact bytes.
+         * At close, the whole run is replayed stripped if a lazy (unmarked, unindented)
+         * content line proved the container markers ornamental; otherwise it replays raw
+         * and the library parses the quote/list natively.
+         */
+        val fenceLines = mutableListOf<String>()
+
+        fun replayFence() {
+            val lazy = fenceLines.any { isLazyFenceContent(it) }
+            for (index in fenceLines.indices) {
+                val fenceLine = fenceLines[index]
+                markdown.appendLine(if (lazy) stripForReplay(fenceLine) else fenceLine)
+            }
+            fenceLines.clear()
+        }
 
         fun flush() {
-            appendBlocks(parser.parse(markdown.toString()), blocks)
+            // An unclosed fence has no close to decide on; replay raw so streaming code
+            // stays visible and the library parses any containers natively.
+            for (index in fenceLines.indices) markdown.appendLine(fenceLines[index])
+            fenceLines.clear()
+            appendBlocks(parser.parse(markdown.toString()), blocks, scanTableOverflow(markdown.toString()))
             markdown.clear()
         }
         for (line in source.replace("\r\n", "\n").split('\n')) {
@@ -238,20 +324,37 @@ object ResponseParser {
                     val index = closingIndex(rest, closing, 0)
                     if (index < 0) {
                         // Every consumed line is newline-terminated so an unfinished display keeps
-                        // the exact source after its opening delimiter.
+                        // the exact source after its opening delimiter. Later lines arrive raw, so
+                        // the opening line's container prefix must not leak into the equation.
+                        mathPrefix = ""
                         open.append(rest).append('\n')
                         rest = null
                     } else {
                         open.append(rest, 0, index).append('\n')
                         blocks += ContentBlock.Math(open.toString().trim(), true)
                         math = null
-                        rest = rest.substring(index + closing.length)
+                        rest = mathPrefix + rest.substring(index + closing.length)
+                        mathPrefix = ""
                         if (rest.isBlank()) rest = null
                     }
                     continue
                 }
+                // Tracks an open fence through container markers: `uncontainer` strips them
+                // for detection only, the lines themselves buffer raw in `fenceLines`.
                 val container = uncontainer(rest)
-                FENCE.find(container)?.let { match ->
+                val inFence = fence != null
+                // A hostile `>` run without spaces is not a container uncontainer() strips, so a
+                // fence buried behind one was never detected. Only the fence hunt gets this
+                // fallback; quote parsing still sees the raw line.
+                val fenced =
+                    if (FENCE.find(container) == null &&
+                        (rest.contains("```") || rest.contains("~~~"))
+                    ) {
+                        container.replaceFirst(DEEP_QUOTE, "")
+                    } else {
+                        container
+                    }
+                FENCE.find(fenced)?.let { match ->
                     val run = match.groupValues[1]
                     if (fence == null) {
                         fence = run.first()
@@ -260,22 +363,52 @@ object ResponseParser {
                         fence = null
                     }
                 }
-                val trimmed = rest.trimStart()
-                val opening =
+                val trimmed = container.trimStart()
+                val indented =
+                    rest.startsWith("    ") || rest.startsWith('\t') ||
+                        container.startsWith("    ") || container.startsWith('\t')
+                var opening =
                     when {
                         fence != null -> null
-                        rest.startsWith("    ") || rest.startsWith('\t') -> null
+                        indented -> null
                         trimmed.startsWith("\\[") -> "\\[" to "\\]"
                         trimmed.startsWith("$$") -> "$$" to "$$"
                         else -> null
                     }
+                if (opening == null && fence == null && !indented) {
+                    // Mid-line `$$` preceded by whitespace opens display math; glued to a word
+                    // (`a$$x$$b`) both dollars stay literal, like currency.
+                    val mid = findMidlineDisplay(container)
+                    if (mid >= 0) {
+                        opening = "$$" to "$$"
+                        val after = container.substring(mid + 2)
+                        flush()
+                        closing = "$$"
+                        math = StringBuilder()
+                        mathPrefix = rest.substring(0, rest.length - container.length)
+                        rest = after
+                        continue
+                    }
+                }
                 if (opening == null) {
-                    markdown.appendLine(rest)
+                    val fenceOpen = FENCE.find(fenced) != null && fence == null
+                    if (inFence || fence != null || fenceOpen) {
+                        // A fence run buffers raw; at close the whole run replays stripped
+                        // only if a lazy (unmarked, unindented) content line proved the
+                        // container markers ornamental. Otherwise it replays raw and the
+                        // library parses the quote/list natively.
+                        fenceLines.add(rest)
+                        if (fence == null) replayFence()
+                    } else {
+                        // Outside a fence the raw line is fed so quotes and lists survive.
+                        markdown.appendLine(rest)
+                    }
                     rest = null
                 } else {
                     flush()
                     closing = opening.second
                     math = StringBuilder()
+                    mathPrefix = rest.substring(0, rest.length - container.length)
                     rest = trimmed.removePrefix(opening.first)
                 }
             }
@@ -290,6 +423,49 @@ object ResponseParser {
 
     private fun children(node: Node): Sequence<Node> = generateSequence(node.firstChild) { it.next }
 
+    /** A content line that cannot continue a container: unindented, unmarked, non-blank. */
+    private fun isLazyFenceContent(line: String): Boolean {
+        if (line.isBlank()) return false
+        val first = line[0]
+        if (first == ' ' || first == '\t') return false
+        return uncontainer(line) == line
+    }
+
+    /** Strips container markers for a replayed fence line, including `>` runs without spaces. */
+    private fun stripForReplay(line: String): String {
+        val stripped = uncontainer(line)
+        if (FENCE.find(stripped) != null) return stripped
+        if (line.contains("```") || line.contains("~~~")) {
+            val deep = stripped.replaceFirst(DEEP_QUOTE, "")
+            if (FENCE.find(deep) != null) return deep
+        }
+        return stripped
+    }
+
+    /** First `$$` preceded by whitespace (mid-line display open), or -1. Skips code spans. */
+    private fun findMidlineDisplay(container: String): Int {
+        var index = 0
+        var code = false
+        while (index < container.length) {
+            if (container[index] == '`') {
+                code = !code
+                index++
+                continue
+            }
+            if (!code &&
+                container[index] == '$' &&
+                index + 1 < container.length &&
+                container[index + 1] == '$' &&
+                index > 0 &&
+                container[index - 1].isWhitespace()
+            ) {
+                return index
+            }
+            index++
+        }
+        return -1
+    }
+
     /**
      * Collects the text under a node without recursing per level, so a pathologically nested subtree
      * still yields its content instead of being dropped when the depth cap is hit.
@@ -301,12 +477,25 @@ object ResponseParser {
         while (pending.isNotEmpty()) {
             val node = pending.removeLast()
             if (node is Text) builder.append(node.literal)
+            if (node is Code) builder.append(node.literal)
+            if (node is MathInline) builder.append(node.source)
             if (node is SoftLineBreak || node is HardLineBreak) builder.append(' ')
+            // Children pushed in reverse so removeLast() yields document order; Code and
+            // MathInline carry text the old Text-only version silently dropped.
             var child = node.firstChild
+            var count = 0
             while (child != null) {
-                pending.addLast(child)
+                count++
                 child = child.next
             }
+            val ordered = arrayOfNulls<Node>(count)
+            child = node.firstChild
+            var slot = count - 1
+            while (child != null) {
+                ordered[slot--] = child
+                child = child.next
+            }
+            ordered.forEach { pending.addLast(it!!) }
         }
         return builder.toString().trim()
     }
@@ -314,6 +503,7 @@ object ResponseParser {
     private fun appendBlocks(
         node: Node,
         out: MutableList<ContentBlock>,
+        dropped: ArrayDeque<Int> = ArrayDeque(),
         depth: Int = 0,
         quoted: Boolean = false,
     ) {
@@ -348,7 +538,7 @@ object ResponseParser {
             }
 
             is BlockQuote -> {
-                children(node).forEach { appendBlocks(it, out, depth + 1, true) }
+                children(node).forEach { appendBlocks(it, out, dropped, depth + 1, true) }
             }
 
             is BulletList, is OrderedList -> {
@@ -368,7 +558,7 @@ object ResponseParser {
                             out += ContentBlock.ListEntry(marker, depth, inlines(child))
                             first = false
                         } else {
-                            appendBlocks(child, out, depth + 1, quoted)
+                            appendBlocks(child, out, dropped, depth + 1, quoted)
                         }
                     }
                 }
@@ -381,7 +571,8 @@ object ResponseParser {
                         .filterIsInstance<TableRow>()
                         .map { row -> children(row).map { inlines(it) }.toList() }
                         .toList()
-                out += ContentBlock.Table(rows.firstOrNull().orEmpty(), rows.drop(1))
+                val overflow = if (dropped.isNotEmpty()) dropped.removeFirst() else 0
+                out += ContentBlock.Table(rows.firstOrNull().orEmpty(), rows.drop(1), overflow)
             }
 
             is HtmlBlock -> {
@@ -389,7 +580,7 @@ object ResponseParser {
             }
 
             else -> {
-                children(node).forEach { appendBlocks(it, out, depth, quoted) }
+                children(node).forEach { appendBlocks(it, out, dropped, depth, quoted) }
             }
         }
     }
