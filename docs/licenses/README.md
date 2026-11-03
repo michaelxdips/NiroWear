@@ -45,9 +45,11 @@ or network access. It checks bytes and coverage, not legal clearance.
 - OkHttp's Public Suffix List has MPL-2.0 terms. The supplied source list regenerates
   the exact packaged asset bytes; source availability applies to that covered list,
   not automatically to the independent NiroWear application.
-- JLaTeXMath 0.2.0, its 30 fonts, MicroTeX, and optional Greek/Cyrillic artifacts are
-  absent from this release. Debug JLaTeXMath is outside this notice bundle; its
-  GPL/linking-exception/font/source review remains separate. Native release math
-  implementation remains absent even if external licensing clearance exists.
+- JLaTeXMath 0.2.0 ships in release and debug builds (unconditional implementation
+  dependency, call site `MathContent.kt`; see THIRD_PARTY_NOTICES.md §boundaries).
+  Its 30 fonts travel in the AAR; OFL/Knuth/dsrom texts are evidenced in
+  `docs/licenses/JLATEXMATH-*.txt` and shipped in `assets/legal/`. The GPL-covered
+  Greek font set named upstream is absent from 0.2.0 (verified: no fcm*/fcs*/fct*
+  names) and is not distributed. MicroTeX and optional artifacts remain absent.
 - No blanket statement that every transitive, embedded, native, or toolchain
   component is legally cleared. Publication/signing/product acceptance unchanged.

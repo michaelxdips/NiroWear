@@ -98,8 +98,11 @@ fun DocumentBlock(block: ContentBlock) {
             val rowModifier = Modifier.padding(start = depthPadding)
             Row(
                 modifier = rowModifier.semantics(mergeDescendants = true) {},
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                Text(block.marker, fontSize = 16.sp)
+                // No fixed width: sp scales with font size, so a 2-3 digit marker
+                // ("12.", "123.") keeps its full glyphs at large font scales.
+                Text(block.marker, fontSize = 16.sp, maxLines = 1, softWrap = false)
                 RichText(block.content, modifier = Modifier.weight(1f))
             }
         }
@@ -298,6 +301,10 @@ private fun InlineRichText(
                     // with a narrow BidiSpoofing suppression; values are intentional.
                     val isolated = BIDI_ISOLATE_OPEN + span.text + BIDI_ISOLATE_CLOSE
                     if (link != null && uri?.scheme?.lowercase() in setOf("https", "http")) {
+                        // ponytail: link hit area is the 22sp line box (~33dp), under
+                        // the 48dp minimum for isolated short links; pad to 48dp
+                        // when a link-specific tap target lands without breaking
+                        // mid-paragraph line flow.
                         withLink(
                             LinkAnnotation.Clickable(link) {
                                 openHttpLink(
