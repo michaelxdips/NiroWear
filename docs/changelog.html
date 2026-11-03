@@ -127,15 +127,50 @@ p:last-child{margin-bottom:0}
       Every published build, in order, with the numbers that identify it. Each entry records what was
       actually executed for that release — not what was intended.
     </p>
-    <p class="meta">Generated from git history and the NiroWear-Beta release API · 2026-11-02</p>
+    <p class="meta">Generated from git history and the NiroWear release API · 2026-11-03</p>
   </div>
+
+  <!-- 0.1.0 -->
+  <article class="release">
+    <div class="rside">
+      <span class="rver">0.1.0</span>
+      <span class="rdate">2026-11-03</span>
+      <span class="rbadge latest">Latest</span>
+    </div>
+    <div class="rbody">
+      <h2>Stable cut</h2>
+      <p>
+        First stable: green beta.8 tree plus a version bump only. Same lineage
+        signing identity, so beta installs update in place.
+      </p>
+      <ul>
+        <li><strong>No protocol guesswork.</strong> Four adapters, four wire protocols; a model name never changes the request format.</li>
+        <li><strong>Regeneration is explicit.</strong> Stop keeps partial content; edit replaces from that point; branches never form.</li>
+        <li><strong>Disclosed, not hidden.</strong> Live provider smoke skipped per owner order; hardware sheet, TalkBack and licence review still open — see release notes.</li>
+      </ul>
+      <dl class="ident">
+        <div><dt>versionCode</dt><dd>10</dd></div>
+        <div><dt>size</dt><dd>3,609,553 B</dd></div>
+        <div><dt>sha256</dt><dd>319ae1cfbc6ee738f0b5b8b4c185f1ab8ebf3718a2b3d2fc43ab612d51934d71</dd></div>
+        <div><dt>certificate</dt><dd>7d4e6e99…abe3</dd></div>
+      </dl>
+      <table class="gate">
+        <thead><tr><th>Check</th><th>Result</th></tr></thead>
+        <tbody>
+          <tr><td>JVM unit tests</td><td>176 / 176, 0 failures</td></tr>
+          <tr><td>lint</td><td>0 errors</td></tr>
+          <tr><td>Connected suite (emulator)</td><td>48 / 48 (XML ts 2026-11-02T20:10:22)</td></tr>
+          <tr><td>assembleRelease + signed</td><td>pass</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </article>
 
   <!-- beta.7 -->
   <article class="release">
     <div class="rside">
       <span class="rver">beta.7</span>
       <span class="rdate">2026-11-02</span>
-      <span class="rbadge latest">Latest</span>
     </div>
     <div class="rbody">
       <h2>Finish campaign: renderer, hardening, watch-frame demo</h2>
@@ -318,10 +353,10 @@ p:last-child{margin-bottom:0}
 <footer class="colophon">
   <div class="wrap">
     <p class="fine">
-      Versions, sizes and hashes on this page were read from the NiroWear-Beta release API on
-      2026-10-22, and the gate figures from the result XML and release notes for each build. Where a
+      Versions, sizes and hashes on this page were read from the NiroWear release API and the
+      signed APK bytes, and the gate figures from the result XML and release notes for each build. Where a
       number was not recorded for a release it is omitted rather than estimated.<br><br>
-      <a href="index.html">Back to the site</a> · <a href="https://github.com/michaelxdips/NiroWear">Source</a> · <a href="https://github.com/michaelxdips/NiroWear-Beta/releases">Releases</a>
+      <a href="index.html">Back to the site</a> · <a href="https://github.com/michaelxdips/NiroWear">Source</a> · <a href="https://github.com/michaelxdips/NiroWear/releases">Releases</a>
     </p>
   </div>
 </footer>

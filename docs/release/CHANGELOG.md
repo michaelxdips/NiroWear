@@ -1,7 +1,7 @@
 # Changelog
 
 Notable changes to NiroWear. Versions follow the published APK releases at
-[NiroWear-Beta](https://github.com/michaelxdips/NiroWear-Beta/releases).
+[NiroWear releases](https://github.com/michaelxdips/NiroWear/releases).
 
 ## 0.1.0 — stable cut, 2026-11-03
 
