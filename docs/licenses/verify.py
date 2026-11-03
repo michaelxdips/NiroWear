@@ -39,5 +39,9 @@ exceptions = b"".join(line + b"\n" for line in sorted(exceptions))
 regenerated = struct.pack(">I", len(rules)) + rules + struct.pack(">I", len(exceptions)) + exceptions
 with zipfile.ZipFile(root / evidence["apk"]["path"]) as apk:
     assert regenerated == apk.read("assets/PublicSuffixDatabase.list"), "MPL source does not regenerate packaged asset"
-assert not any("jlatexmath" in coordinate.lower() for coordinate in coords), "Debug math entered release graph"
+jlatex = next(item for item in evidence["coordinates"] if item["coordinate"] == "ru.noties:jlatexmath-android:0.2.0")
+assert any(entry["material"].startswith("JLATEXMATH-") for entry in jlatex["license_entries"]), "JLaTeXMath font licence evidence missing"
+assert {entry["material"] for entry in jlatex["license_entries"]} >= {
+    "JLATEXMATH-OFL.txt", "JLATEXMATH-KNUTH-LICENSE.txt", "JLATEXMATH-DSROM-LICENSE.txt",
+}, "JLaTeXMath ships release+debug per THIRD_PARTY_NOTICES.md §boundaries and assets/legal/; font licences must be evidenced"
 print(f"PASS: {len(coords)} coordinates, {len(evidence['material_hashes'])} exact material hashes; APK unchanged")

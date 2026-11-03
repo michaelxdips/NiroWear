@@ -49,7 +49,8 @@ https://github.com/michaelxdips/NiroWear/issues and one will be provided.
 BUNDLED FONTS
 -------------
 The library ships font resources with their own terms, reproduced in this directory:
-OFL.txt (SIL Open Font License), Knuth_License.txt, License_for_dsrom.txt, and public-domain
+JLATEXMATH-OFL.txt (SIL Open Font License), JLATEXMATH-KNUTH-LICENSE.txt,
+JLATEXMATH-DSROM-LICENSE.txt, and public-domain
 fonts. The GPL-covered Greek font set listed in the upstream LICENSE (fcmbipg, fcmripg,
 fcmrpg, fcsropg, fcmbpg, fcsbpg, fctrpg, fcsrpg) is NOT present in the 0.2.0 artifact and is
 therefore not distributed with NiroWear.
