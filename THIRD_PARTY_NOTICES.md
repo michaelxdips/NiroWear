@@ -27,8 +27,10 @@ font set named upstream is **not** present in 0.2.0 and is not distributed.
 Corresponding source: https://github.com/noties/jlatexmath-android (branch `android`), used
 unmodified. AAR SHA-256 `b16824328d45ed86892f7f8aa74a542fc361b8a94004de8ca5ae86113b78a89f`.
 
-APK releases remain at https://github.com/michaelxdips/NiroWear-Beta and carry their own
-notices inside `assets/legal/`. This repository publishes source, not releases.
+APK releases are at https://github.com/michaelxdips/NiroWear/releases (stable
+0.1.0 onward; historical betas remain at
+https://github.com/michaelxdips/NiroWear-Beta, archived) and carry their own
+notices inside `assets/legal/`.
 ## Historical code1 scope
 
 These notices cover the existing NiroWear 0.1.0/code1 validation release identified
