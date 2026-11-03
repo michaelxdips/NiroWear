@@ -85,14 +85,19 @@ fun DocumentBlock(block: ContentBlock) {
         }
 
         is ContentBlock.ListEntry -> {
-            Row(Modifier.padding(start = (block.depth.coerceAtMost(3) * 8).dp)) {
-                Text(block.marker, modifier = Modifier.width(24.dp), fontSize = 16.sp)
+            val depthPadding = (block.depth.coerceAtMost(3) * 8).dp
+            val rowModifier = Modifier.padding(start = depthPadding)
+            Row(
+                modifier = rowModifier.semantics(mergeDescendants = true) {},
+            ) {
+                Text(block.marker, fontSize = 16.sp)
                 RichText(block.content, modifier = Modifier.weight(1f))
             }
         }
 
         is ContentBlock.Quote -> {
-            Row {
+            val quoteModifier = Modifier.semantics(mergeDescendants = true) { heading() }
+            Row(modifier = quoteModifier) {
                 Box(Modifier.width(2.dp).height(24.dp).background(Color(0xFF99AABB)))
                 RichText(block.content, Modifier.padding(start = 8.dp))
             }
@@ -279,6 +284,9 @@ private fun InlineRichText(
                 withStyle(style) {
                     val link = span.link
                     val uri = link?.toUri()
+                    // Bidi isolate: mixed-direction URLs and code keep their own order inside
+                    // surrounding text instead of reordering with it.
+                    val isolated = "⁦" + span.text + "⁩"
                     if (link != null && uri?.scheme?.lowercase() in setOf("https", "http")) {
                         withLink(
                             LinkAnnotation.Clickable(link) {
@@ -287,9 +295,9 @@ private fun InlineRichText(
                                     link,
                                 )?.let { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() }
                             },
-                        ) { append(span.text) }
+                        ) { append(isolated) }
                     } else {
-                        append(span.text)
+                        append(isolated)
                     }
                 }
             }

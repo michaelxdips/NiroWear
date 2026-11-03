@@ -46,7 +46,8 @@ internal data class PairingPayload(
 
 internal class PairingServer(
     private val host: String,
-    ttlMillis: Long = 120_000,
+    private val clock: () -> Long = System::currentTimeMillis,
+    private val ttlMillis: Long = 120_000,
     private val onPayload: (PairingPayload) -> Unit,
 ) : Closeable {
     private val token = ByteArray(16).also { SecureRandom().nextBytes(it) }
@@ -55,7 +56,7 @@ internal class PairingServer(
             .getInstance("EC")
             .apply { initialize(ECGenParameterSpec("secp256r1")) }
             .generateKeyPair()
-    private val deadline = System.currentTimeMillis() + ttlMillis
+    private val deadline = clock() + ttlMillis
 
     // Bound to the address we advertise, not the wildcard: the listener must not be reachable on a
     // tethered or secondary interface the user never saw.
@@ -85,7 +86,7 @@ internal class PairingServer(
                 try {
                     // Accepts for a short grace past the deadline so an expired attempt still gets the
                     // explicit 410 instead of a bare connection reset, then self-closes.
-                    while (!socket.isClosed && System.currentTimeMillis() < deadline + GRACE_MILLIS) {
+                    while (!socket.isClosed && clock() < deadline + GRACE_MILLIS) {
                         val client =
                             try {
                                 socket.accept()
@@ -132,7 +133,7 @@ internal class PairingServer(
     private fun handle(client: Socket) {
         // A per-read timeout alone lets one byte every 1.9 s hold the single worker for hours and
         // outlive the screen. The wall clock is the real bound.
-        val requestDeadline = System.currentTimeMillis() + REQUEST_MILLIS
+        val requestDeadline = clock() + REQUEST_MILLIS
         client.soTimeout = 2000
         val input = client.getInputStream()
         val head = readHead(input, requestDeadline) ?: return respond(client, 400, TEXT, "bad request")
@@ -179,7 +180,7 @@ internal class PairingServer(
         body: ByteArray,
     ) {
         // Expiry is checked before the token so a late request cannot burn the session's only use.
-        if (System.currentTimeMillis() > deadline) return respond(client, 410, JSON, """{"ok":false}""")
+        if (clock() > deadline) return respond(client, 410, JSON, """{"ok":false}""")
         if (consumed) return respond(client, 401, JSON, """{"ok":false}""")
         val root =
             runCatching { Json.parseToJsonElement(String(body, Charsets.UTF_8)).jsonObject }.getOrNull()
@@ -306,7 +307,7 @@ internal class PairingServer(
     ): String? {
         val out = StringBuilder()
         while (out.length < MAX_HEAD) {
-            if (System.currentTimeMillis() > deadline) return null
+            if (clock() > deadline) return null
             val byte = input.read()
             if (byte < 0) return null
             out.append(byte.toChar())
@@ -324,7 +325,7 @@ internal class PairingServer(
         input: InputStream,
         length: Int,
         deadline: Long,
-    ): ByteArray? = readBounded(input, length, deadline)
+    ): ByteArray? = readBounded(input, length, deadline, clock)
 
     private fun b64(bytes: ByteArray): String = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
 
@@ -360,12 +361,13 @@ internal class PairingServer(
             input: InputStream,
             length: Int,
             deadline: Long,
+            now: () -> Long = System::currentTimeMillis,
         ): ByteArray? {
             if (length <= 0 || length > MAX_BODY) return null
             val buffer = ByteArray(length)
             var offset = 0
             while (offset < length) {
-                if (System.currentTimeMillis() > deadline) return null
+                if (now() > deadline) return null
                 val read = input.read(buffer, offset, length - offset)
                 if (read < 0) return null
                 offset += read

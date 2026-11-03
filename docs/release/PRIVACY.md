@@ -1,4 +1,4 @@
-# NiroWear privacy facts — validation candidate
+# NiroWear privacy facts — stable 0.1.0
 
 Technical disclosure draft, not an approved legal privacy policy or Play Data Safety declaration. Publisher/controller identity, public policy URL, jurisdiction/contact and channel approval remain external prerequisites.
 

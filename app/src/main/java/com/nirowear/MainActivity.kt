@@ -42,6 +42,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -109,6 +110,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // ponytail: 4.5 KB debug fixture still read on the main thread; move to Dispatchers.IO
+        // with a loading state if it ever grows or blocks first-frame measurement.
         val fixture =
             if (BuildConfig.DEBUG) {
                 assets.open("RENDER_TORTURE_FIXTURE.md").bufferedReader().use {
@@ -202,7 +205,7 @@ private fun ChatReader(
     var restoredConversation by remember { mutableStateOf<String?>(null) }
     // Survives effect restarts, which is what turns the coalescing delay into a throttle rather
     // than a debounce. See the parse effect below.
-    var lastParseAt by remember { mutableStateOf(0L) }
+    var lastParseAt by remember { mutableLongStateOf(0L) }
     var footerHeight by remember { androidx.compose.runtime.mutableIntStateOf(0) }
     val renderedHistory = historyBlocks
     val historyKeys = remember(renderedHistory) { historyKeysFor(renderedHistory) }
@@ -273,6 +276,9 @@ private fun ChatReader(
         lastParseAt = System.currentTimeMillis()
         if (id != null) recentConversations = (recentConversations - id + id).takeLast(MAX_RETAINED_CONVERSATIONS)
         parsedRows = evictStaleConversations(rows, recentConversations + listOfNotNull(id))
+        // Same bound as the parse memo above: one entry per conversation ever opened
+        // grows without limit otherwise.
+        (anchors.keys - (recentConversations + listOfNotNull(id)).toSet()).forEach { anchors.remove(it) }
         historyBlocks = rows.values.flatten()
         parsedConversation = id
     }

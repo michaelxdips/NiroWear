@@ -12,7 +12,7 @@ Streamed answers that read like a document — Markdown, code, math, tables and 
 
 **Website: [michaelxdips.github.io/NiroWear](https://michaelxdips.github.io/NiroWear/)**
 
-[Features](#features) · [Install](#install) · [Provider setup](#provider-setup) · [Architecture](#architecture) · [Contributing](#contributing)
+[Features](#features) · [Install](#install) · [Provider setup](#provider-setup) · [Architecture](#architecture) · [Evidence](#evidence) · [Contributing](#contributing)
 
 </div>
 
@@ -26,13 +26,15 @@ It exists because every other way of reading an AI answer on a watch is a compro
 
 **Reference viewport:** 466 × 466 px, round (Xiaomi Watch 2 class). Everything is designed against that, not scaled down from a phone.
 
+> NiroWear is an independent client by Stephen Michael — not affiliated with OpenAI, Google, or Anthropic. "Wear OS" and "Android" are trademarks of Google LLC.
+
 ## Features
 
-**Four real adapters, four real protocols.** OpenAI Responses, Anthropic Messages, Google Gemini GenerateContent, and generic OpenAI-compatible Chat Completions. The protocol is chosen by the provider type you select — never guessed from a model name. Adding a model never silently changes the wire format.
+**Four real adapters, four real protocols.** OpenAI Responses, Anthropic Messages, Google Gemini GenerateContent, and generic OpenAI-compatible Chat Completions. The protocol is chosen by the provider type you select — never guessed from a model name. Adding a model never silently changes the wire format. Instruction mapping differs per protocol (`instructions` vs `system` vs `systemInstruction` vs leading `system` message); each adapter owns its SSE framing and its own terminal event. EOF alone is never success — a closed socket without the protocol's completion event is reported as an interruption, not a finished answer.
 
-**Bring your own key, stored properly.** Keys are encrypted with AES-GCM under a non-exportable Android Keystore key. Only versioned ciphertext and nonce touch disk; a profile stores a credential *reference*, never the key. A decrypt failure demands re-entry — there is no plaintext fallback, and a saved key is never repopulated into an editing field.
+**Bring your own key, stored properly.** Keys are encrypted with AES-256-GCM under a non-exportable Android Keystore key (randomized IV, version byte + 12 B IV + ciphertext, AAD-bound to the credential reference). Only versioned ciphertext and nonce touch disk; a profile stores a credential *reference*, never the key. A decrypt failure demands re-entry — there is no plaintext fallback, and a saved key is never repopulated into an editing field. Entry is masked (`PasswordVisualTransformation` + `KeyboardType.Password`) and the provider screens set `FLAG_SECURE`. See [Security & privacy](#security--privacy).
 
-**No typing required for setup.** The watch serves a one-time page on your local network; you open the URL on a phone or laptop and paste the key into a real form. The key payload is encrypted with ephemeral ECDH P-256 and AES-GCM before it leaves the browser, and the session is gated by a 128-bit capability token that only appears on the watch screen. Manual entry is always available underneath.
+**LAN pairing for long keys.** The watch serves a one-time page on your local network; you open the URL on a phone or laptop and paste the key into a real form. The key payload is encrypted with ephemeral ECDH P-256 and AES-GCM before it leaves the browser, gated by a 128-bit single-use capability token shown only on the watch screen, valid for 120 s (+5 s delivery grace) and closed the moment you leave the screen. Manual entry is always available underneath.
 
 The transport itself is plain HTTP and the handshake is not authenticated, so this is not "end-to-end encrypted" in the strict sense: an attacker who can both intercept your LAN traffic **and** read the token off the watch screen could impersonate the watch. That is a narrow model, but it is not nothing. If it is not acceptable to you, use manual entry — it never touches the network.
 
@@ -46,13 +48,15 @@ The transport itself is plain HTTP and the handshake is not authenticated, so th
 > origin — a design decision, not a patch. **Until then, add providers by typing the key on the
 > watch.**
 
-**Streaming with honest interruption.** Tokens render as they arrive. Scroll up and the view stops following you, with a small `Latest` control to jump back. `Stop` cancels the underlying HTTP request and keeps whatever partial answer had already arrived — it is never replayed automatically. If the provider had already signalled completion, the answer is kept as complete rather than being relabelled as stopped: a finished answer is never downgraded.
+**Streaming with honest interruption.** Tokens render as they arrive through a 16 ms coalescing throttle (at most one re-parse per frame, never a debounce that starves the view blank). Scroll up and the view stops following you, with a small `Latest` control to jump back. `Stop` cancels the underlying OkHttp call and keeps whatever partial answer had already arrived — it is never replayed automatically. If the provider had already signalled completion, the answer is kept as complete rather than relabelled as stopped: a finished answer is never downgraded. Partial content survives rotation, process death (interrupted streams resume as STOPPED on next launch), and errors.
 
-**One linear conversation.** Editing an earlier user message replaces it, deletes everything after it, and regenerates from that point. There are no branches and no alternate-response variants to choose between. Switching provider or model keeps the same history, and each assistant message records which profile and model produced it.
+**One linear conversation.** Editing an earlier user message replaces it, deletes everything after it, and regenerates from that point. Retry truncates the failed assistant message and resends. There are no branches and no alternate-response variants to choose between. Switching provider or model keeps the same history, and each assistant message records which profile and model produced it.
 
-**A reader, not a bubble.** Assistant output is parsed into semantic blocks — headings, paragraphs, lists, quotes, inline code, fenced code, display math, tables, dividers, links — and rendered as a document. Raw Markdown is stored, so the renderer can improve without a migration.
+**A reader, not a bubble.** Assistant output is parsed into semantic blocks — headings, paragraphs, lists, quotes, inline code, fenced code, inline/display math, tables, dividers, links — and rendered as a document. Raw Markdown is stored in Room, so the renderer can improve without a migration. Tables become labelled vertical records; a 1000-row table renders at most 40 rows with an explicit "… N more rows" line rather than an ANR.
 
-**Wide content stays readable.** Code and formulas are never shrunk into illegibility. They pan horizontally inside a single vertical reader, so a long line costs a swipe rather than your eyesight. Tables become labelled vertical records instead of a 4-column grid squeezed into 466 px.
+**Wide content stays readable.** Code and formulas are never shrunk into illegibility. They pan horizontally inside a single vertical reader, so a long line costs a swipe rather than your eyesight. Display math is promoted to a pannable block when it overflows; anything the math renderer deliberately refuses (file-inclusion macros, macro definitions, unbalanced braces) falls back to readable source text, never a blank.
+
+**Math that covers the syllabus.** Greek letters, operators, calculus, set theory, logic, vectors, fractions, roots, powers, subscripts, integrals/sums/limits, matrices (`bmatrix`), cases, and aligned equations — natively typeset in release builds through JLaTeXMath (GPL v2-or-later **with an independent-module linking exception**, which is what permits linking it from MIT code; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and `assets/legal/`).
 
 **Watch-sized answers by default.** The system instruction asks for the shortest answer that keeps the required facts and caveats, and to expand when you ask for detail. The client never truncates a long answer to fit the screen.
 
@@ -94,6 +98,19 @@ There is no store listing. Two supported routes:
 
 **Prebuilt APK** — grab `app-release.apk` from [NiroWear releases](https://github.com/michaelxdips/NiroWear/releases) (stable `v0.1.0`). Signed, non-debuggable, versionCode 10. The source in *this* repository builds the same app.
 
+Verify before installing:
+
+```powershell
+Get-FileHash .\app-release.apk -Algorithm SHA256
+# expect 319AE1CFBC6EE738F0B5B8B4C185F1AB8EBF3718A2B3D2FC43AB612D51934D71
+```
+
+```powershell
+adb install -r .\app-release.apk
+```
+
+> Stable releases live at [`michaelxdips/NiroWear`](https://github.com/michaelxdips/NiroWear) from `v0.1.0` on. The signing identity is still the Android debug key (`CN=Android Debug`, SHA-256 `7D:4E:6E:99:…:AB:E3`), disclosed in the release notes — shipping with a production keystore is an owner decision, not a code change. Historical beta APKs remain at [`NiroWear-Beta`](https://github.com/michaelxdips/NiroWear-Beta) (archived, read-only).
+
 **From source**
 
 ```powershell
@@ -125,7 +142,7 @@ Name and base URL come prefilled. Then get the key onto the watch:
 
 The pairing page is valid for **two minutes and one use**, and the socket closes the moment you leave the screen. If your watch has no Wi-Fi address, the screen says so and you can type the key manually instead.
 
-**Validate · uses API** makes one real (billable) call against the selected model to prove the key and model work together. **Discover models** lists what the provider advertises; discovery failure never blocks manual entry, because compatible endpoints legitimately vary.
+**Validate · uses API** makes one real (billable) call against the selected model to prove the key and model work together. **Discover models** lists what the provider advertises; discovery failure never blocks manual entry, because compatible endpoints legitimately vary. The app never silently substitutes a model: authentication and listing are separate, and a deprecated or mistyped model surfaces as an error you can read.
 
 ### Why keys are annoying, and what we did
 
@@ -135,7 +152,7 @@ Because setup happens **once**, a URL and a form are cheap. After that, the app 
 
 ## Architecture
 
-One application module, no over-engineering:
+One application module, no over-engineering (27 Kotlin sources under `app/src/main`):
 
 ```
 Wear Compose UI  →  ChatViewModel  →  LlmProvider adapter  →  OkHttp → provider
@@ -143,24 +160,47 @@ Wear Compose UI  →  ChatViewModel  →  LlmProvider adapter  →  OkHttp → p
                   Room (history)  +  DataStore (profiles)  +  SecretStore (Keystore)
 ```
 
-- **Kotlin + Jetpack Compose for Wear OS Material 3**, Coroutines/Flow, Room, DataStore, OkHttp, kotlinx.serialization.
+- **Kotlin + Jetpack Compose for Wear OS Material 3**, Coroutines/Flow, Room, DataStore, OkHttp, kotlinx.serialization. No Firebase, no analytics, no crash SDK — `grep` the build files and find nothing.
 - **Canonical history is provider-neutral**: USER/ASSISTANT raw content only. Adapters own instruction mapping, request construction, SSE parsing and semantic completion. EOF alone is not success — adapters detect each protocol's terminal event.
-- **One generation job per request.** Cancellation propagates into the OkHttp call. Partial text is durable across Stop, error and process death.
-- **Renderer** parses semantic blocks off the main thread; raw Markdown is retained so the renderer can evolve.
-- **No backend.** The only network calls are to the endpoint you configured.
+- **One generation job per request.** Cancellation propagates into the OkHttp call (`awaitClose { call.cancel() }`). Partial text is durable across Stop, error and process death: checkpoints every 120 ms, final save in `NonCancellable`, interrupted streams marked STOPPED on next launch.
+- **Renderer** parses semantic blocks off the main thread (throttled to one parse per 16 ms frame); raw Markdown is retained so the renderer can evolve. The parse memo keeps the last 3 conversations; table rendering caps at 40 rows.
+- **No backend.** The only network calls are to the endpoint you configured — HTTPS-only in release (`usesCleartextTraffic=false`), redirects and automatic retries disabled, so a key cannot leak via a 302. Credential-bearing URL query strings are rejected at the endpoint layer.
 
 Deeper reading: [ARCHITECTURE.md](docs/memory/ARCHITECTURE.md), [PROVIDERS.md](docs/memory/PROVIDERS.md), [RENDERER.md](docs/memory/RENDERER.md), [SCOPE.md](docs/memory/SCOPE.md).
 
+## Evidence
+
+Every number below was read from a result file produced on this tree, not quoted from memory. Reproduce any of them:
+
+```powershell
+# Unit suite + lint + assemble (CI runs exactly this)
+.\gradlew.bat :app:testDebugUnitTest :app:lintDebug :app:ktlintCheck :app:assembleDebug :app:assembleRelease
+```
+
+| Check | Result (measured) | Where |
+|---|---|---|
+| JVM unit tests | 176 / 176, 0 failures, 0 errors, 0 skipped (38 suites) | `app/build/test-results/testDebugUnitTest/*.xml` |
+| Connected suite (emulator `NiroWear_Rebook_20261020`, destructive — not a CI gate) | 48 / 48, 0 failures, XML ts `2026-11-02T20:10:22` | `app/build/outputs/androidTest-results/connected/debug/*.xml` |
+| Lint | 0 errors, 2 issues: 1 `GradleDependency` (test runner 1.5.0→1.5.2) + 1 `AutoboxingStateCreation` hint (`MainActivity.kt:205`) | `app/build/reports/lint-results-debug.xml` |
+| Release APK | `app-release.apk`, 3609553 B, SHA-256 `319AE1CF…34D71`, `com.nirowear` v10 / `0.1.0`, minSdk 30, targetSdk 37, non-debuggable | `app/build/outputs/apk/release/`, `output-metadata.json` |
+| Signing identity | `CN=Android Debug`, SHA-256 `7D:4E:6E:99:…:AB:E3` (disclosed lineage) | `apksigner verify --print-certs`, release notes |
+| Fuzz probes | parser/SSE/UTF-8/hostile-LaTeX/zero-width-key corpus: 21/21 PASS, 3000-mutation run clean, 10 MB payload ~360 ms | throwaway harness, not shipped |
+| Live site | zero console errors (Edge + mobile shape), all links 200, numbers match release XML | [michaelxdips.github.io/NiroWear](https://michaelxdips.github.io/NiroWear/) |
+
+CI is green on `main` (JVM + lint + ktlint + both assembles); the connected suite is a local pre-release gate because it needs an emulator. Read the full per-claim table — including what is explicitly **unverified** (real-watch battery/thermals, TalkBack audio, production-credential sweeps) — on the [site's evidence section](https://michaelxdips.github.io/NiroWear/#status) and in [docs/release/RELEASE_NOTES_0.1.0.md](docs/release/RELEASE_NOTES_0.1.0.md).
+
 ## Security & privacy
 
-- Keys encrypted with **AES-GCM** under an Android Keystore key; ciphertext + nonce only, no plaintext fallback.
+- Keys encrypted with **AES-256-GCM** under an Android Keystore key; versioned ciphertext + nonce only, no plaintext fallback. Decrypt failure = re-entry.
+- Stored keys are never logged (`Authorization` / `x-api-key` / `x-goog-api-key` redacted), never in URLs/filenames/notifications/errors, never repopulated into editing fields.
 - Masked entry by default; provider screens set `FLAG_SECURE` so they cannot be screenshotted by other apps.
 - Release networking requires **HTTPS** with platform trust. Redirects and automatic retries are disabled. Credential-bearing URL query strings are rejected.
-- `android:allowBackup="false"` — credentials are device-bound, so clearing data or uninstalling removes them permanently.
+- Pairing transport is plain HTTP on the LAN by design (a watch cannot present a phone-trusted certificate); the *payload* is ECDH+AES-GCM encrypted and single-use. See the threat-model note under [Features](#features).
+- `android:allowBackup="false"` + `data_extraction_rules` exclude everything — credentials are device-bound, so clearing data or uninstalling removes them permanently.
 - **No analytics, no crash reporting, no NiroWear backend.**
 - Chat text and the key go directly to the endpoint you chose; that provider's retention policy then applies, not ours.
 
-Full facts: [PRIVACY.md](docs/release/PRIVACY.md).
+Full facts: [PRIVACY.md](docs/release/PRIVACY.md). To report a vulnerability, use GitHub **Security → Report a vulnerability** (see [SECURITY.md](SECURITY.md)).
 
 ## Known limitations
 
@@ -172,9 +212,10 @@ Stated plainly, because a README that hides these is useless:
 - **Link taps** open via the system handler; destination completion on a real paired device is unverified.
 - **Live smoke tests** are documented against controlled endpoints and one third-party Responses endpoint — not against every official provider with production credentials.
 - **TalkBack audio** acceptance is incomplete.
-- **There is no stable release channel.** `releases/latest` returns 404; every published build is a
-  prerelease, because the signing identity is still the Android debug key. Shipping a stable build
-  needs a production keystore, which is an owner decision, not a code change.
+- **Stable releases live at `michaelxdips/NiroWear` from `v0.1.0` on.** `releases/latest`
+  redirects to the newest stable build. The signing identity is still the Android debug key,
+  which is disclosed in the release notes — shipping with a production keystore is an owner
+  decision, not a code change.
 - **The connected suite (48 tests) is a local gate, not a CI gate.** It needs an emulator, so CI runs
   the JVM tests, lint, ktlint and both assembles only. Run `connectedDebugAndroidTest` before a
   release; nothing will remind you.

@@ -10,6 +10,7 @@ import com.nirowear.provider.LlmProvider
 import com.nirowear.provider.OpenAiCompatibleProvider
 import com.nirowear.provider.OpenAiProvider
 import com.nirowear.provider.ProviderType
+import com.nirowear.provider.providerHttpClient
 import com.nirowear.security.SecretStore
 
 class NiroApplication : Application() {
@@ -24,10 +25,11 @@ class NiroApplication : Application() {
             ).addMigrations(ChatDatabase.MIGRATION_1_2)
             .build()
     }
-    private val compatible by lazy { OpenAiCompatibleProvider(allowLocalHttp = BuildConfig.DEBUG) }
-    private val openAi by lazy { OpenAiProvider(allowLocalHttp = BuildConfig.DEBUG) }
-    private val gemini by lazy { GeminiProvider(allowLocalHttp = BuildConfig.DEBUG) }
-    private val anthropic by lazy { AnthropicProvider(allowLocalHttp = BuildConfig.DEBUG) }
+    private val sharedClient by lazy { providerHttpClient() }
+    private val compatible by lazy { OpenAiCompatibleProvider(sharedClient, allowLocalHttp = BuildConfig.DEBUG) }
+    private val openAi by lazy { OpenAiProvider(sharedClient, allowLocalHttp = BuildConfig.DEBUG) }
+    private val gemini by lazy { GeminiProvider(sharedClient, allowLocalHttp = BuildConfig.DEBUG) }
+    private val anthropic by lazy { AnthropicProvider(sharedClient, allowLocalHttp = BuildConfig.DEBUG) }
 
     fun provider(type: ProviderType): LlmProvider? =
         when (type) {

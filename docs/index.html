@@ -2456,13 +2456,14 @@ A failed decrypt is a generic rejection: the caller learns that the payload is n
         </div>
 
         <div class="stream-presets" role="group" aria-label="Watch model — fixture length">
-          <button class="preset" type="button" data-stream="0" aria-pressed="true">Model A · 875 chars</button>
-          <button class="preset" type="button" data-stream="1" aria-pressed="false">Model B · 695 chars</button>
-          <button class="preset" type="button" data-stream="2" aria-pressed="false">Model C · 619 chars</button>
+          <button class="preset" type="button" data-stream="0" aria-pressed="true">Aurora · 875 chars</button>
+          <button class="preset" type="button" data-stream="1" aria-pressed="false">Basalt · 695 chars</button>
+          <button class="preset" type="button" data-stream="2" aria-pressed="false">Cinder · 619 chars</button>
         </div>
 
         <dl class="stream-facts">
           <div><dt>Parse cadence</dt><dd>throttled to one parse per frame, never a debounce</dd></div>
+          <div><dt>Demo parser</dt><dd>a ~130-line tokenizer mirroring the app's block shape, not the app itself</dd></div>
           <div><dt>On Stop</dt><dd>the answer keeps the exact app copy <b>Stopped · partial answer kept</b>, persisted and never replayed automatically</dd></div>
           <div><dt>On Retry</dt><dd>the same fixture replays from the start — the app regenerates a continuation instead; neither replays visible output as a new answer</dd></div>
           <div><dt>On a cut</dt><dd>no terminal event is a <b>failure</b>, not a short answer; partial text is still kept</dd></div>
@@ -2857,7 +2858,7 @@ HTTP/1.1 400
 
         <div class="panel" id="p-src">
           <p style="color:var(--steel);font-size:15px">
-            Needs JDK 25 and Android SDK platform 36. The Gradle wrapper is checked in; do not
+            Needs JDK 25 and Android SDK platform 37. The Gradle wrapper is checked in; do not
             install Gradle separately.
           </p>
           <div class="code">
@@ -2974,7 +2975,7 @@ adb install -r app-release.apk</pre>
             </tr>
             <tr>
               <td>Renderer emits semantic blocks, never one text node</td>
-              <td><span class="pill pill-source">Source</span> <span class="pill pill-device">JVM</span> 155 tests / 30 suites, 0 failures, 0 errors, 0 skipped.</td>
+              <td><span class="pill pill-source">Source</span> <span class="pill pill-device">JVM</span> 176 tests / 38 suites, 0 failures, 0 errors, 0 skipped.</td>
               <td>ContentBlock.kt; app/build/test-results/testDebugUnitTest/</td>
             </tr>
             <tr>
@@ -2989,7 +2990,7 @@ adb install -r app-release.apk</pre>
             </tr>
             <tr>
               <td>Static analysis is clean</td>
-              <td><span class="pill pill-device">JVM</span> lintDebug: 0 errors, 14 issues — 9 GradleDependency, 4 NewerVersionAvailable, 1 AutoboxingStateCreation. Dependency-freshness notices only; nothing in the app's own code.</td>
+              <td><span class="pill pill-device">JVM</span> lintDebug: 0 errors, 2 issues — 1 GradleDependency, 1 AutoboxingStateCreation. Dependency-freshness notice plus one in-app allocation hint; nothing failing.</td>
               <td>app/build/reports/lint-results-debug.xml</td>
             </tr>
             <tr>
@@ -3029,7 +3030,7 @@ adb install -r app-release.apk</pre>
 
         <p class="status-note">
           The JVM and lint figures above were read from the result XML produced by a forced re-run on
-          2026-10-22 at 21:07, not quoted from memory. The connected-test suite is deliberately absent
+          2026-11-03, not quoted from memory. The connected-test suite is deliberately absent
           from this table: its last recorded run was on the emulator, and it was not re-run while this
           page was written, so presenting it as current would be the exact kind of claim this section
           exists to prevent. Test sources are not published in this repository by policy, so the result
@@ -3719,7 +3720,7 @@ if (typeof module !== "undefined" && module.exports) {
 
   var currentBlocks = [];
   var follow = true;
-  var streamTimer = null;
+  var streamBenchTimer = null;
 
   function measureDials() {
     Array.prototype.slice.call(document.querySelectorAll(".js-measure")).forEach(function (el) {
@@ -3865,6 +3866,7 @@ if (typeof module !== "undefined" && module.exports) {
   var telRate = document.getElementById("telRate");
   var telChange = document.getElementById("telChange");
 
+  var telDeltas = document.getElementById("telDeltas");
   var streamTimer = null;
   var streamFull = "";
   var streamPos = 0;
@@ -4254,10 +4256,10 @@ if (typeof module !== "undefined" && module.exports) {
     });
   }
 
-  // Model switch: fixtures have measured lengths (875 / 695 / 619 chars from node t6measure).
+  // Fixtures have measured lengths (875 / 695 / 619 chars from node t6measure).
   // Switching resets the replay and updates the masthead model. For a physical check, run the
   // long fixture, scroll up to surface Latest, then confirm tapping Latest returns to the end.
-  var MODEL_NAMES = ["Model A · 128k", "Model B · 200k", "Model C · 32k"];
+  var MODEL_NAMES = ["Aurora · 128k", "Basalt · 1M", "Cinder · 32k"];
   Array.prototype.forEach.call(document.querySelectorAll("[data-stream]"), function (btn) {
     btn.addEventListener("click", function () {
       streamIndex = parseInt(btn.getAttribute("data-stream"), 10) || 0;
@@ -4359,7 +4361,7 @@ if (typeof module !== "undefined" && module.exports) {
   }
 
   function stopStream() {
-    if (streamTimer) { window.clearInterval(streamTimer); streamTimer = null; }
+    if (streamBenchTimer) { window.clearInterval(streamBenchTimer); streamBenchTimer = null; }
     var replay = document.getElementById("replay");
     if (replay) replay.setAttribute("aria-pressed", "false");
   }
@@ -4367,7 +4369,7 @@ if (typeof module !== "undefined" && module.exports) {
   var replayBtn = document.getElementById("replay");
   if (replayBtn) {
     replayBtn.addEventListener("click", function () {
-      if (streamTimer) { stopStream(); return; }
+      if (streamBenchTimer) { stopStream(); return; }
       var blocks = tokenize(src.value);
       if (!blocks.length) return;
       if (reduce) { renderBench(); return; }
@@ -4379,7 +4381,7 @@ if (typeof module !== "undefined" && module.exports) {
       benchDial.scrollTop = 0;
 
       var at = 0;
-      streamTimer = window.setInterval(function () {
+      streamBenchTimer = window.setInterval(function () {
         at++;
         benchDial.insertAdjacentHTML("beforeend", blocksToHtml([blocks[at - 1]]));
         if (follow) benchDial.scrollTop = benchDial.scrollHeight;
@@ -4390,8 +4392,8 @@ if (typeof module !== "undefined" && module.exports) {
   }
 
   if (benchDial) {
-    benchDial.addEventListener("wheel", function () {
-      if (streamTimer && !atBottom(benchDial)) {
+    benchDial.addEventListener("scroll", function () {
+      if (streamBenchTimer && !atBottom(benchDial)) {
         follow = false;
         if (latest) latest.classList.add("on");
       }
