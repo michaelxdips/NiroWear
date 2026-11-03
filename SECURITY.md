@@ -42,5 +42,5 @@ Anything that breaks one of these is in scope:
 
 ## Supported versions
 
-Only the newest published prerelease is supported. There is no stable channel yet: every release is
-a prerelease because the signing identity is still the debug key.
+Only the newest published stable is supported. It is signed with the debug key by owner
+decision (disclosed in the release notes); a production keystore is not a code change.

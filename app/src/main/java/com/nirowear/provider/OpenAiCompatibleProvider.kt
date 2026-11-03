@@ -34,7 +34,6 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import java.io.IOException
 import java.net.SocketTimeoutException
-import java.util.concurrent.TimeUnit
 
 private val jsonMedia = "application/json; charset=utf-8".toMediaType()
 
@@ -42,15 +41,7 @@ private val jsonMedia = "application/json; charset=utf-8".toMediaType()
 private const val MAX_COMPATIBLE_SSE_BYTES = 6 * MAX_RESPONSE_CHARS + 256 * 1024
 
 class OpenAiCompatibleProvider(
-    private val client: OkHttpClient =
-        OkHttpClient
-            .Builder()
-            .connectTimeout(20, TimeUnit.SECONDS)
-            .readTimeout(90, TimeUnit.SECONDS)
-            .retryOnConnectionFailure(false)
-            .followRedirects(false)
-            .followSslRedirects(false)
-            .build(),
+    private val client: OkHttpClient = providerHttpClient(),
     private val allowLocalHttp: Boolean = false,
 ) : LlmProvider {
     override suspend fun validate(
@@ -200,6 +191,7 @@ class OpenAiCompatibleProvider(
                                         val decoder = CompatibleStreamDecoder()
                                         val frame = StringBuilder()
                                         var visibleChars = 0
+                                        var lastFrameAt = System.currentTimeMillis()
 
                                         suspend fun dispatch(): Boolean {
                                             if (frame.isEmpty()) return false
@@ -226,13 +218,18 @@ class OpenAiCompatibleProvider(
                                                     ?: break
                                             if (line.isEmpty()) {
                                                 if (dispatch()) return@launch
+                                                lastFrameAt = System.currentTimeMillis()
                                             } else if (line.startsWith("data:")) {
                                                 frame.append(line.removePrefix("data:").removePrefix(" ")).append('\n')
+                                                lastFrameAt = System.currentTimeMillis()
                                                 if (frame.length >
                                                     MAX_COMPATIBLE_SSE_BYTES
                                                 ) {
                                                     throw SafeProviderException(ProviderError.RESPONSE_TOO_LARGE)
                                                 }
+                                            }
+                                            if (System.currentTimeMillis() - lastFrameAt > 120_000L) {
+                                                throw SafeProviderException(ProviderError.TIMEOUT)
                                             }
                                         }
                                         // EOF is never promoted. A complete final frame still requires semantic stop.

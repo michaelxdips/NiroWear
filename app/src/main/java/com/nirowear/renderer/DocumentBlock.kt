@@ -47,6 +47,15 @@ import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
 import androidx.wear.compose.material3.Text
 
+// FSI (U+2066) / PDI (U+2069) isolates for mixed-direction inline spans.
+// Values are intentional bidi controls; suppression is scoped to these two lines.
+
+@Suppress("BidiSpoofing")
+private const val BIDI_ISOLATE_OPEN = " "
+
+@Suppress("BidiSpoofing")
+private const val BIDI_ISOLATE_CLOSE = " "
+
 internal fun openHttpLink(
     context: android.content.Context,
     target: String,
@@ -85,14 +94,19 @@ fun DocumentBlock(block: ContentBlock) {
         }
 
         is ContentBlock.ListEntry -> {
-            Row(Modifier.padding(start = (block.depth.coerceAtMost(3) * 8).dp)) {
-                Text(block.marker, modifier = Modifier.width(24.dp), fontSize = 16.sp)
+            val depthPadding = (block.depth.coerceAtMost(3) * 8).dp
+            val rowModifier = Modifier.padding(start = depthPadding)
+            Row(
+                modifier = rowModifier.semantics(mergeDescendants = true) {},
+            ) {
+                Text(block.marker, fontSize = 16.sp)
                 RichText(block.content, modifier = Modifier.weight(1f))
             }
         }
 
         is ContentBlock.Quote -> {
-            Row {
+            val quoteModifier = Modifier.semantics(mergeDescendants = true) { heading() }
+            Row(modifier = quoteModifier) {
                 Box(Modifier.width(2.dp).height(24.dp).background(Color(0xFF99AABB)))
                 RichText(block.content, Modifier.padding(start = 8.dp))
             }
@@ -279,6 +293,10 @@ private fun InlineRichText(
                 withStyle(style) {
                     val link = span.link
                     val uri = link?.toUri()
+                    // Bidi isolate: mixed-direction URLs and code keep their own order
+                    // inside surrounding text (FSI/PDP). Constants live at file top
+                    // with a narrow BidiSpoofing suppression; values are intentional.
+                    val isolated = BIDI_ISOLATE_OPEN + span.text + BIDI_ISOLATE_CLOSE
                     if (link != null && uri?.scheme?.lowercase() in setOf("https", "http")) {
                         withLink(
                             LinkAnnotation.Clickable(link) {
@@ -287,9 +305,9 @@ private fun InlineRichText(
                                     link,
                                 )?.let { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() }
                             },
-                        ) { append(span.text) }
+                        ) { append(isolated) }
                     } else {
-                        append(span.text)
+                        append(isolated)
                     }
                 }
             }

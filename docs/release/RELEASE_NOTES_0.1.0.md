@@ -1,6 +1,6 @@
 # NiroWear 0.1.0 — stable release
 
-Release date: 2026-11-03. Public beta-channel stable cut.
+Release date: 2026-11-03. First stable cut, published at `michaelxdips/NiroWear` `v0.1.0`.
 
 Four provider adapters (OpenAI Responses, Anthropic Messages, Gemini
 GenerateContent, OpenAI-compatible Chat Completions), secure BYOK, dynamic
@@ -20,7 +20,7 @@ typesetting in release builds, and the `Latest` control.
 
 JVM suite green, lint 0 errors, connected suite 48/48 on emulator, release
 assemble clean — full gates re-run on the stable tree before tagging. APK
-bytes and SHA-256 measured at release time and recorded in the beta-repo
+- bytes and SHA-256 measured at release time and recorded in the source-repo
 changelog entry.
 
 ## Known open items

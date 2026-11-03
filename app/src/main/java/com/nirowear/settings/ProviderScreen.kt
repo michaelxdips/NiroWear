@@ -1,5 +1,6 @@
 package com.nirowear.settings
 
+import android.os.SystemClock
 import android.view.WindowManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -180,7 +181,7 @@ fun ProviderScreen(onBack: () -> Unit) {
         // the fd until process death.
         val server =
             runCatching {
-                PairingServer(host) { payload ->
+                PairingServer(host, clock = SystemClock::elapsedRealtime) { payload ->
                     scope.launch {
                         stopPairing("Key received.")
                         edit = null

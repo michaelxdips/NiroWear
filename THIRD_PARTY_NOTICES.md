@@ -194,9 +194,9 @@ ASF NOTICE provenance and complete embedded/generated-code mapping remain open.
 Cached binary license entries and distinct copyright-bearing source comments are
 preserved; POM license labels alone are not blanket compliance approval.
 
-JLaTeXMath 0.2.0 and its fonts remain **debug-only and excluded from this release**.
-No GPL/font candidate is promoted or copied into these release materials.
-External math clearance and native release implementation are separate questions.
+JLaTeXMath 0.2.0 and its fonts ship in **release and debug** builds (unconditional
+implementation dependency, unconditional call site in MathContent.kt). Release APK
+contains 30 TTF files and the GPL text plus exception under assets/legal/.
 MicroTeX, optional math font artifacts, compiler/build tooling and Android system
 fonts are not represented as application runtime redistributions here.
 

@@ -309,7 +309,8 @@ object ResponseParser {
             // stays visible and the library parses any containers natively.
             for (index in fenceLines.indices) markdown.appendLine(fenceLines[index])
             fenceLines.clear()
-            appendBlocks(parser.parse(markdown.toString()), blocks, scanTableOverflow(markdown.toString()))
+            val rendered = markdown.toString()
+            appendBlocks(parser.parse(rendered), blocks, scanTableOverflow(rendered))
             markdown.clear()
         }
         for (line in source.replace("\r\n", "\n").split('\n')) {
