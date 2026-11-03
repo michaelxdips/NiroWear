@@ -47,6 +47,15 @@ import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
 import androidx.wear.compose.material3.Text
 
+// FSI (U+2066) / PDI (U+2069) isolates for mixed-direction inline spans.
+// Values are intentional bidi controls; suppression is scoped to these two lines.
+
+@Suppress("BidiSpoofing")
+private const val BIDI_ISOLATE_OPEN = " "
+
+@Suppress("BidiSpoofing")
+private const val BIDI_ISOLATE_CLOSE = " "
+
 internal fun openHttpLink(
     context: android.content.Context,
     target: String,
@@ -284,9 +293,10 @@ private fun InlineRichText(
                 withStyle(style) {
                     val link = span.link
                     val uri = link?.toUri()
-                    // Bidi isolate: mixed-direction URLs and code keep their own order inside
-                    // surrounding text instead of reordering with it.
-                    val isolated = "⁦" + span.text + "⁩"
+                    // Bidi isolate: mixed-direction URLs and code keep their own order
+                    // inside surrounding text (FSI/PDP). Constants live at file top
+                    // with a narrow BidiSpoofing suppression; values are intentional.
+                    val isolated = BIDI_ISOLATE_OPEN + span.text + BIDI_ISOLATE_CLOSE
                     if (link != null && uri?.scheme?.lowercase() in setOf("https", "http")) {
                         withLink(
                             LinkAnnotation.Clickable(link) {

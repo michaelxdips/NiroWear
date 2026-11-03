@@ -179,9 +179,9 @@ Every number below was read from a result file produced on this tree, not quoted
 
 | Check | Result (measured) | Where |
 |---|---|---|
-| JVM unit tests | 176 / 176, 0 failures, 0 errors, 0 skipped (38 suites) | `app/build/test-results/testDebugUnitTest/*.xml` |
+| JVM unit tests | 177 / 177, 0 failures, 0 errors, 0 skipped (38 suites) | `app/build/test-results/testDebugUnitTest/*.xml` |
 | Connected suite (emulator `NiroWear_Rebook_20261020`, destructive — not a CI gate) | 48 / 48, 0 failures, XML ts `2026-11-02T20:10:22` | `app/build/outputs/androidTest-results/connected/debug/*.xml` |
-| Lint | 0 errors, 2 issues: 1 `GradleDependency` (test runner 1.5.0→1.5.2) + 1 `AutoboxingStateCreation` hint (`MainActivity.kt:205`) | `app/build/reports/lint-results-debug.xml` |
+| Lint | 0 errors, 1 warning: `GradleDependency` (test runner 1.5.0→1.5.2) | `app/build/reports/lint-results-debug.xml` |
 | Release APK | `app-release.apk`, 3609553 B, SHA-256 `319AE1CF…34D71`, `com.nirowear` v10 / `0.1.0`, minSdk 30, targetSdk 37, non-debuggable | `app/build/outputs/apk/release/`, `output-metadata.json` |
 | Signing identity | `CN=Android Debug`, SHA-256 `7D:4E:6E:99:…:AB:E3` (disclosed lineage) | `apksigner verify --print-certs`, release notes |
 | Fuzz probes | parser/SSE/UTF-8/hostile-LaTeX/zero-width-key corpus: 21/21 PASS, 3000-mutation run clean, 10 MB payload ~360 ms | throwaway harness, not shipped |
