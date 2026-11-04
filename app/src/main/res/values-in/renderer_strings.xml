@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="renderer_link_cannot_open">Tautan tidak dapat dibuka</string>
+    <string name="renderer_link_no_app">Tidak ada aplikasi yang dapat membuka tautan</string>
+    <string name="renderer_math_description">Matematika: %1$s</string>
+    <string name="renderer_quote">Kutipan</string>
+    <string name="renderer_links">Tautan</string>
+    <string name="renderer_open_link">Buka tautan %1$s</string>
+    <plurals name="renderer_hidden_rows">
+        <item quantity="other">… %1$d baris lagi. Tabel dipotong agar pembaca tetap responsif.</item>
+    </plurals>
+    <plurals name="renderer_hidden_cells">
+        <item quantity="other">… %1$d sel lagi. Tabel dipotong agar pembaca tetap responsif.</item>
+    </plurals>
+</resources>

@@ -14,9 +14,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.appendInlineContent
@@ -26,7 +28,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
@@ -45,16 +50,35 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
+import androidx.wear.compose.material3.Button
 import androidx.wear.compose.material3.Text
+import com.nirowear.R
 
-// FSI (U+2066) / PDI (U+2069) isolates for mixed-direction inline spans.
-// Values are intentional bidi controls; suppression is scoped to these two lines.
+// FSI (U+2068) / PDI (U+2069) isolate mixed-direction inline spans.
+private const val BIDI_ISOLATE_OPEN = "\u2068"
+private const val BIDI_ISOLATE_CLOSE = "\u2069"
 
-@Suppress("BidiSpoofing")
-private const val BIDI_ISOLATE_OPEN = " "
-
-@Suppress("BidiSpoofing")
-private const val BIDI_ISOLATE_CLOSE = " "
+// A paragraph direction marker keeps the paragraph's own direction even when
+// every visible character is hidden inside FSI/PDI isolates.
+private fun paragraphDirectionMarker(content: List<InlineContent>): String {
+    val text = content.joinToString("") { it.text }
+    if (text.isEmpty()) return ""
+    var index = 0
+    while (index < text.length) {
+        val point = text.codePointAt(index)
+        val direction = Character.getDirectionality(point)
+        if (direction == Character.DIRECTIONALITY_RIGHT_TO_LEFT ||
+            direction == Character.DIRECTIONALITY_RIGHT_TO_LEFT_ARABIC
+        ) {
+            return "\u200F"
+        }
+        if (direction == Character.DIRECTIONALITY_LEFT_TO_RIGHT) {
+            return "\u200E"
+        }
+        index += Character.charCount(point)
+    }
+    return ""
+}
 
 internal fun openHttpLink(
     context: android.content.Context,
@@ -62,7 +86,7 @@ internal fun openHttpLink(
 ): String? {
     val uri = target.toUri()
     if (uri.scheme?.lowercase() !in setOf("https", "http") || uri.host.isNullOrBlank() || uri.userInfo != null) {
-        return "Link cannot be opened"
+        return context.getString(R.string.renderer_link_cannot_open)
     }
     return try {
         context.startActivity(Intent(Intent.ACTION_VIEW, uri))
@@ -70,9 +94,9 @@ internal fun openHttpLink(
     } catch (
         _: ActivityNotFoundException,
     ) {
-        "No app available to open link"
+        context.getString(R.string.renderer_link_no_app)
     } catch (_: SecurityException) {
-        "Link cannot be opened"
+        context.getString(R.string.renderer_link_cannot_open)
     }
 }
 
@@ -108,10 +132,21 @@ fun DocumentBlock(block: ContentBlock) {
         }
 
         is ContentBlock.Quote -> {
-            val quoteModifier = Modifier.semantics(mergeDescendants = true) { heading() }
-            Row(modifier = quoteModifier) {
-                Box(Modifier.width(2.dp).height(24.dp).background(Color(0xFF99AABB)))
-                RichText(block.content, Modifier.padding(start = 8.dp))
+            val quoteLabel = LocalResources.current.getString(R.string.renderer_quote)
+            Row {
+                Box(
+                    Modifier
+                        .width(2.dp)
+                        .height(24.dp)
+                        .background(Color(0xFF99AABB))
+                        .semantics { contentDescription = quoteLabel },
+                )
+                RichText(
+                    block.content,
+                    Modifier
+                        .padding(start = 8.dp)
+                        .semantics(mergeDescendants = false) { contentDescription = quoteLabel },
+                )
             }
         }
 
@@ -139,6 +174,7 @@ fun DocumentBlock(block: ContentBlock) {
             // silently dropping rows would read as "the table ended here", which is worse.
             val shown = block.rows.take(MAX_TABLE_ROWS)
             val hidden = block.rows.size - shown.size
+            val resources = LocalResources.current
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (block.rows.isEmpty()) block.headers.forEach { RichText(it, heading = 4) }
                 shown.forEach { cells ->
@@ -152,19 +188,24 @@ fun DocumentBlock(block: ContentBlock) {
                     Box(Modifier.fillMaxWidth().height(1.dp).background(Color.DarkGray))
                 }
                 if (hidden > 0) {
-                    val noun = if (hidden == 1) "row" else "rows"
                     RichText(
-                        listOf(InlineContent("… $hidden more $noun. The table was cut to keep the reader responsive.")),
+                        listOf(
+                            InlineContent(
+                                resources.getQuantityString(R.plurals.renderer_hidden_rows, hidden, hidden),
+                            ),
+                        ),
                         heading = 4,
                     )
                 }
                 if (block.droppedCells > 0) {
-                    val noun = if (block.droppedCells == 1) "cell" else "cells"
                     RichText(
                         listOf(
                             InlineContent(
-                                "… ${block.droppedCells} more $noun. " +
-                                    "The table was cut to keep the reader responsive.",
+                                resources.getQuantityString(
+                                    R.plurals.renderer_hidden_cells,
+                                    block.droppedCells,
+                                    block.droppedCells,
+                                ),
                             ),
                         ),
                         heading = 4,
@@ -185,7 +226,16 @@ private fun RichText(
     modifier: Modifier = Modifier,
     heading: Int? = null,
 ) {
+    val links = content.mapNotNull { it.link }.distinct()
+    val linkActions = links.isNotEmpty()
     if (content.none { it.math }) {
+        if (linkActions) {
+            Column {
+                InlineRichText(content, List(content.size) { null }, heading, modifier)
+                LinkActions(links)
+            }
+            return
+        }
         InlineRichText(content, List(content.size) { null }, heading, modifier)
         return
     }
@@ -230,7 +280,14 @@ private fun RichText(
                 }
             }
         if (wide.isEmpty()) {
-            InlineRichText(content, math, heading)
+            if (linkActions) {
+                Column {
+                    InlineRichText(content, math, heading)
+                    LinkActions(links)
+                }
+            } else {
+                InlineRichText(content, math, heading)
+            }
         } else {
             Column {
                 // ponytail: intact formula pan; upgrade to math-aware wrapping when renderer supports width.
@@ -249,7 +306,46 @@ private fun RichText(
                 ) {
                     InlineRichText(content.subList(start, content.size), math.subList(start, content.size), heading)
                 }
+                if (linkActions) LinkActions(links)
             }
+        }
+    }
+}
+
+@Composable
+private fun LinkActions(links: List<String>) {
+    val context = LocalContext.current
+    val resources = LocalResources.current
+    val groupLabel = resources.getString(R.string.renderer_links)
+    Column(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .semantics(mergeDescendants = false) { contentDescription = groupLabel },
+    ) {
+        links.forEach { link ->
+            val label = resources.getString(R.string.renderer_open_link, link)
+            Button(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .widthIn(min = 48.dp)
+                        .heightIn(min = 48.dp)
+                        .semantics {
+                            contentDescription = label
+                            onClick(label) {
+                                openHttpLink(context, link)?.let {
+                                    Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+                                }
+                                true
+                            }
+                        },
+                onClick = {
+                    openHttpLink(context, link)?.let {
+                        Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+                    }
+                },
+            ) { Text(link, maxLines = 2) }
         }
     }
 }
@@ -279,6 +375,7 @@ private fun InlineRichText(
             }.toMap()
     val text =
         buildAnnotatedString {
+            append(paragraphDirectionMarker(content))
             content.forEachIndexed { index, span ->
                 if (math[index] != null) {
                     appendInlineContent("math$index", span.text)
@@ -296,15 +393,11 @@ private fun InlineRichText(
                 withStyle(style) {
                     val link = span.link
                     val uri = link?.toUri()
-                    // Bidi isolate: mixed-direction URLs and code keep their own order
-                    // inside surrounding text (FSI/PDP). Constants live at file top
-                    // with a narrow BidiSpoofing suppression; values are intentional.
+                    // Isolate mixed-direction URLs and code from surrounding text.
                     val isolated = BIDI_ISOLATE_OPEN + span.text + BIDI_ISOLATE_CLOSE
                     if (link != null && uri?.scheme?.lowercase() in setOf("https", "http")) {
-                        // ponytail: link hit area is the 22sp line box (~33dp), under
-                        // the 48dp minimum for isolated short links; pad to 48dp
-                        // when a link-specific tap target lands without breaking
-                        // mid-paragraph line flow.
+                        // ponytail: inline links have no guaranteed 48dp target; add
+                        // separate accessible actions when they preserve paragraph flow.
                         withLink(
                             LinkAnnotation.Clickable(link) {
                                 openHttpLink(

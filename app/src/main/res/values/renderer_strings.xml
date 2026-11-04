@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="renderer_link_cannot_open">Link cannot be opened</string>
+    <string name="renderer_link_no_app">No app available to open link</string>
+    <string name="renderer_math_description">Math: %1$s</string>
+    <string name="renderer_quote">Quote</string>
+    <string name="renderer_links">Links</string>
+    <string name="renderer_open_link">Open link %1$s</string>
+    <plurals name="renderer_hidden_rows">
+        <item quantity="one">… one more row. The table was cut to keep the reader responsive.</item>
+        <item quantity="other">… %1$d more table rows. The table was cut to keep the reader responsive.</item>
+    </plurals>
+    <plurals name="renderer_hidden_cells">
+        <item quantity="one">… one more cell. The table was cut to keep the reader responsive.</item>
+        <item quantity="other">… %1$d more table cells. The table was cut to keep the reader responsive.</item>
+    </plurals>
+</resources>

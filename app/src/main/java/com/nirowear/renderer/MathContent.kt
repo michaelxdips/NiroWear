@@ -13,11 +13,13 @@ import androidx.compose.runtime.produceState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.sp
 import androidx.wear.compose.material3.Text
+import com.nirowear.R
 
 @Composable
 fun rememberMath(
@@ -51,12 +53,13 @@ fun MathCanvas(
     source: String,
 ) {
     val density = LocalDensity.current
+    val description = LocalResources.current.getString(R.string.renderer_math_description, source)
     Canvas(
         Modifier
             .size(
                 with(density) { drawable.intrinsicWidth.toDp() },
                 with(density) { drawable.intrinsicHeight.toDp() },
-            ).semantics { contentDescription = "Math: $source" },
+            ).semantics { contentDescription = description },
     ) {
         drawable.setBounds(0, 0, drawable.intrinsicWidth, drawable.intrinsicHeight)
         drawable.draw(drawContext.canvas.nativeCanvas)
