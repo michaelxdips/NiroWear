@@ -185,7 +185,7 @@ fun DocumentBlock(block: ContentBlock) {
                             RichText(cell)
                         }
                     }
-                    Box(Modifier.fillMaxWidth().height(1.dp).background(Color.DarkGray))
+                    Box(Modifier.fillMaxWidth().height(1.dp).background(Color(0xFF5F646C)))
                 }
                 if (hidden > 0) {
                     RichText(
@@ -215,7 +215,7 @@ fun DocumentBlock(block: ContentBlock) {
         }
 
         ContentBlock.Divider -> {
-            Box(Modifier.fillMaxWidth().height(1.dp).background(Color.DarkGray))
+            Box(Modifier.fillMaxWidth().height(1.dp).background(Color(0xFF5F646C)))
         }
     }
 }
