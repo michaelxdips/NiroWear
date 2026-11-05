@@ -34,9 +34,13 @@ It exists because every other way of reading an AI answer on a watch is a compro
 
 **Bring your own key, stored properly.** Keys are encrypted with AES-256-GCM under a non-exportable Android Keystore key (randomized IV, version byte + 12 B IV + ciphertext, AAD-bound to the credential reference). Only versioned ciphertext and nonce touch disk; a profile stores a credential *reference*, never the key. A decrypt failure demands re-entry — there is no plaintext fallback, and a saved key is never repopulated into an editing field. Entry is masked (`PasswordVisualTransformation` + `KeyboardType.Password`) and the provider screens set `FLAG_SECURE`. See [Security & privacy](#security--privacy).
 
-**LAN pairing for long keys.** The watch serves a one-time page on your local network; you open the URL on a phone or laptop and paste the key into a real form. The key payload is encrypted with ephemeral ECDH P-256 and AES-GCM before it leaves the browser, gated by a 128-bit single-use capability token shown only on the watch screen, valid for 120 s (+5 s delivery grace) and closed the moment you leave the screen. Manual entry is always available underneath.
-
-The transport itself is plain HTTP and the handshake is not authenticated, so this is not "end-to-end encrypted" in the strict sense: an attacker who can both intercept your LAN traffic **and** read the token off the watch screen could impersonate the watch. That is a narrow model, but it is not nothing. If it is not acceptable to you, use manual entry — it never touches the network.
+**LAN pairing for long keys — designed, shipped, and currently unusable.** The watch can serve a
+one-time page on your local network so a key can be pasted into a real form instead of tapped on a
+1.4-inch keyboard: ephemeral ECDH P-256 + AES-GCM before it leaves the browser, gated by a 128-bit
+single-use capability token shown only on the watch screen, valid for 120 s (+5 s delivery grace), and
+closed the moment you leave the screen. The transport is plain HTTP and the handshake is
+unauthenticated, so it is not "end-to-end encrypted" in the strict sense. **In practice no browser can
+run its crypto at all** — see the note below — so manual entry is the working path.
 
 > **Pairing does not currently work in a browser, and the page now says so.** Browsers only expose
 > the Web Crypto API (`crypto.subtle`) on a secure origin — `https`, `file`, `localhost`,
@@ -138,22 +142,25 @@ Open **Menu → Providers / model** and pick a preset:
 | Gemini | `https://generativelanguage.googleapis.com/v1beta` | GenerateContent (SSE) |
 | OpenAI-compatible | *(you supply)* | Chat Completions |
 
-Name and base URL come prefilled. Then get the key onto the watch:
+Name and base URL come prefilled. Then get the key onto the watch: **open the provider, type the key, tap Validate, tap Save.** That is the path that works.
 
-1. Tap **Set up from phone**.
-2. The watch shows a URL like `http://192.168.1.24:41234/`.
-3. Open it on your phone or laptop, pick the provider, paste the key, tap **Send to watch**.
-4. The watch saves, validates, and lists models on its own.
-
-The pairing page is valid for **two minutes and one use**, and the socket closes the moment you leave the screen. If your watch has no Wi-Fi address, the screen says so and you can type the key manually instead.
+> **Pairing from a phone does not work, and the screen says so.** Tapping **Set up from phone**
+> starts a one-time listener and shows a URL, but a browser will not run Web Crypto on a
+> plain-HTTP LAN origin: `crypto.subtle` is only available in a secure context (`https`, `file`,
+> `localhost`, `127.0.0.1`), so the page cannot encrypt anything and tells you to enter the key on
+> the watch instead. Measured directly from a page served the way the watch serves it:
+> `window.isSecureContext` was `false` and `typeof crypto.subtle` was `undefined`. The listener is
+> still there (it is valid for two minutes, one use, and closes when you leave the screen) but it
+> cannot complete. Fixing it needs a pure-JavaScript crypto implementation served on that origin —
+> a design decision, not a patch.
 
 **Validate · uses API** makes one real (billable) call against the selected model to prove the key and model work together. **Discover models** lists what the provider advertises; discovery failure never blocks manual entry, because compatible endpoints legitimately vary. The app never silently substitutes a model: authentication and listing are separate, and a deprecated or mistyped model surfaces as an error you can read.
 
-### Why keys are annoying, and what we did
+### Why keys are annoying, and what we tried
 
-An API key is 40–200 opaque characters. Typing that on a 1.4-inch keyboard is not a friction problem, it is a correctness problem — the failure mode is a silent typo. So the transport was the thing to fix, not the keyboard. The pairing page puts the key on a device with a real keyboard, and the watch only ever receives it.
+An API key is 40–200 opaque characters. Typing that on a 1.4-inch keyboard is not a friction problem, it is a correctness problem — the failure mode is a silent typo. So the transport looked like the thing to fix, not the keyboard: put the key on a device with a real keyboard and have the watch only receive it.
 
-Because setup happens **once**, a URL and a form are cheap. After that, the app just uses whatever network the watch already has.
+That design is implemented and does not work, for the reason above: a browser refuses to expose `crypto.subtle` to a plain-HTTP LAN page, so there is nothing to encrypt with. The honest current answer is that the key is typed on the watch once, and `Validate` proves it immediately rather than at first send. Key normalisation at the boundary strips stray whitespace, and a key whose shape contradicts the selected preset shows a warning — nothing is switched automatically.
 
 ## Architecture
 
@@ -184,7 +191,7 @@ Every number below was read from a result file produced on this tree, not quoted
 
 | Check | Result (measured) | Where |
 |---|---|---|
-| JVM unit tests | 182 / 182, 0 failures, 0 errors, 0 skipped (33 suites) | `app/build/test-results/testDebugUnitTest/*.xml` |
+| JVM unit tests | 187 / 187, 0 failures, 0 errors, 0 skipped (34 suites) | `app/build/test-results/testDebugUnitTest/*.xml` |
 | Connected suite (emulator `NiroWear_Rebook_20261020`, destructive — not a CI gate) | 48 / 48 last recorded 2026-11-02; **not re-run** for this revision | `app/build/outputs/androidTest-results/connected/debug/*.xml` |
 | Lint | 0 errors, 1 warning: `GradleDependency` (test runner 1.5.0→1.5.2) | `app/build/reports/lint-results-debug.xml` |
 | Release APK | Source builds an **unsigned** `app-release-unsigned.apk`, 3589237 B, SHA-256 `66ABE409…BC6E`. The published `app-release.apk` (3609553 B, `319AE1CF…34D71`) is signed by the release pipeline, not by a local build. Both are `com.nirowear` v10 / `0.1.0`, minSdk 30, targetSdk 37 | `app/build/outputs/apk/release/`, `output-metadata.json` |

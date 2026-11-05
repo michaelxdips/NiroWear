@@ -158,9 +158,20 @@ internal class PairingServer(
             }
         // The whole session lives under an unguessable prefix. A caller without the capability gets
         // 404 on every route, which is also the honest answer: there is nothing here for them.
+        //
+        // The prefix is compared in CONSTANT TIME. It used to be `path.startsWith(prefix)`, which
+        // returns at the first mismatching byte, so a peer on the same LAN could recover the 128-bit
+        // token by timing the 404s a byte at a time — the later MessageDigest.isEqual in pair() only
+        // protected the POST body after this shortcut had already leaked the prefix.
+        val segment = path.trimStart('/').substringBefore('/')
+        val presentedPrefix = runCatching { unb64(segment) }.getOrNull()
+        val authorised =
+            presentedPrefix != null &&
+                MessageDigest.isEqual(token, presentedPrefix) &&
+                path.length > segment.length + 1
         val prefix = "/${b64(token)}"
         when {
-            !path.startsWith(prefix) -> respond(client, 404, TEXT, "not found")
+            !authorised -> respond(client, 404, TEXT, "not found")
             method == "GET" && path == "$prefix/" -> respond(client, 200, HTML, PAIRING_PAGE)
             method == "GET" && path == "$prefix/handshake" -> respond(client, 200, JSON, handshake())
             method == "POST" && path == "$prefix/pair" -> pair(client, body)
