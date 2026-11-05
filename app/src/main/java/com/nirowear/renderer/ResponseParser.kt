@@ -268,10 +268,11 @@ object ResponseParser {
      * tables the parser sees:
      *
      * - fence state is tracked, so a table-shaped sample inside a code block (which produces no
-     *   TableBlock) no longer queues a count that the NEXT real table then reports. That bug made the
-     *   reader claim cells were hidden on a table that hid nothing;
-     * - container markers are stripped for detection, so a table inside a blockquote is counted
-     *   instead of silently stealing the next table's entry.
+     *   TableBlock) no longer queues a count that the NEXT real table then reports;
+     * - the header and its delimiter row must carry the SAME container prefix. Stripping them
+     *   independently counted regions the parser never builds (a quoted header over an unquoted
+     *   delimiter is not a table), which shifted the queue by one: a table that really clamped cells
+     *   reported nothing while a clean table claimed to have hidden some.
      */
     private fun scanTableOverflow(markdown: String): ArrayDeque<Int> {
         val dropped = ArrayDeque<Int>()
@@ -280,7 +281,8 @@ object ResponseParser {
         var fence: Char? = null
         var fenceLength = 0
         while (index < lines.size) {
-            val line = uncontainer(lines[index])
+            val raw = lines[index]
+            val line = uncontainer(raw)
             FENCE.find(line)?.let { match ->
                 val run = match.groupValues[1]
                 if (fence == null) {
@@ -294,7 +296,11 @@ object ResponseParser {
                 index++
                 continue
             }
-            if (!line.contains('|') || index + 1 >= lines.size || !isDelimiterRow(uncontainer(lines[index + 1]))) {
+            // Prefix = the container markers this line's content sits behind.
+            val prefix = raw.length - line.length
+            val delimiter = if (index + 1 < lines.size) uncontainer(lines[index + 1]) else ""
+            val delimiterPrefix = if (index + 1 < lines.size) lines[index + 1].length - delimiter.length else -1
+            if (!line.contains('|') || delimiterPrefix != prefix || !isDelimiterRow(delimiter)) {
                 index++
                 continue
             }
@@ -302,7 +308,10 @@ object ResponseParser {
             var total = 0
             index += 2
             while (index < lines.size) {
-                val nextLine = uncontainer(lines[index])
+                val nextRaw = lines[index]
+                val nextLine = uncontainer(nextRaw)
+                // A row only belongs to this table if it sits behind the same container prefix.
+                if (nextRaw.length - nextLine.length != prefix) break
                 if (FENCE.find(nextLine) != null || !nextLine.contains('|') || isDelimiterRow(nextLine)) break
                 total += (splitTableRow(nextLine).size - width).coerceAtLeast(0)
                 index++
@@ -343,7 +352,20 @@ object ResponseParser {
             val lazy = fenceLines.any { !isFenceRun(it) && isLazyFenceContent(it) }
             for (index in fenceLines.indices) {
                 val fenceLine = fenceLines[index]
-                markdown.appendLine(if (lazy) stripForReplay(fenceLine) else fenceLine)
+                // A fence-looking line is stripped only at the BOUNDARIES — the opener or closer of a
+                // nested fence — never in the middle. Stripping a "> ```" that is part of the code
+                // SAMPLE produced a bare "```", which closed the block it belonged to: the sample then
+                // rendered as an empty block plus prose, and a following $$ line was torn out as
+                // display math. The lazy case still needs the boundary strip, because "> ```" around
+                // an unmarked body has to become a plain fence for the library to see.
+                val boundary = index == 0 || index == fenceLines.lastIndex
+                val replay =
+                    when {
+                        isFenceRun(fenceLine) && !boundary -> fenceLine
+                        lazy -> stripForReplay(fenceLine)
+                        else -> fenceLine
+                    }
+                markdown.appendLine(replay)
             }
             fenceLines.clear()
         }
@@ -409,12 +431,17 @@ object ResponseParser {
                     } else {
                         container
                     }
-                // Close detection runs on the STRIPPED line only for a fence that was opened behind a
-                // container, and on the raw line otherwise. A top-level fence treats its body as
-                // literal, so a content line "> ```" must not close it; a fence opened inside a quote or
-                // list still closes on its marker line, whose prefix need not match the opener's
-                // exactly ("> - ```" opens, ">   ```" closes).
-                val fenceBody = if (fenceNested) container else rest
+                // Close detection runs on the STRIPPED line only for a fence opened behind a
+                // container, and on the raw line otherwise: a top-level fence body is literal, so a
+                // content line "> ```" must not close it, while a fence inside a quote or list closes
+                // on its marker line even when that line's prefix differs from the opener's
+                // ("> - ```" opens, ">   ```" closes).
+                //
+                // `fenced`, not `container`: a GLUED quote run (">```", ">>```") is not something
+                // uncontainer() strips — it needs the DEEP_QUOTE fallback. Using `container` here made
+                // a quoted code block open and never close, so the block rendered empty and its body
+                // spilled out as prose.
+                val fenceBody = if (fenceNested) fenced else rest
                 if (fence != null) {
                     FENCE.find(fenceBody)?.let { match ->
                         val run = match.groupValues[1]
@@ -428,7 +455,12 @@ object ResponseParser {
                         val run = match.groupValues[1]
                         fence = run.first()
                         fenceLength = run.length
-                        fenceNested = uncontainer(rest) != rest || FENCE.find(rest.replaceFirst(DEEP_QUOTE, "")) != null
+                        // Nested only when stripping CHANGED the line. Testing DEEP_QUOTE's output
+                        // without that check made this true for every fence (replaceFirst returns the
+                        // input unchanged when it matches nothing, and FENCE matches that line), so the
+                        // raw-line branch was dead code.
+                        val deep = rest.replaceFirst(DEEP_QUOTE, "")
+                        fenceNested = uncontainer(rest) != rest || (deep != rest && FENCE.find(deep) != null)
                     }
                 }
                 val trimmed = container.trimStart()
