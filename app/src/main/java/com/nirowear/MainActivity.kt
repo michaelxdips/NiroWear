@@ -986,6 +986,11 @@ private fun HistoryScreen(
             hits = emptyList()
             searched = ""
         } else {
+            // Drop the previous result set BEFORE the wait. It used to stay on screen for the whole
+            // debounce window, so the rows shown did not match the text in the field, and tapping
+            // one opened a conversation from the query the user had already replaced.
+            hits = emptyList()
+            searched = ""
             kotlinx.coroutines.delay(SEARCH_DEBOUNCE_MS)
             hits =
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
