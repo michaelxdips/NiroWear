@@ -419,7 +419,7 @@ private fun ChatReader(
                 generating = chatState.generating,
                 currentId = chatState.conversationId,
                 onBack = { historyScreen = false },
-                onSelect = { id ->
+                onSelect = { id, messageId ->
                     // A notice belongs to the screen that raised it (clipboard, voice). Leaving it
                     // set pinned that line above every later conversation for the whole process.
                     notice = ""
@@ -427,8 +427,16 @@ private fun ChatReader(
                         chat.newChat()
                         following = true
                         followNewConversation = false
-                    } else if (id != chatState.conversationId) {
-                        chat.open(id)
+                    } else {
+                        // A search hit names a MESSAGE. Seed the reading anchor at it, otherwise the
+                        // reader fell back to block 0 and dumped the user at the top of a long
+                        // conversation after the row promised that message. contentHash = -1 never
+                        // matches, so the restore lands on the message's first block rather than a
+                        // saved scroll offset.
+                        if (messageId != null) anchors[id] = ReaderAnchor(messageId, 0, 0, 0, -1, false)
+                        if (id != chatState.conversationId) chat.open(id)
+                        // Re-arm the restore effect even for the conversation already open, where the
+                        // id is unchanged and nothing else would make it run.
                         restoredConversation = null
                         following = false
                         followNewConversation = false
@@ -543,10 +551,12 @@ private fun ChatReader(
                         kotlinx.coroutines.Dispatchers.Default,
                     ) { ResponseParser.parse(source) }
             }
-            // Keyed by the list's own stable key string, not by the block value. `ContentBlock.Paragraph` is
-// a data class holding the whole inline run, so a value key hashes the entire streaming paragraph
-// on every layout write and inserts a fresh entry per parse; `retainAll` then re-hashed every block
-// of the conversation once per frame. A String key is an identity compare.
+            // Keyed by the list's own stable key string, not by the block value. `ContentBlock.Paragraph`
+            // is a data class holding the whole inline run, so a value key hashed the entire streaming
+            // paragraph on every layout write and inserted a fresh entry per parse; `retainAll` then
+            // re-hashed every block of the conversation once per frame. A String key is an identity
+            // compare, and it also removes the duplicate keys a value key produced for two identical
+            // blocks inside one message.
             val blockHeights =
                 remember(chatState.conversationId, LocalDensity.current) {
                     androidx.compose.runtime.mutableStateMapOf<String, Int>()
@@ -978,7 +988,7 @@ private fun HistoryScreen(
     generating: Boolean,
     currentId: String?,
     onBack: () -> Unit,
-    onSelect: (String?) -> Unit,
+    onSelect: (String?, Long?) -> Unit,
 ) {
     val context = LocalContext.current
     val app = context.applicationContext as NiroApplication
@@ -1044,7 +1054,7 @@ private fun HistoryScreen(
             )
         }
         item {
-            Button(enabled = !generating, onClick = { onSelect(null) }, modifier = Modifier.fillMaxWidth()) {
+            Button(enabled = !generating, onClick = { onSelect(null, null) }, modifier = Modifier.fillMaxWidth()) {
                 Text("New chat")
             }
         }
@@ -1056,7 +1066,7 @@ private fun HistoryScreen(
                 // ViewModel, and closing History anyway looked like a dead tap that lost the search.
                 Button(
                     enabled = !generating,
-                    onClick = { onSelect(hit.conversationId) },
+                    onClick = { onSelect(hit.conversationId, hit.messageId) },
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text(
@@ -1070,7 +1080,7 @@ private fun HistoryScreen(
             items(conversations, key = { it.id }) { conversation ->
                 androidx.wear.compose.material3.OutlinedButton(
                     enabled = !generating || conversation.id == currentId,
-                    onClick = { onSelect(conversation.id) },
+                    onClick = { onSelect(conversation.id, null) },
                     modifier = Modifier.fillMaxWidth(),
                 ) { Text(conversation.title) }
             }

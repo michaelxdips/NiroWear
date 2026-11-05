@@ -185,7 +185,11 @@ class ProviderSettings(
                     prefs[profilesKey] = encode(decode(prefs[profilesKey] ?: "[]").filterNot { it.id == id })
                     if (prefs[selectedKey] == id) prefs.remove(selectedKey)
                 }
-                secrets.cleanup(decode(store.data.first()[profilesKey] ?: "[]").map { it.credentialRef }.toSet())
+                // Same rule as save() and recover(): cleanup deletes any ciphertext whose ref is absent, so
+                // the set must include entries this build cannot parse. Using the decoded refs here
+                // meant deleting one provider could also destroy the stored key of an entry that was
+                // merely unreadable.
+                secrets.cleanup(referencedCredentialRefs(store.data.first()[profilesKey] ?: "[]"))
             }
         }
 
