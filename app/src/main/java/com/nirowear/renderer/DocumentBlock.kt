@@ -29,6 +29,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.onClick
@@ -80,14 +81,29 @@ private fun paragraphDirectionMarker(content: List<InlineContent>): String {
     return ""
 }
 
+/**
+ * True when a link target can actually be opened by the system handler.
+ *
+ * Uses `java.net.URI`, not `android.net.Uri`: this is a pure decision, it has to be unit-testable on
+ * the JVM, and the Android stub throws for every URI method there. A target that does not parse is
+ * not openable, which is the safe direction — the renderer then does not paint it as tappable.
+ */
+internal fun isOpenableLink(target: String): Boolean =
+    try {
+        val uri = java.net.URI(target)
+        uri.scheme?.lowercase() in setOf("https", "http") &&
+            !uri.host.isNullOrBlank() &&
+            uri.userInfo == null
+    } catch (_: java.net.URISyntaxException) {
+        false
+    }
+
 internal fun openHttpLink(
     context: android.content.Context,
     target: String,
 ): String? {
+    if (!isOpenableLink(target)) return context.getString(R.string.renderer_link_cannot_open)
     val uri = target.toUri()
-    if (uri.scheme?.lowercase() !in setOf("https", "http") || uri.host.isNullOrBlank() || uri.userInfo != null) {
-        return context.getString(R.string.renderer_link_cannot_open)
-    }
     return try {
         context.startActivity(Intent(Intent.ACTION_VIEW, uri))
         null
@@ -105,6 +121,9 @@ internal fun openHttpLink(
  * in full on every measure; 40 rows is already more than fits on a 466 px watch face.
  */
 private const val MAX_TABLE_ROWS = 40
+
+/** ponytail: 6 link buttons per paragraph; the rest stay inline in the text. */
+private const val MAX_LINK_ACTIONS = 6
 
 @Composable
 fun DocumentBlock(block: ContentBlock) {
@@ -133,19 +152,21 @@ fun DocumentBlock(block: ContentBlock) {
 
         is ContentBlock.Quote -> {
             val quoteLabel = LocalResources.current.getString(R.string.renderer_quote)
-            Row {
+            // One label, on the merged quote. The decorative bar used to carry its OWN
+            // contentDescription, so TalkBack stopped on a 2dp bar labelled "Quote" and then announced
+            // the same label again on the text node next to it. The label stays on the parent because
+            // QuoteSemanticsTest requires a localized label on the node that holds the text.
+            Row(Modifier.semantics(mergeDescendants = true) { contentDescription = quoteLabel }) {
                 Box(
                     Modifier
                         .width(2.dp)
                         .height(24.dp)
                         .background(Color(0xFF99AABB))
-                        .semantics { contentDescription = quoteLabel },
+                        .clearAndSetSemantics {},
                 )
                 RichText(
                     block.content,
-                    Modifier
-                        .padding(start = 8.dp)
-                        .semantics(mergeDescendants = false) { contentDescription = quoteLabel },
+                    Modifier.padding(start = 8.dp),
                 )
             }
         }
@@ -177,11 +198,15 @@ fun DocumentBlock(block: ContentBlock) {
             val resources = LocalResources.current
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (block.rows.isEmpty()) block.headers.forEach { RichText(it, heading = 4) }
-                shown.forEach { cells ->
+                shown.forEachIndexed { rowIndex, cells ->
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         cells.forEachIndexed { index, cell ->
                             val label = block.headers.getOrNull(index).orEmpty()
-                            if (label.isNotEmpty()) RichText(label, heading = 4)
+                            // Heading semantics only on the FIRST row's labels. The label is repeated
+                            // per row so a watch reader keeps the column association, but marking
+                            // every repetition as a heading gave TalkBack ~120 heading stops for a
+                            // 40x3 table, all reading "Name / Price / Qty".
+                            if (label.isNotEmpty()) RichText(label, heading = if (rowIndex == 0) 4 else null)
                             RichText(cell)
                         }
                     }
@@ -226,7 +251,7 @@ private fun RichText(
     modifier: Modifier = Modifier,
     heading: Int? = null,
 ) {
-    val links = content.mapNotNull { it.link }.distinct()
+    val links = content.mapNotNull { it.link }.filter { isOpenableLink(it) }.distinct()
     val linkActions = links.isNotEmpty()
     if (content.none { it.math }) {
         if (linkActions) {
@@ -317,13 +342,18 @@ private fun LinkActions(links: List<String>) {
     val context = LocalContext.current
     val resources = LocalResources.current
     val groupLabel = resources.getString(R.string.renderer_links)
+    // Same bound as the table: one 48dp full-width Button per distinct link means a paragraph with
+    // twenty links stacked ~960dp of buttons into a single lazy item, several screens of scrolling on
+    // a 466px display, after the reader had already traversed the same links inline. The remainder is
+    // still reachable inside the text itself where the link is inline.
+    val shown = links.take(MAX_LINK_ACTIONS)
     Column(
         modifier =
             Modifier
                 .fillMaxWidth()
                 .semantics(mergeDescendants = false) { contentDescription = groupLabel },
     ) {
-        links.forEach { link ->
+        shown.forEach { link ->
             val label = resources.getString(R.string.renderer_open_link, link)
             Button(
                 modifier =
@@ -346,6 +376,16 @@ private fun LinkActions(links: List<String>) {
                     }
                 },
             ) { Text(link, maxLines = 2) }
+        }
+        if (links.size > shown.size) {
+            Text(
+                resources.getQuantityString(
+                    R.plurals.renderer_hidden_links,
+                    links.size - shown.size,
+                    links.size - shown.size,
+                ),
+                fontSize = 12.sp,
+            )
         }
     }
 }
@@ -381,21 +421,24 @@ private fun InlineRichText(
                     appendInlineContent("math$index", span.text)
                     return@forEachIndexed
                 }
+                // Paint a link only when it can actually be opened. Relative links, bare domains,
+                // mailto: and javascript: used to render blue and underlined with no click action,
+                // so the reader was told "this is tappable" and nothing happened.
+                val openable = span.link?.let { isOpenableLink(it) } == true
                 val style =
                     SpanStyle(
                         fontWeight = if (span.bold || heading != null) FontWeight.Bold else null,
                         fontStyle = if (span.italic || span.math) FontStyle.Italic else null,
                         fontFamily = if (span.code) FontFamily.Monospace else null,
                         background = if (span.code) Color(0xFF25282D) else Color.Unspecified,
-                        color = if (span.link != null) Color(0xFFA8C7FA) else Color.Unspecified,
-                        textDecoration = if (span.link != null) TextDecoration.Underline else null,
+                        color = if (openable) Color(0xFFA8C7FA) else Color.Unspecified,
+                        textDecoration = if (openable) TextDecoration.Underline else null,
                     )
                 withStyle(style) {
                     val link = span.link
-                    val uri = link?.toUri()
                     // Isolate mixed-direction URLs and code from surrounding text.
                     val isolated = BIDI_ISOLATE_OPEN + span.text + BIDI_ISOLATE_CLOSE
-                    if (link != null && uri?.scheme?.lowercase() in setOf("https", "http")) {
+                    if (openable && link != null) {
                         // ponytail: inline links have no guaranteed 48dp target; add
                         // separate accessible actions when they preserve paragraph flow.
                         withLink(

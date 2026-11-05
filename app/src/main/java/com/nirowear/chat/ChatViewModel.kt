@@ -29,10 +29,10 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.retryWhen
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -85,12 +85,25 @@ class ChatViewModel(
     private val app = application as NiroApplication
     private val dao = app.database.chats()
     val settings = app.settings.state
+
+    /**
+     * History list, resilient to a transient Room failure.
+     *
+     * `catch { emit(emptyList()) }` reported the error and then COMPLETED the flow: one SQLITE_BUSY
+     * or disk hiccup left History permanently empty for the life of this ViewModel (which survives
+     * rotation, so until process death), and the message was then overwritten by the next
+     * conversation open. `retryWhen` keeps the upstream alive and backs off instead.
+     */
     val conversations =
-        dao.conversations().catch { error ->
-            if (error is CancellationException) throw error
-            mutableState.value = mutableState.value.copy(error = "History cannot be read. No messages deleted.")
-            emit(emptyList())
-        }
+        dao
+            .conversations()
+            .retryWhen { error, attempt ->
+                if (error is CancellationException) throw error
+                mutableState.value = mutableState.value.copy(error = "History cannot be read. Retrying.")
+                // 1 s, 2 s, 4 s, capped. A watch has no user-visible way to force a retry.
+                delay((1000L shl attempt.coerceAtMost(2L).toInt()).coerceAtMost(4000L))
+                true
+            }
     val messages = MutableStateFlow<List<StoredMessage>>(emptyList())
     private val liveAnswer = MutableStateFlow<StoredMessage?>(null)
     private var history: Job? = null
@@ -134,7 +147,10 @@ class ChatViewModel(
     }
 
     fun open(id: String) {
-        if (mutableState.value.generating || mutableState.value.unsaved || !ready.isCompleted) return
+        // `initFailed` matters here too: a deferred completed exceptionally still reports
+        // isCompleted, so this used to pass and then wipe the only diagnostic ("History unavailable")
+        // with a fresh empty ChatState while starting an observer that can never deliver.
+        if (initFailed || mutableState.value.generating || mutableState.value.unsaved || !ready.isCompleted) return
         liveAnswer.value = null
         mutableState.value = ChatState(conversationId = id)
         observe(id)
@@ -153,6 +169,14 @@ class ChatViewModel(
                             rows.map { if (it.id == live.id) live else it } +
                                 if (rows.none { it.id == live.id }) listOf(live) else emptyList()
                         }
+                    }.retryWhen { error, attempt ->
+                        // Same reason as `conversations`: one transient read error must not end the
+                        // observation of the open conversation forever.
+                        if (error is CancellationException) throw error
+                        mutableState.value =
+                            mutableState.value.copy(error = "History cannot be read. Retrying.")
+                        delay((1000L shl attempt.coerceAtMost(2L).toInt()).coerceAtMost(4000L))
+                        true
                     }.collect { messages.value = it }
                 } catch (cancelled: CancellationException) {
                     throw cancelled
@@ -164,7 +188,7 @@ class ChatViewModel(
     }
 
     fun newChat() {
-        if (mutableState.value.generating || mutableState.value.unsaved || !ready.isCompleted) return
+        if (initFailed || mutableState.value.generating || mutableState.value.unsaved || !ready.isCompleted) return
         liveAnswer.value = null
         history?.cancel()
         messages.value = emptyList()

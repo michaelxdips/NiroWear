@@ -14,4 +14,8 @@
         <item quantity="one">… one more cell. The table was cut to keep the reader responsive.</item>
         <item quantity="other">… %1$d more table cells. The table was cut to keep the reader responsive.</item>
     </plurals>
+    <plurals name="renderer_hidden_links">
+        <item quantity="one">… one more link. Tap it in the text above.</item>
+        <item quantity="other">… %1$d more links. Tap them in the text above.</item>
+    </plurals>
 </resources>

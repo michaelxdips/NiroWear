@@ -12,4 +12,7 @@
     <plurals name="renderer_hidden_cells">
         <item quantity="other">… %1$d sel lagi. Tabel dipotong agar pembaca tetap responsif.</item>
     </plurals>
+    <plurals name="renderer_hidden_links">
+        <item quantity="other">… %1$d tautan lagi. Ketuk di teks di atas.</item>
+    </plurals>
 </resources>
