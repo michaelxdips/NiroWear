@@ -290,10 +290,12 @@ class ChatViewModel(
                     }
                     val newAssistantId = dao.admit(conversationId, prompt?.trim(), profile)
                     assistantId = newAssistantId
-                    // A chat opened from a seeded or empty row carries the "New chat" fallback title
-                    // forever. Name it from the first prompt actually stored.
+                    // Name the chat from its FIRST prompt. The previous version used `prompt` (the
+                    // current message) whether or not a title existed, so every send RENAMED an
+                    // existing conversation to its latest message and History stopped being
+                    // recognisable. The `title = 'New chat'` guard makes it a no-op once named.
                     prompt?.trim()?.takeIf { it.isNotEmpty() }?.let { text ->
-                        runCatching { dao.retitle(conversationId, text.take(60)) }
+                        runCatching { dao.retitleIfUnnamed(conversationId, text.take(60)) }
                     }
                     val admitted = dao.snapshot(conversationId)
                     liveAnswer.value = admitted.first { it.id == assistantId }
@@ -460,13 +462,24 @@ class ChatViewModel(
                         // conversation so history agrees with what the reader shows. Sends only:
                         // edit and retry already truncate their own turn and show it transiently.
                         //
-                        // `failure != null` matters: a Stop before any row exists clears the failure,
-                        // and inserting then produced an empty ERROR row with a null message — an
-                        // anonymous "Answer" heading under a Retry instead of "Stopped · partial
-                        // answer kept".
-                        if (assistantId == null && prompt != null && failure != null) {
+                        // `admit()` never ran, so NOTHING exists for this turn yet. Record it — for a Stop as well as a
+                        // failure. Without this: a new chat was left as an empty conversation with the
+                        // typed question gone while the reader still said "Stopped · partial answer
+                        // kept"; an edit had already replaced the message and truncated everything after
+                        // it, so the turn vanished and the next send appended USER,USER.
+                        if (assistantId == null) {
                             mutableState.value.conversationId?.let { id ->
-                                runCatching { dao.recordFailure(id, prompt.trim(), usedProfile, failure) }
+                                runCatching {
+                                    dao.recordFailure(
+                                        id,
+                                        prompt?.trim(),
+                                        usedProfile,
+                                        failure,
+                                        // A user cancel is STOPPED, not ERROR: the reader renders the
+                                        // same line it already shows for a stopped answer.
+                                        status = if (failure == null) "STOPPED" else "ERROR",
+                                    )
+                                }
                             }
                         }
                         liveAnswer.value =

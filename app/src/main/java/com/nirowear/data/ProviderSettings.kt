@@ -189,7 +189,11 @@ class ProviderSettings(
                     // unreadable entries and takes their keys with them.
                     val kept = decode(prefs[profilesKey] ?: "[]").filterNot { it.id == id }
                     prefs[profilesKey] = encodePreserving(kept, prefs[profilesKey] ?: "[]")
-                    if (prefs[selectedKey] == id) prefs.remove(selectedKey)
+                    // Deleting the ACTIVE provider used to just drop the selection, leaving the app
+                    // with no provider and nothing on screen saying so until the next send failed.
+                    // Fall back to the first survivor so chatting keeps working.
+                    val selection = nextSelection(kept, prefs[selectedKey], id)
+                    if (selection != null) prefs[selectedKey] = selection else prefs.remove(selectedKey)
                 }
                 // Same rule as save() and recover(): cleanup deletes any ciphertext whose ref is absent, so
                 // the set must include entries this build cannot parse. Using the decoded refs here
@@ -304,4 +308,20 @@ internal fun referencedCredentialRefs(source: String): Set<String> {
         }.getOrNull()?.takeIf { Regex("[a-f0-9-]{36}").matches(it) }?.let { refs += it }
     }
     return refs
+}
+
+/**
+ * Selection after deleting [deletedId] from [remaining].
+ *
+ * Keeps the current selection when it survived; otherwise falls back to the first survivor. Returning
+ * null only when nothing is left is correct there — the provider screen then shows an empty list and
+ * the chat reports "Add or select provider from menu." instead of pointing at a deleted profile.
+ */
+internal fun nextSelection(
+    remaining: List<ProviderProfile>,
+    current: String?,
+    deletedId: String,
+): String? {
+    if (current != deletedId && remaining.any { it.id == current }) return current
+    return remaining.firstOrNull()?.id
 }

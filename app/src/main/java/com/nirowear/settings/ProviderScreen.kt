@@ -195,11 +195,33 @@ fun ProviderScreen(onBack: () -> Unit) {
         } catch (failure: Exception) {
             // A rejected replacement key arrives as SafeProviderException from the promotion probe.
             // Naming the cause beats "Secure save failed" when the real problem is a 401.
-            message = (failure as? SafeProviderException)
-                ?.error
-                ?.userMessage
-                ?.let { "$it Previous credential kept." }
-                ?: "Secure save failed. Previous credential kept. Re-enter key."
+            val specific = (failure as? SafeProviderException)?.error?.userMessage
+            // "Previous credential kept." is only true when there WAS one. On a brand-new provider the
+            // failure is a plain require() ("API key required", "Selected model ID required"), and
+            // claiming a credential was kept both lied and hid the reason.
+            val hadPrevious = edit != null
+            message =
+                when {
+                    specific != null && hadPrevious -> {
+                        "$specific Previous credential kept."
+                    }
+
+                    specific != null -> {
+                        specific
+                    }
+
+                    failure is IllegalArgumentException || failure is IllegalStateException -> {
+                        failure.message?.takeIf { it.isNotBlank() } ?: "Check the configuration and try again."
+                    }
+
+                    hadPrevious -> {
+                        "Secure save failed. Previous credential kept. Re-enter key."
+                    }
+
+                    else -> {
+                        "Secure save failed. Re-enter key."
+                    }
+                }
         } finally {
             busy = false
         }
@@ -509,10 +531,25 @@ fun ProviderScreen(onBack: () -> Unit) {
                 if (message.isNotBlank()) Text(message, fontSize = 14.sp, color = Color(0xFFFFD28A))
             }
             item {
+                // Save must not outrun Validate.
+                //
+                // The old gate read `edit == null || key.isBlank() || validated`, which let through
+                // exactly the two cases that matter: a NEW provider was saved without ever proving the
+                // key (Save skips the probe when there is no previous profile), and an EDIT with a
+                // blank key field was saved with a changed base URL or model, unvalidated. Both then
+                // showed "Saved securely." and failed with 401 on the first send.
+                //
+                // A name-only edit still saves freely: nothing connectivity-relevant changed.
+                val original = edit
+                val connectivityChanged =
+                    original == null ||
+                        type != original.type ||
+                        base.trim() != original.baseUrl ||
+                        model.trim() != original.selectedModelId
+                val needsValidation = key.isNotBlank() || connectivityChanged
                 Button(
                     modifier = Modifier.fillMaxWidth(),
-                    enabled =
-                        !busy && (edit == null || key.isBlank() || validated),
+                    enabled = !busy && (!needsValidation || validated),
                     onClick = {
                         scope.launch {
                             stopPairing()

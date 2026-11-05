@@ -190,8 +190,14 @@ interface ChatDao {
         time: Long,
     )
 
-    @Query("UPDATE conversations SET title = :title WHERE id = :id")
-    suspend fun retitle(
+    /**
+     * Name a conversation that still carries the "New chat" fallback, and only such a conversation.
+     *
+     * The guard is the point: calling this on every send re-labelled every chat with its latest
+     * message, so History stopped showing the question that opened each conversation.
+     */
+    @Query("UPDATE conversations SET title = :title WHERE id = :id AND title = 'New chat'")
+    suspend fun retitleIfUnnamed(
         id: String,
         title: String,
     )
@@ -202,10 +208,14 @@ interface ChatDao {
     /**
      * A turn that failed before any assistant row existed.
      *
-     * Writes the USER row too, because that row is what makes the conversation a conversation: with
-     * only an ASSISTANT row and no prompt, the transcript had no question, the heading rendered
-     * "null · null", and Retry was dead forever ("No user message"). Provenance is recorded when a
-     * profile is known, so this row renders like any completed answer.
+     * Called when `admit()` never ran, which includes a Stop landing during the credential read. In that
+     * window nothing had been written for the turn: a new chat was left as an EMPTY conversation with
+     * the typed question gone and the reader claiming "Stopped · partial answer kept" over nothing, and
+     * an edit had already replaced the message and truncated the rest, leaving a dangling question.
+     * So the USER row is written here (it is what makes the turn exist) and the ASSISTANT row carries
+     * the status the turn actually ended in.
+     *
+     * @param status "STOPPED" for a user cancel, "ERROR" for a failure.
      */
     @Transaction
     suspend fun recordFailure(
@@ -213,6 +223,7 @@ interface ChatDao {
         prompt: String?,
         profile: com.nirowear.provider.ProviderProfile?,
         error: String?,
+        status: String = "ERROR",
     ) {
         // No duplicate check on the prompt. This function runs only when `admit()` never ran
         // (ChatViewModel gates it on assistantId == null), and admit is what writes the USER row — so
@@ -228,7 +239,7 @@ interface ChatDao {
                 conversationId = conversationId,
                 role = "ASSISTANT",
                 rawContent = "",
-                status = "ERROR",
+                status = status,
                 providerProfileId = profile?.id,
                 providerLabel = profile?.displayName,
                 modelId = profile?.selectedModelId,
