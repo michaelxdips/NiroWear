@@ -255,6 +255,26 @@ object ResponseParser {
         return cells
     }
 
+    /**
+     * Container identity of a line, used to decide whether two lines belong to the same table.
+     *
+     * A character-count comparison is wrong for list items: the header carries a `1. ` marker while
+     * its continuation rows carry the equivalent spaces, so the removal lengths differ even though
+     * CommonMark puts both in the same container. Marker characters are masked to spaces and the
+     * continuation indent (up to three) is normalised, which makes "1. |a|" and "   |---|" compare
+     * equal while keeping a quoted header distinct from an unquoted delimiter.
+     */
+    private fun containerKey(raw: String): String {
+        val content = uncontainer(raw)
+        val markers =
+            raw
+                .substring(0, raw.length - content.length)
+                .map { if (it.isDigit() || it in ">.-*+)") ' ' else it }
+                .joinToString("")
+        val indent = content.takeWhile { it == ' ' }.length.coerceAtMost(3)
+        return markers + " ".repeat(indent)
+    }
+
     private fun isDelimiterRow(line: String): Boolean {
         val cells = splitTableRow(line)
         return cells.isNotEmpty() &&
@@ -283,36 +303,65 @@ object ResponseParser {
         while (index < lines.size) {
             val raw = lines[index]
             val line = uncontainer(raw)
-            FENCE.find(line)?.let { match ->
-                val run = match.groupValues[1]
-                if (fence == null) {
-                    fence = run.first()
-                    fenceLength = run.length
-                } else if (run.first() == fence && run.length >= fenceLength && match.groupValues[2].isBlank()) {
-                    fence = null
+            if (fence == null) {
+                // OPEN detection tolerates container markers: replayFence leaves them in place when the
+                // body was properly marked, so a fence can reach this point as "> ```".
+                val opener = FENCE.find(raw) ?: FENCE.find(line)
+                if (opener != null) {
+                    fence = opener.groupValues[1].first()
+                    fenceLength = opener.groupValues[1].length
+                    index++
+                    continue
                 }
-            }
-            if (fence != null) {
+            } else {
+                // CLOSE detection uses the RAW line only, exactly like CommonMark. A fence body is
+                // literal, so a content line "> ```" must not close it. This used to run on the
+                // stripped line, which closed a top-level block early, reopened a fence on the real
+                // closer, and skipped EVERY later table — so no overflow notice was ever shown again.
+                val closer = FENCE.find(raw)
+                if (closer != null) {
+                    val run = closer.groupValues[1]
+                    if (run.first() == fence && run.length >= fenceLength && closer.groupValues[2].isBlank()) {
+                        fence = null
+                    }
+                }
                 index++
                 continue
             }
-            // Prefix = the container markers this line's content sits behind.
-            val prefix = raw.length - line.length
-            val delimiter = if (index + 1 < lines.size) uncontainer(lines[index + 1]) else ""
-            val delimiterPrefix = if (index + 1 < lines.size) lines[index + 1].length - delimiter.length else -1
-            if (!line.contains('|') || delimiterPrefix != prefix || !isDelimiterRow(delimiter)) {
+            // Container identity of this line, NOT a character count. A list item's header carries a `1. `
+            // marker while its continuation rows carry the resulting spaces instead, so comparing
+            // removal lengths said "different container" for a table the library actually builds — the
+            // scan skipped it and the overflow queue shifted by one.
+            val key = containerKey(raw)
+            // Four spaces of content indentation starts an INDENTED CODE BLOCK, which CommonMark
+            // never turns into a table. Counting it queued a phantom that the next real table then
+            // reported, so a clean table claimed hidden cells.
+            val indent = line.length - line.trimStart(' ').length
+            val delimiterRaw = if (index + 1 < lines.size) lines[index + 1] else ""
+            val delimiter = uncontainer(delimiterRaw)
+            val headerCells = if (line.contains('|')) splitTableRow(line) else emptyList()
+            // GFM also requires the delimiter row to have exactly as many cells as the header; without
+            // that check a header over a shorter delimiter row was counted although the library parses
+            // it as a paragraph.
+            if (indent >= 4 ||
+                headerCells.isEmpty() ||
+                containerKey(delimiterRaw) != key ||
+                !isDelimiterRow(delimiter) ||
+                splitTableRow(delimiter).size != headerCells.size
+            ) {
                 index++
                 continue
             }
-            val width = splitTableRow(line).size
+            val width = headerCells.size
             var total = 0
             index += 2
             while (index < lines.size) {
                 val nextRaw = lines[index]
                 val nextLine = uncontainer(nextRaw)
-                // A row only belongs to this table if it sits behind the same container prefix.
-                if (nextRaw.length - nextLine.length != prefix) break
-                if (FENCE.find(nextLine) != null || !nextLine.contains('|') || isDelimiterRow(nextLine)) break
+                // A row only belongs to this table if it sits in the same container.
+                if (containerKey(nextRaw) != key) break
+                if (nextLine.length - nextLine.trimStart(' ').length >= 4) break
+                if (FENCE.find(nextRaw) != null || !nextLine.contains('|') || isDelimiterRow(nextLine)) break
                 total += (splitTableRow(nextLine).size - width).coerceAtLeast(0)
                 index++
             }

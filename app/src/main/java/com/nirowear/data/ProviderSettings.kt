@@ -135,7 +135,9 @@ class ProviderSettings(
                         val profiles =
                             decode(prefs[profilesKey] ?: "[]").filterNot { it.id == profile.id } +
                                 profile.copy(credentialRef = ref)
-                        prefs[profilesKey] = encode(profiles)
+                        // Preserve entries this build cannot decode instead of erasing them: an erased
+                        // entry loses its credential reference, and cleanup would then delete its key.
+                        prefs[profilesKey] = encodePreserving(profiles, prefs[profilesKey] ?: "[]")
                         // Selecting is a separate, explicit action (select()). Replacing a key on an
                         // existing profile must not retarget the next send: editing provider B while
                         // A is active used to silently make B the active provider and model, which is
@@ -182,7 +184,11 @@ class ProviderSettings(
                 check(current.error == null) { "Provider settings unavailable" }
                 val previous = current.profiles.find { it.id == id } ?: return@withContext
                 store.edit { prefs ->
-                    prefs[profilesKey] = encode(decode(prefs[profilesKey] ?: "[]").filterNot { it.id == id })
+                    // Encode from the document as it is NOW, and carry forward entries this build
+                    // cannot decode — otherwise removing one provider silently erases the others'
+                    // unreadable entries and takes their keys with them.
+                    val kept = decode(prefs[profilesKey] ?: "[]").filterNot { it.id == id }
+                    prefs[profilesKey] = encodePreserving(kept, prefs[profilesKey] ?: "[]")
                     if (prefs[selectedKey] == id) prefs.remove(selectedKey)
                 }
                 // Same rule as save() and recover(): cleanup deletes any ciphertext whose ref is absent, so
@@ -193,19 +199,50 @@ class ProviderSettings(
             }
         }
 
-    private fun encode(profiles: List<ProviderProfile>) =
-        JsonArray(
-            profiles.map { p ->
-                buildJsonObject {
-                    put("id", p.id)
-                    put("type", p.type.name)
-                    put("name", p.displayName)
-                    put("base", p.baseUrl)
-                    put("model", p.selectedModelId)
-                    put("credentialRef", p.credentialRef)
+    internal fun encodeOne(p: ProviderProfile) =
+        buildJsonObject {
+            put("id", p.id)
+            put("type", p.type.name)
+            put("name", p.displayName)
+            put("base", p.baseUrl)
+            put("model", p.selectedModelId)
+            put("credentialRef", p.credentialRef)
+        }
+
+    private fun encode(profiles: List<ProviderProfile>) = JsonArray(profiles.map { encodeOne(it) }).toString()
+
+    /**
+     * Serialise [profiles], carrying forward any RAW element this build cannot decode.
+     *
+     * The reason this exists: `encode(decode(x))` silently deletes every entry decode rejected. That is
+     * how the cleanup fix was defeated — the unparsable entry was erased from the document FIRST, so by
+     * the time `referencedCredentialRefs` looked, its ref was gone and `SecretStore.cleanup` deleted
+     * its ciphertext (no plaintext fallback, so permanently). Keeping the raw element keeps both the
+     * profile for a future build and the credential reference alive.
+     *
+     * An element is preserved only if it is genuinely undecodable; anything decodable is replaced by
+     * the canonical encoding above.
+     */
+    internal fun encodePreserving(
+        profiles: List<ProviderProfile>,
+        previous: String,
+    ): String {
+        val known = profiles.map { it.credentialRef }.toSet()
+        val preserved =
+            runCatching { Json.parseToJsonElement(previous).jsonArray }
+                .getOrDefault(JsonArray(emptyList()))
+                .filter { element ->
+                    val ref =
+                        runCatching {
+                            element.jsonObject
+                                .getValue("credentialRef")
+                                .jsonPrimitive.content
+                        }.getOrNull()
+                    ref != null && ref !in known && Regex("[a-f0-9-]{36}").matches(ref) &&
+                        runCatching { decodeOne(element) }.isFailure
                 }
-            },
-        ).toString()
+        return JsonArray(profiles.map { encodeOne(it) } + preserved).toString()
+    }
 
     /**
      * Per-element decoding.
