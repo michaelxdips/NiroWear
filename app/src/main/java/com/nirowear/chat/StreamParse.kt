@@ -55,3 +55,18 @@ internal fun coalesceDelayMs(
     if (elapsed < 0L) return 0L
     return if (elapsed >= windowMs) 0L else windowMs - elapsed
 }
+
+/**
+ * Recency list with [id] moved to the end and bounded to [MAX_RETAINED_CONVERSATIONS].
+ *
+ * Extracted from the reader effect so the eviction order is testable on the JVM. The previous test
+ * computed this expression itself and fed the result back in, so dropping the move-to-end here (or
+ * the bound) changed nothing in any suite — the production line was untested.
+ */
+internal fun nextRecency(
+    recent: List<String>,
+    id: String?,
+): List<String> {
+    if (id == null) return recent
+    return (recent - id + id).takeLast(MAX_RETAINED_CONVERSATIONS)
+}

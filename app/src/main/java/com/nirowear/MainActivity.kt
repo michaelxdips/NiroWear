@@ -85,6 +85,7 @@ import com.nirowear.chat.ReaderAnchor
 import com.nirowear.chat.coalesceDelayMs
 import com.nirowear.chat.evictStaleConversations
 import com.nirowear.chat.needsParse
+import com.nirowear.chat.nextRecency
 import com.nirowear.data.Conversation
 import com.nirowear.data.ProviderSettingsState
 import com.nirowear.data.SearchHit
@@ -282,7 +283,7 @@ private fun ChatReader(
         currentCoroutineContext().ensureActive()
         if (currentSource != (id to messages)) return@LaunchedEffect
         lastParseAt = System.currentTimeMillis()
-        if (id != null) recentConversations = (recentConversations - id + id).takeLast(MAX_RETAINED_CONVERSATIONS)
+        recentConversations = nextRecency(recentConversations, id)
         parsedRows = evictStaleConversations(rows, recentConversations + listOfNotNull(id))
         // Same bound as the parse memo above: one entry per conversation ever opened
         // grows without limit otherwise.

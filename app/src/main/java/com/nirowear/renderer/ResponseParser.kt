@@ -264,22 +264,47 @@ object ResponseParser {
     /**
      * Cells the GFM parser will silently drop: body rows wider than the header are clamped to the
      * header width by the library, so count the overflow here and report it explicitly instead.
-     * One entry per table region, in document order.
+     * One entry per table region, in document order — which means this scan must see exactly the
+     * tables the parser sees:
+     *
+     * - fence state is tracked, so a table-shaped sample inside a code block (which produces no
+     *   TableBlock) no longer queues a count that the NEXT real table then reports. That bug made the
+     *   reader claim cells were hidden on a table that hid nothing;
+     * - container markers are stripped for detection, so a table inside a blockquote is counted
+     *   instead of silently stealing the next table's entry.
      */
     private fun scanTableOverflow(markdown: String): ArrayDeque<Int> {
         val dropped = ArrayDeque<Int>()
         val lines = markdown.split('\n')
         var index = 0
+        var fence: Char? = null
+        var fenceLength = 0
         while (index < lines.size) {
-            if (!lines[index].contains('|') || index + 1 >= lines.size || !isDelimiterRow(lines[index + 1])) {
+            val line = uncontainer(lines[index])
+            FENCE.find(line)?.let { match ->
+                val run = match.groupValues[1]
+                if (fence == null) {
+                    fence = run.first()
+                    fenceLength = run.length
+                } else if (run.first() == fence && run.length >= fenceLength && match.groupValues[2].isBlank()) {
+                    fence = null
+                }
+            }
+            if (fence != null) {
                 index++
                 continue
             }
-            val width = splitTableRow(lines[index]).size
+            if (!line.contains('|') || index + 1 >= lines.size || !isDelimiterRow(uncontainer(lines[index + 1]))) {
+                index++
+                continue
+            }
+            val width = splitTableRow(line).size
             var total = 0
             index += 2
-            while (index < lines.size && lines[index].contains('|') && !isDelimiterRow(lines[index])) {
-                total += (splitTableRow(lines[index]).size - width).coerceAtLeast(0)
+            while (index < lines.size) {
+                val nextLine = uncontainer(lines[index])
+                if (FENCE.find(nextLine) != null || !nextLine.contains('|') || isDelimiterRow(nextLine)) break
+                total += (splitTableRow(nextLine).size - width).coerceAtLeast(0)
                 index++
             }
             dropped.addLast(total)
@@ -537,6 +562,12 @@ object ResponseParser {
             if (node is Text) builder.append(node.literal)
             if (node is Code) builder.append(node.literal)
             if (node is MathInline) builder.append(node.source)
+            // Block nodes carry their text on the node itself and have no Text children, so a code
+            // block or HTML block inside a flattened (depth-capped) subtree used to vanish entirely
+            // instead of degrading to plain text.
+            if (node is FencedCodeBlock) builder.append(node.literal).append(' ')
+            if (node is IndentedCodeBlock) builder.append(node.literal).append(' ')
+            if (node is HtmlBlock) builder.append(node.literal).append(' ')
             if (node is SoftLineBreak || node is HardLineBreak) builder.append(' ')
             // Children pushed in reverse so removeLast() yields document order; Code and
             // MathInline carry text the old Text-only version silently dropped.
@@ -616,6 +647,13 @@ object ResponseParser {
                             out += ContentBlock.ListEntry(marker, depth, inlines(child))
                             first = false
                         } else {
+                            // Deliberate: an item whose content is a block rather than a paragraph
+                            // (fence, quote, table) emits no marker of its own, so the reader gets no
+                            // lone bullet above a code block. Pinned for BOTH the bulleted and the
+                            // ordered form by
+                            // containerFencesKeepLiteralMathAndDoNotHideFollowingDisplay. An audit
+                            // flagged this as a numbering bug; the golden case is the contract, so the
+                            // behaviour stays and the reason is recorded here.
                             appendBlocks(child, out, dropped, depth + 1, quoted)
                         }
                     }
