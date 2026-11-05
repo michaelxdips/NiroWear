@@ -406,6 +406,8 @@ private fun ChatReader(
                         // Voice ADDS to the draft. The draft deliberately survives backing out of the
                         // editor, so replacing it here destroyed a typed prompt with no undo.
                         draft = if (draft.isBlank()) spoken else draft.trimEnd() + " " + spoken
+                        // A fresh compose: never inherit an abandoned edit's parked draft.
+                        draftBackup = ""
                         editedId = null
                         editing = true
                     }
@@ -507,6 +509,10 @@ private fun ChatReader(
                                 // The text now lives in the conversation; leaving it in the single
                                 // draft slot pre-filled the next editor with the message just sent.
                                 draft = ""
+                                // The parked pre-edit draft is consumed by this turn too: keeping it
+                                // meant a later abandoned editor restored a prompt that had already
+                                // been sent (or was never current).
+                                draftBackup = ""
                                 notice = ""
                                 editedId = null
                             }
@@ -964,6 +970,8 @@ private fun ChatReader(
                                     // second copy of the same question appended to the conversation.
                                     .clickable(role = Role.Button, onClick = {
                                         saveReaderPosition()
+                                        // A fresh compose: never restore a parked pre-edit draft.
+                                        draftBackup = ""
                                         editing = true
                                     }),
                                 contentAlignment = Alignment.Center,
