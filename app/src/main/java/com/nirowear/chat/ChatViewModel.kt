@@ -90,6 +90,10 @@ class ChatViewModel(
     private val liveAnswer = MutableStateFlow<StoredMessage?>(null)
     private var history: Job? = null
     private val ready = CompletableDeferred<Unit>()
+
+    /** True once init has failed. A completed-exceptionally deferred looks "completed" to isCompleted. */
+    private var initFailed = false
+
     private val mutableState = MutableStateFlow(ChatState())
     val state = mutableState.asStateFlow()
     private var generation: Job? = null
@@ -117,6 +121,7 @@ class ChatViewModel(
                 }
                 ready.complete(Unit)
             } catch (_: Exception) {
+                initFailed = true
                 mutableState.value = mutableState.value.copy(error = "History unavailable. No messages changed.")
                 ready.completeExceptionally(IllegalStateException("History unavailable"))
             }
@@ -174,6 +179,14 @@ class ChatViewModel(
         ) {
             return
         }
+        // `open`/`newChat` refuse to run before init settles; a send must too. Without this a failed
+        // init still created a conversation, observed it, then threw at `ready.await()`, so the user
+        // saw a provider-setup error over a "History unavailable. No messages changed." state — and
+        // a conversation row had in fact been written.
+        if (initFailed || !ready.isCompleted) {
+            mutableState.value = mutableState.value.copy(error = "History unavailable. No messages changed.")
+            return
+        }
         liveAnswer.value = null
         mutableState.value = mutableState.value.copy(generating = true, error = null, rawMarkdown = null)
         // The conversation is created as the FIRST thing the job does, before the settings and
@@ -197,6 +210,8 @@ class ChatViewModel(
                 var failure: String? = null
                 var localPhases: StoredOpenAiPhases? = null
                 var checkpoints: Job? = null
+                // Which profile this turn was aimed at, so a failure row still has provenance.
+                var usedProfile: com.nirowear.provider.ProviderProfile? = null
                 try {
                     if (newConversationId != null) {
                         dao.insertConversation(
@@ -213,6 +228,7 @@ class ChatViewModel(
                     val config = settings.first()
                     check(config.error == null) { "Provider settings unavailable" }
                     val profile = config.selected ?: throw SafeProviderException(ProviderError.PROVIDER_REQUIRED)
+                    usedProfile = profile
                     val provider =
                         app.provider(profile.type) ?: throw SafeProviderException(ProviderError.PROVIDER_UNSUPPORTED)
                     val secret = withContext(Dispatchers.IO) { app.secrets.read(profile.credentialRef) }
@@ -395,9 +411,14 @@ class ChatViewModel(
                         // question whose answer never happened. Record the failure on the
                         // conversation so history agrees with what the reader shows. Sends only:
                         // edit and retry already truncate their own turn and show it transiently.
-                        if (assistantId == null && prompt != null) {
+                        //
+                        // `failure != null` matters: a Stop before any row exists clears the failure,
+                        // and inserting then produced an empty ERROR row with a null message — an
+                        // anonymous "Answer" heading under a Retry instead of "Stopped · partial
+                        // answer kept".
+                        if (assistantId == null && prompt != null && failure != null) {
                             mutableState.value.conversationId?.let { id ->
-                                runCatching { dao.recordFailure(id, failure) }
+                                runCatching { dao.recordFailure(id, prompt.trim(), usedProfile, failure) }
                             }
                         }
                         liveAnswer.value =
@@ -436,6 +457,11 @@ class ChatViewModel(
                     save()
                     pendingSave = null
                     mutableState.value = mutableState.value.copy(rawMarkdown = null, unsaved = false, error = null)
+                } catch (cancelled: CancellationException) {
+                    // Stop during a save retry must not be reported as a storage failure: the write is
+                    // a @Transaction that still commits, and swallowing cancellation left pendingSave
+                    // set with a "Still cannot save" message over text that was in fact saved.
+                    throw cancelled
                 } catch (_: Exception) {
                     mutableState.value =
                         mutableState.value.copy(error = "Still cannot save. Keep app open and copy unsaved answer.")

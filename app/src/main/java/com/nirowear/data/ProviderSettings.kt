@@ -132,7 +132,12 @@ class ProviderSettings(
                             decode(prefs[profilesKey] ?: "[]").filterNot { it.id == profile.id } +
                                 profile.copy(credentialRef = ref)
                         prefs[profilesKey] = encode(profiles)
-                        prefs[selectedKey] = profile.id
+                        // Selecting is a separate, explicit action (select()). Replacing a key on an
+                        // existing profile must not retarget the next send: editing provider B while
+                        // A is active used to silently make B the active provider and model, which is
+                        // exactly the "never silently change a model" rule. Only a brand-new profile
+                        // becomes selected.
+                        if (previous == null) prefs[selectedKey] = profile.id
                     }
                     ; promoted = true
                 }
@@ -191,24 +196,39 @@ class ProviderSettings(
             },
         ).toString()
 
+    /**
+     * Per-element decoding.
+     *
+     * Previously any single bad element (an unknown `type` after an enum change, one missing field,
+     * one malformed ref) threw for the whole array. The state then reported "settings unreadable"
+     * with an EMPTY profile list, and every writer re-decodes that same poisoned value before it can
+     * write, so nothing could repair it: the app was permanently unconfigurable while the ciphertext
+     * for every profile still sat on disk with no reference to it. Dropping only the broken entries
+     * keeps the rest usable and keeps their credential references alive.
+     *
+     * A parse failure of the whole document is still fatal — that is real corruption of the envelope,
+     * not of one entry.
+     */
     private fun decode(source: String): List<ProviderProfile> =
-        Json.parseToJsonElement(source).jsonArray.map {
-            val p = it.jsonObject
+        Json.parseToJsonElement(source).jsonArray.mapNotNull { element ->
+            runCatching {
+                val p = element.jsonObject
 
-            fun field(name: String): String {
-                val value = p.getValue(name).jsonPrimitive
-                require(value.isString) { "Invalid profile field" }
-                return value.content
-            }
-            val ref = field("credentialRef")
-            require(Regex("[a-f0-9-]{36}").matches(ref)) { "Invalid credential reference" }
-            ProviderProfile(
-                field("id"),
-                ProviderType.valueOf(field("type")),
-                field("name"),
-                field("base"),
-                field("model"),
-                ref,
-            )
+                fun field(name: String): String {
+                    val value = p.getValue(name).jsonPrimitive
+                    require(value.isString) { "Invalid profile field" }
+                    return value.content
+                }
+                val ref = field("credentialRef")
+                require(Regex("[a-f0-9-]{36}").matches(ref)) { "Invalid credential reference" }
+                ProviderProfile(
+                    field("id"),
+                    ProviderType.valueOf(field("type")),
+                    field("name"),
+                    field("base"),
+                    field("model"),
+                    ref,
+                )
+            }.getOrNull()
         }
 }

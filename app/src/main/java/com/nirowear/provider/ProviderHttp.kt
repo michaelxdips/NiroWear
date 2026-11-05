@@ -177,19 +177,25 @@ internal class ProviderHttp(
                                                 }
                                             if (line.isEmpty()) {
                                                 if (dispatch()) return@launch
+                                                lastFrameAt = System.currentTimeMillis()
                                             } else if (line.startsWith("data:")) {
                                                 frame.append(line.removePrefix("data:").removePrefix(" ")).append('\n')
+                                                lastFrameAt = System.currentTimeMillis()
                                                 if (frame.length >
                                                     maxFrameBytes
                                                 ) {
                                                     throw SafeProviderException(ProviderError.RESPONSE_TOO_LARGE)
                                                 }
                                             }
-                                            // Refresh on ANY line, including an SSE comment (": ping"),
-                                            // which exists precisely to prove the stream is alive. Only
-                                            // refreshing on data:/blank made a keepalive-only socket look
-                                            // silent and killed a live stream at the idle deadline.
-                                            lastFrameAt = System.currentTimeMillis()
+                                            // Two different bounds, deliberately:
+                                            //
+                                            // - `readTimeout` (90 s) already catches a dead socket, because it
+                                            //   fires when one read returns nothing.
+                                            // - `lastFrameAt` tracks the last line that carried CONTENT (a data
+                                            //   field, or the blank line that dispatches a frame). A server that
+                                            //   drips `: ping` comments every 89 s keeps the socket and the watch
+                                            //   radio alive while the answer makes no progress; that is the case
+                                            //   this deadline exists to stop.
                                             if (System.currentTimeMillis() - lastFrameAt > streamIdleTimeoutMs) {
                                                 throw SafeProviderException(ProviderError.TIMEOUT)
                                             }

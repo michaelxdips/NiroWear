@@ -194,8 +194,11 @@ class AnthropicProvider(
     ) = Request
         .Builder()
         .url(url)
-        // Official Messages reference authenticates with x-api-key; `Authorization: Bearer` is the
-        // OAuth-token path only. Sending the API key as a bearer token is not the documented header.
+        // Both headers authenticate an API key. The API overview documents
+        // "Authorization: Bearer <key>" as primary ("required unless x-api-key is set") and
+        // "x-api-key" as a legacy fallback that is still supported; the get-started cURL example for
+        // the API-key tab uses x-api-key, which is why this adapter sends it, while the official SDKs
+        // send Bearer. Neither is wrong — do not "correct" one to the other without reading both.
         .header("x-api-key", secret.forRequest())
         .header("anthropic-version", ANTHROPIC_VERSION)
 }

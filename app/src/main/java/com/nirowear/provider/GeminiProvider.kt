@@ -120,9 +120,14 @@ class GeminiProvider(
         }
         val payload =
             buildJsonObject {
-                // No `store` field: that is an OpenAI Responses flag. GenerateContentRequest has no
-                // such member, and Google's REST layer rejects unknown fields with 400
-                // INVALID_ARGUMENT, which would fail every request.
+                // GenerateContentRequest.store is a real boolean: "Configures the logging behavior for
+                // a given request. If set, it takes precedence over the project-level logging config."
+                // It is absent from the published proto mirror and from ai.google.dev, which is how a
+                // previous audit wrongly concluded the field was illegal — it is in the deployed
+                // discovery schema, and an unauthenticated probe confirmed only genuinely unknown
+                // fields are rejected ("Unknown name ..."), while store parsed and reached auth.
+                // Chat text must not be retained upstream, so the opt-out is sent explicitly.
+                put("store", false)
                 if (request.systemInstruction.isNotBlank()) put("systemInstruction", content(request.systemInstruction))
                 put(
                     "contents",

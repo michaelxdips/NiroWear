@@ -58,9 +58,10 @@ The transport itself is plain HTTP and the handshake is not authenticated, so th
 
 **Math that covers the syllabus.** Greek letters, operators, calculus, set theory, logic, vectors, fractions, roots, powers, subscripts, integrals/sums/limits, matrices (`bmatrix`), cases, and aligned equations — natively typeset in release builds through JLaTeXMath (GPL v2-or-later **with an independent-module linking exception**, which is what permits linking it from MIT code; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and `assets/legal/`).
 
-**Searchable history.** History carries a full-text search over every stored message. It uses
-SQLite's built-in FTS5 — no dependency, no server, no extra permission — so old conversations stay
-findable without scrolling a 1.4-inch list.
+**Searchable history.** History carries a full-text search over every stored message. It is a plain
+SQLite `LIKE` scan with escaped wildcards — no dependency, no virtual table, no migration, no extra
+permission. FTS5 was tried first and measured impossible here: Android's bundled SQLite answers
+`no such module: fts5` on a Wear OS emulator, so an FTS index would have crashed the upgrade.
 
 **Watch-sized answers by default.** The system instruction asks for the shortest answer that keeps the required facts and caveats, and to expand when you ask for detail. The client never truncates a long answer to fit the screen.
 
@@ -156,7 +157,7 @@ Because setup happens **once**, a URL and a form are cheap. After that, the app 
 
 ## Architecture
 
-One application module, no over-engineering (27 Kotlin sources under `app/src/main`):
+One application module, no over-engineering (28 Kotlin sources under `app/src/main`):
 
 ```
 Wear Compose UI  →  ChatViewModel  →  LlmProvider adapter  →  OkHttp → provider
@@ -183,10 +184,10 @@ Every number below was read from a result file produced on this tree, not quoted
 
 | Check | Result (measured) | Where |
 |---|---|---|
-| JVM unit tests | 177 / 177, 0 failures, 0 errors, 0 skipped (38 suites) | `app/build/test-results/testDebugUnitTest/*.xml` |
-| Connected suite (emulator `NiroWear_Rebook_20261020`, destructive — not a CI gate) | 48 / 48, 0 failures, XML ts `2026-11-02T20:10:22` | `app/build/outputs/androidTest-results/connected/debug/*.xml` |
+| JVM unit tests | 178 / 178, 0 failures, 0 errors, 0 skipped (36 suites) | `app/build/test-results/testDebugUnitTest/*.xml` |
+| Connected suite (emulator `NiroWear_Rebook_20261020`, destructive — not a CI gate) | 48 / 48 last recorded 2026-11-02; **not re-run** for this revision | `app/build/outputs/androidTest-results/connected/debug/*.xml` |
 | Lint | 0 errors, 1 warning: `GradleDependency` (test runner 1.5.0→1.5.2) | `app/build/reports/lint-results-debug.xml` |
-| Release APK | `app-release.apk`, 3609553 B, SHA-256 `319AE1CF…34D71`, `com.nirowear` v10 / `0.1.0`, minSdk 30, targetSdk 37, non-debuggable | `app/build/outputs/apk/release/`, `output-metadata.json` |
+| Release APK | Source builds an **unsigned** `app-release-unsigned.apk`, 3589237 B, SHA-256 `66ABE409…BC6E`. The published `app-release.apk` (3609553 B, `319AE1CF…34D71`) is signed by the release pipeline, not by a local build. Both are `com.nirowear` v10 / `0.1.0`, minSdk 30, targetSdk 37 | `app/build/outputs/apk/release/`, `output-metadata.json` |
 | Signing identity | `CN=Android Debug`, SHA-256 `7D:4E:6E:99:…:AB:E3` (disclosed lineage) | `apksigner verify --print-certs`, release notes |
 | Fuzz probes | parser/SSE/UTF-8/hostile-LaTeX/zero-width-key corpus: 21/21 PASS, 3000-mutation run clean, 10 MB payload ~360 ms | throwaway harness, not shipped |
 | Live site | zero console errors (Edge + mobile shape), all links 200, numbers match release XML | [michaelxdips.github.io/NiroWear](https://michaelxdips.github.io/NiroWear/) |

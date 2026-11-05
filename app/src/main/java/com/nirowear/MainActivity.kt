@@ -252,12 +252,15 @@ private fun ChatReader(
                 messages.filter { it.conversationId == id }.associateWith { message ->
                     previous[message] ?: run {
                         val label =
-                            if (message.role ==
-                                "USER"
-                            ) {
+                            if (message.role == "USER") {
                                 "You · hold to edit"
                             } else {
-                                "${message.providerLabel} · ${message.modelId}"
+                                // Provenance is optional: a turn that failed before a profile was
+                                // resolved has neither field, and the old interpolation printed the
+                                // literal "null · null" under it.
+                                listOfNotNull(message.providerLabel, message.modelId)
+                                    .joinToString(" · ")
+                                    .ifBlank { "Answer" }
                             }
                         listOf(message.id to ContentBlock.Heading(4, listOf(InlineContent(label)))) +
                             ResponseParser.parse(message.rawContent).map { message.id to it } +
@@ -865,7 +868,10 @@ private fun ChatReader(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         if (chatState.generating && !renderLab) {
-                            if (chatState.generating) {
+                            // `unsaved` means the turn is over and only the save is retrying: there
+                            // is no stream to stop, and offering Stop there invited a cancel that
+                            // was reported as a storage failure.
+                            if (!chatState.unsaved) {
                                 if (!following) Spacer(Modifier.width(48.dp))
                                 Button(onClick = {
                                     chat.stop()
@@ -934,11 +940,12 @@ private fun ChatReader(
 }
 
 /**
- * History: recent conversations plus a full-text search over every message ever stored.
+ * History: recent conversations plus a search over every message ever stored.
  *
  * Search lives here rather than on a second screen because History already owns the round-screen
- * budget for a list, and a hit is just a conversation to open. FTS5 is native SQLite, so this costs no
- * dependency; `likeTerms` owns the escaping.
+ * budget for a list, and a hit is just a conversation to open. It is a SQLite `LIKE` scan
+ * (`likeTerms` escapes the wildcards), not FTS5: Android's bundled SQLite has no fts5 module, which
+ * was measured on a Wear emulator as `no such module: fts5`.
  */
 @Composable
 private fun HistoryScreen(

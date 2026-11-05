@@ -137,14 +137,6 @@ class OpenAiCompatibleProvider(
     }
 }
 
-private fun okio.BufferedSource.readUtf8LineStrictOrNull(limit: Long): String? {
-    if (exhausted()) return null
-    if (indexOf('\n'.code.toByte(), 0, limit + 1) == -1L && request(limit + 1)) {
-        throw SafeProviderException(ProviderError.RESPONSE_TOO_LARGE)
-    }
-    return readUtf8LineStrict(limit)
-}
-
 class SafeProviderException(
     val error: ProviderError,
 ) : Exception(error.userMessage)
@@ -159,10 +151,7 @@ fun httpError(code: Int): ProviderError =
         else -> ProviderError.HTTP
     }
 
-private fun networkError(error: IOException) =
-    if (error is SocketTimeoutException) ProviderError.TIMEOUT else ProviderError.NETWORK_UNAVAILABLE
-
-/** Compatible text subset: only finish_reason=stop proves successful completion. */
+/** Compatible text subset: only a documented finish_reason proves successful completion. */
 class CompatibleStreamDecoder {
     private var hasText = false
 

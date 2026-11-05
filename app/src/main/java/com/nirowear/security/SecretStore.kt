@@ -31,25 +31,39 @@ class SecretStore(
         ref: String,
         value: SecretValue,
     ) {
+        // Encrypt first, in its own failure domain. Only a crypto failure here means the key
+        // itself cannot do its job, and only that justifies replacing the key.
+        val iv: ByteArray
+        val encrypted: ByteArray
         try {
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
             cipher.init(Cipher.ENCRYPT_MODE, key(create = true))
             cipher.updateAAD(ref.toByteArray(Charsets.UTF_8))
             val plaintext = value.forRequest().toByteArray(Charsets.UTF_8)
-            val encrypted =
+            encrypted =
                 try {
                     cipher.doFinal(plaintext)
                 } finally {
                     plaintext.fill(0)
                 }
-            CredentialPromotionProbe.reached("CANDIDATE_ENCRYPTED")
-            check(cipher.iv.size == 12)
+            iv = cipher.iv
+            check(iv.size == 12)
+        } catch (error: Exception) {
+            invalidateKey()
+            throw CredentialUnavailable()
+        }
+        CredentialPromotionProbe.reached("CANDIDATE_ENCRYPTED")
+        // Filesystem failure is NOT a key failure. This used to sit inside the same catch-all, so a
+        // full disk or a failed mkdir destroyed the shared Keystore entry and every other profile's
+        // ciphertext became permanently undecryptable. Losing one save is recoverable; losing every
+        // provider's key is not.
+        try {
             check(directory.isDirectory || directory.mkdirs())
             val target = file(ref)
             val output = target.startWrite()
             try {
                 output.write(byteArrayOf(1))
-                output.write(cipher.iv)
+                output.write(iv)
                 CredentialPromotionProbe.reached("CANDIDATE_WRITING")
                 output.write(encrypted)
                 output.fd.sync()
@@ -59,7 +73,6 @@ class SecretStore(
                 throw error
             }
         } catch (_: Exception) {
-            invalidateKey()
             throw CredentialUnavailable()
         }
     }
@@ -68,7 +81,7 @@ class SecretStore(
     fun read(ref: String): SecretValue {
         // A missing payload (rotated-away or deleted ref) says nothing about the key: an
         // in-flight reader holding a stale ref must not nuke the live Keystore entry that
-        // siblings still decrypt with. Only crypto failure invalidates.
+        // siblings still decrypt with.
         if (!file(ref).baseFile.exists()) throw CredentialUnavailable()
         try {
             val payload = file(ref).readFully()
@@ -83,10 +96,12 @@ class SecretStore(
                 plaintext.fill(0)
             }
         } catch (_: Exception) {
-            // A cached handle can go stale if the key was invalidated (e.g. lock-screen change or
-            // device reset). Drop it so the next read re-loads and surfaces CredentialUnavailable,
-            // rather than repeatedly failing against a dead reference.
-            invalidateKey()
+            // ONE payload failing (truncated, bit-flipped, restored from another device, or a
+            // different format version) says nothing about the key. Deleting the shared entry here
+            // would make every OTHER profile undecryptable — permanent, since there is no plaintext
+            // fallback. Drop the cached handle so the next read re-loads it, and report this ref as
+            // unavailable; re-entry of that one key fixes it.
+            dropCachedKey()
             throw CredentialUnavailable()
         }
     }
@@ -145,7 +160,14 @@ class SecretStore(
         }
     }
 
-    /** Drop the cached handle AND the Keystore entry. Called on crypto failure. */
+    /** Drop the cached handle only. The Keystore entry stays: it may still protect other payloads. */
+    private fun dropCachedKey() {
+        synchronized(this) {
+            cachedKey = null
+        }
+    }
+
+    /** Drop the cached handle AND the Keystore entry. Only for a key that cannot encrypt at all. */
     private fun invalidateKey() {
         synchronized(this) {
             cachedKey = null

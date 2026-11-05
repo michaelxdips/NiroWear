@@ -110,10 +110,12 @@ object ResponseParser {
      * real answer uses but keeps the text.
      */
     private fun capContainers(line: String): String {
-        // A fence run owns the line: rewriting container bytes around it once mangled the opening
-        // fence of a deeply quoted code block, so the fence check below never fired and the code
-        // vanished into prose. The library handles deep nesting from here (see MAX_DEPTH).
-        if (line.contains("```") || line.contains("~~~")) return line
+        // No blanket fence exemption. It used to return the line untouched whenever it contained a
+        // fence run, which disabled the cap entirely for `">".repeat(200_000) + "```"`: the library
+        // then recursed 200k deep inside the library and threw StackOverflowError, an Error nothing
+        // upstream catches. The cap now runs for every line; at the cap the rest of the markers is
+        // collapsed by uncontainer (a loop, not recursion) and the remaining prefix becomes three
+        // spaces — the legal fence indent — so a deeply quoted fence still parses as a code block.
         var index = 0
         var depth = 0
         while (index < line.length) {
@@ -151,7 +153,14 @@ object ResponseParser {
             if (end < 0 || (needsSpace && end < line.length && line[end] != ' ')) break
             depth++
             index = if (end < line.length) end + 1 else line.length
-            if (depth >= MAX_CONTAINER_DEPTH) return " ".repeat(MAX_CONTAINER_DEPTH) + line.substring(index)
+            if (depth >= MAX_CONTAINER_DEPTH) {
+                // Drop the REST of the markers, not just the first 48: leaving them lets the library
+                // recurse exactly as far as before (`">".repeat(200_000)` is one marker run with no
+                // spaces, so uncontainer cannot split it). Three spaces of indent keeps a fence run
+                // that sat behind the markers parseable, which is what the deep-quote fence case
+                // needs.
+                return "   " + line.substring(index).trimStart('>', '-', '*', '+', ' ', '\t')
+            }
         }
         return line
     }
@@ -296,7 +305,13 @@ object ResponseParser {
         val fenceLines = mutableListOf<String>()
 
         fun replayFence() {
-            val lazy = fenceLines.any { isLazyFenceContent(it) }
+            // Strip container markers only if a CONTENT line proved them ornamental. The fence lines
+            // themselves must not vote: an opening "```yaml" is unmarked and unindented, so it always
+            // looked "lazy" and forced stripping for every top-level fence — which rewrote body lines
+            // like "- name: foo" or "+ added" into "name: foo" and "added". A YAML block, a diff or a
+            // Markdown example stopped reproducing its own input. A properly container-indented body
+            // is still left alone, because its lines are indented or marked.
+            val lazy = fenceLines.any { !isFenceRun(it) && isLazyFenceContent(it) }
             for (index in fenceLines.indices) {
                 val fenceLine = fenceLines[index]
                 markdown.appendLine(if (lazy) stripForReplay(fenceLine) else fenceLine)
@@ -423,6 +438,13 @@ object ResponseParser {
     }
 
     private fun children(node: Node): Sequence<Node> = generateSequence(node.firstChild) { it.next }
+
+    /** True when the line is itself a fence run, possibly behind container markers. */
+    private fun isFenceRun(line: String): Boolean {
+        val stripped = uncontainer(line)
+        if (FENCE.find(stripped) != null) return true
+        return line.contains("```") || line.contains("~~~")
+    }
 
     /** A content line that cannot continue a container: unindented, unmarked, non-blank. */
     private fun isLazyFenceContent(line: String): Boolean {

@@ -83,7 +83,11 @@ data class SearchHit(
 )
 
 /**
- * Case-insensitive substring search over stored message text.
+ * ASCII case-insensitive substring search over stored message text.
+ *
+ * "ASCII" is the honest bound: SQLite's LIKE folds case only for ASCII, so `café` does not match
+ * `Café`. Folding in Kotlin would need a normalised column and a migration; not worth it for search
+ * on a watch.
  *
  * Every term must appear somewhere in the message (implicit AND), which is what a person means by
  * typing two words. `%`, `_` and the escape character in the input are escaped, so a query for
@@ -144,7 +148,19 @@ interface ChatDao {
         baseUrl: String,
     ): List<StoredOpenAiPhases>
 
-    @Query("UPDATE messages SET rawContent = :text, status = :status, error = :error WHERE id = :id")
+    /**
+     * Streaming checkpoint.
+     *
+     * Guarded on the row still being STREAMING. `checkpoints?.cancelAndJoin()` orders the coroutine,
+     * not Room's submitted write: a cancel that lands inside an in-flight UPDATE cannot stop it, so a
+     * late checkpoint could commit AFTER `finish()` and leave the answer as a stale prefix marked
+     * STREAMING with its phase row already inserted. The WHERE clause makes the terminal write win
+     * regardless of commit order.
+     */
+    @Query(
+        "UPDATE messages SET rawContent = :text, status = :status, error = :error " +
+            "WHERE id = :id AND (:status != 'STREAMING' OR status = 'STREAMING')",
+    )
     suspend fun checkpoint(
         id: Long,
         text: String,
@@ -184,21 +200,38 @@ interface ChatDao {
     suspend fun recoverInterrupted()
 
     /**
-     * A turn that failed before any assistant row existed. The pending USER row stays (the user did
-     * ask), and this row carries the failure the reader shows, so the transcript and history do not
-     * imply an answer that never arrived.
+     * A turn that failed before any assistant row existed.
+     *
+     * Writes the USER row too, because that row is what makes the conversation a conversation: with
+     * only an ASSISTANT row and no prompt, the transcript had no question, the heading rendered
+     * "null · null", and Retry was dead forever ("No user message"). Provenance is recorded when a
+     * profile is known, so this row renders like any completed answer.
      */
     @Transaction
     suspend fun recordFailure(
         conversationId: String,
+        prompt: String?,
+        profile: com.nirowear.provider.ProviderProfile?,
         error: String?,
     ) {
+        // No duplicate check on the prompt. This function runs only when `admit()` never ran
+        // (ChatViewModel gates it on assistantId == null), and admit is what writes the USER row — so
+        // there is no row for this attempt. A text-equality check over the whole conversation was
+        // worse than useless: asking "continue" or "yes" a second time matched an OLDER identical
+        // message, skipped the insert, and hung the error row under a question the user had not just
+        // sent.
+        if (prompt != null) {
+            insertMessage(StoredMessage(conversationId = conversationId, role = "USER", rawContent = prompt))
+        }
         insertMessage(
             StoredMessage(
                 conversationId = conversationId,
                 role = "ASSISTANT",
                 rawContent = "",
                 status = "ERROR",
+                providerProfileId = profile?.id,
+                providerLabel = profile?.displayName,
+                modelId = profile?.selectedModelId,
                 error = error,
             ),
         )
