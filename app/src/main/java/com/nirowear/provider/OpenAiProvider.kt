@@ -247,11 +247,44 @@ internal class OpenAiStreamDecoder {
                 }
 
                 "response.incomplete" -> {
-                    // A response the API finished early (max_output_tokens, content filter) is a
-                    // truncation, not a broken stream. Text already arrived and is kept as SUCCESS, and
-                    // it is now reported as Truncated so the reader says the answer was cut instead of
-                    // presenting it as finished.
-                    listOf(StreamEvent.Truncated)
+                    // The API documents WHY it stopped in `response.incomplete_details.reason`:
+                    // max_output_tokens | max_messages | content_filter | steered. Treating all four as
+                    // "cut at the output limit" reported a CONTENT-FILTERED answer as a length cap, and a
+                    // zero-text incomplete produced an empty SUCCESS row with a note under it.
+                    val reason =
+                        root["response"]
+                            ?.jsonObject
+                            ?.get("incomplete_details")
+                            ?.jsonObject
+                            ?.get("reason")
+                            ?.jsonPrimitive
+                            ?.contentOrNull
+                    when (reason) {
+                        // The provider stopped for policy, not for length: same meaning as a
+                        // content-filtered finish in the compatible adapter.
+                        "content_filter" -> {
+                            listOf(StreamEvent.Failure(ProviderError.PROMPT_BLOCKED))
+                        }
+
+                        // Reaches here only over WebSocket in the reference SDK; SSE cannot steer, and
+                        // nothing was cut, so the answer stands as complete.
+                        "steered" -> {
+                            if (text.isNotEmpty()) {
+                                listOf(StreamEvent.Completed)
+                            } else {
+                                listOf(StreamEvent.Failure(ProviderError.PROTOCOL))
+                            }
+                        }
+
+                        // max_output_tokens / max_messages / anything newer: the answer was cut.
+                        else -> {
+                            if (text.isNotEmpty()) {
+                                listOf(StreamEvent.Truncated)
+                            } else {
+                                listOf(StreamEvent.Failure(ProviderError.PROTOCOL))
+                            }
+                        }
+                    }
                 }
 
                 "response.output_item.added", "response.output_item.done" -> {

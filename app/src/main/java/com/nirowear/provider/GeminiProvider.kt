@@ -254,10 +254,24 @@ internal class GeminiStreamDecoder {
                         add(if (hasText) StreamEvent.Truncated else StreamEvent.Failure(ProviderError.PROTOCOL))
                     }
 
-                    "SAFETY", "RECITATION", "BLOCKLIST", "PROHIBITED_CONTENT", "SPII" -> {
+                    "SAFETY", "RECITATION", "BLOCKLIST", "PROHIBITED_CONTENT", "SPII",
+                    "IMAGE_SAFETY", "IMAGE_PROHIBITED_CONTENT", "IMAGE_RECITATION",
+                    -> {
                         add(
                             if (hasText) StreamEvent.Completed else StreamEvent.Failure(ProviderError.PROMPT_BLOCKED),
                         )
+                    }
+
+                    // Reasons that ABORT a generation part-way. These were falling into the generic
+                    // branch and reported as Completed, so an answer that Gemini itself called
+                    // malformed, escalated or policy-limited was stored SUCCESS with no note — the same
+                    // undisclosed-cut class the Truncated event was added to remove. The text that
+                    // arrived is still kept (Failure preserves partial content).
+                    "MALFORMED_FUNCTION_CALL", "MALFORMED_RESPONSE", "MISSING_THOUGHT_SIGNATURE",
+                    "UNEXPECTED_TOOL_CALL", "TOO_MANY_TOOL_CALLS", "ESCALATION",
+                    "PUP_LIMITED_DISABLED",
+                    -> {
+                        add(StreamEvent.Failure(ProviderError.PROTOCOL))
                     }
 
                     else -> {

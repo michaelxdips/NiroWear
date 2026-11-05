@@ -261,6 +261,9 @@ class ChatViewModel(
                 var checkpoints: Job? = null
                 // Which profile this turn was aimed at, so a failure row still has provenance.
                 var usedProfile: com.nirowear.provider.ProviderProfile? = null
+                // Set when the turn was rejected BEFORE anything was sent or written, so the failure
+                // must not be recorded as an answer row in a conversation the user never touched.
+                var nothingSent = false
                 try {
                     if (newConversationId != null) {
                         dao.insertConversation(
@@ -286,13 +289,15 @@ class ChatViewModel(
                     if (editId != null) {
                         // Verify the target belongs to THIS conversation BEFORE mutating anything. An
                         // edit target can outlive its conversation (a restored screen state, or a
-                        // conversation switch that did not clear it); the failing `require` inside
-                        // dao.edit threw after the caller had already cleared the composer, so the
-                        // typed text was lost and a spurious ERROR row landed in the open conversation.
+                        // conversation switch that did not clear it), and the failing `require` inside
+                        // dao.edit threw after the caller had already cleared the composer.
                         val owned = dao.snapshot(conversationId).any { it.id == editId && it.role == "USER" }
                         if (!owned) {
-                            // Generic failure text, not "add a provider": the provider is fine, the
-                            // edit simply belongs to another conversation.
+                            // Nothing was sent and nothing was written, so this must NOT be recorded as a
+                            // failed turn: recording it put a phantom "Cannot send…" answer row into a
+                            // conversation the user never touched. The reason still reaches the UI
+                            // through chatState.error.
+                            nothingSent = true
                             error("Edit target is not part of this conversation")
                         }
                         dao.edit(conversationId, editId, requireNotNull(editedText))
@@ -493,7 +498,11 @@ class ChatViewModel(
                         // typed question gone while the reader still said "Stopped · partial answer
                         // kept"; an edit had already replaced the message and truncated everything after
                         // it, so the turn vanished and the next send appended USER,USER.
-                        if (assistantId == null) {
+                        //
+                        // `!nothingSent`: a turn rejected before anything was sent or written leaves no
+                        // trace in the conversation either — recording it wrote a phantom "Cannot send…"
+                        // answer into a conversation the user never touched.
+                        if (assistantId == null && !nothingSent) {
                             mutableState.value.conversationId?.let { id ->
                                 runCatching {
                                     dao.recordFailure(

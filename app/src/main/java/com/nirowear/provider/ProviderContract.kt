@@ -157,8 +157,16 @@ sealed interface StreamEvent {
     data object Truncated : StreamEvent
 }
 
-/** Shown under an answer that ended at the provider's output cap. */
-const val TRUNCATION_NOTE = "Answer reached the model's output limit and may be cut short."
+/**
+ * Shown under an answer that ended before it finished.
+ *
+ * Deliberately CAUSE-NEUTRAL. The first wording said "reached the model's output limit", which was
+ * untrue for Gemini's CONTINUATION: that finishReason returns a `continuationToken` to resume the
+ * generation, and this client never reads it, so the answer is genuinely incomplete but was NOT cut at
+ * a length limit. A wrong cause is worse than a general one — the reader only needs to know the answer
+ * is not the whole answer.
+ */
+const val TRUNCATION_NOTE = "Answer ended early and may be incomplete."
 
 sealed interface ModelDiscoveryResult {
     data class Models(
@@ -201,7 +209,14 @@ suspend fun LlmProvider.validateWithProbe(
     streamChat(ChatRequest(listOf(ChatMessage(ChatRole.USER, "Reply OK."))), profile, secret).collect {
         when (it) {
             StreamEvent.Completed -> error = null
+
+            // "Reply OK." cannot reach a length cap unless the cap is absurd, but a probe that
+            // answered and was merely cut DID prove credentials and reachability. Leaving this in
+            // `else` reported "Stream interrupted or unsupported" for a working provider.
+            StreamEvent.Truncated -> error = null
+
             is StreamEvent.Failure -> error = it.error
+
             else -> Unit
         }
     }
