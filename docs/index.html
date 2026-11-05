@@ -2637,7 +2637,7 @@ A failed decrypt is a generic rejection: the caller learns that the payload is n
             <dl style="margin:0">
               <div class="mrow"><dt>Protocol</dt><dd>Messages API · <code>POST {base}/messages</code></dd></div>
               <div class="mrow"><dt>Auth</dt><dd><code>x-api-key: &lt;key&gt;</code> plus <code>anthropic-version: 2026-10-21</code></dd></div>
-              <div class="mrow"><dt>Terminal event</dt><dd><b>message_stop</b> — reachable only after <code>message_delta</code> reported a <code>stop_reason</code> of <code>end_turn</code>, <code>stop_sequence</code> or <code>refusal</code>, and only if text was seen.</dd></div>
+              <div class="mrow"><dt>Terminal event</dt><dd><b>message_stop</b> — accepted for every documented <code>stop_reason</code>: <code>end_turn</code>, <code>max_tokens</code>, <code>stop_sequence</code>, <code>tool_use</code>, <code>pause_turn</code>, <code>refusal</code>, <code>model_context_window_exceeded</code>. Text is not required — a refusal, or a reply made only of thinking blocks, ends with none. An unrecognised reason still fails.</dd></div>
               <div class="mrow"><dt>Refuses to guess</dt><dd class="refuse"><code>max_tokens</code> is required, so it is read from the model's own metadata. It is never derived from a model name. When metadata is unavailable the code uses 8192 and says so in a comment — a fallback, not a documented default.</dd></div>
               <div class="mrow"><dt>Roles</dt><dd>Adjacent same-role turns are merged at the wire boundary; canonical history stays provider-neutral.</dd></div>
             </dl>

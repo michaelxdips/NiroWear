@@ -213,18 +213,19 @@ class ChatViewModel(
         mutableState.value = ChatState()
     }
 
-    fun send(prompt: String?) = generate(prompt)
+    /** True when the turn actually started, so the caller knows whether the text was accepted. */
+    fun send(prompt: String?): Boolean = generate(prompt)
 
     private fun generate(
         prompt: String?,
         editId: Long? = null,
         editedText: String? = null,
         retry: Boolean = false,
-    ) {
+    ): Boolean {
         if (prompt?.isBlank() == true || mutableState.value.unsaved || mutableState.value.generating ||
             generation?.isActive == true
         ) {
-            return
+            return false
         }
         // `open`/`newChat` refuse to run before init settles; a send must too. Without this a failed
         // init still created a conversation, observed it, then threw at `ready.await()`, so the user
@@ -232,7 +233,7 @@ class ChatViewModel(
         // a conversation row had in fact been written.
         if (initFailed || !ready.isCompleted) {
             mutableState.value = mutableState.value.copy(error = "History unavailable. No messages changed.")
-            return
+            return false
         }
         liveAnswer.value = null
         mutableState.value = mutableState.value.copy(generating = true, error = null, rawMarkdown = null)
@@ -479,14 +480,17 @@ class ChatViewModel(
                     }
                 }
             }
+        // The turn was accepted: the job owns the text from here.
+        return true
     }
 
+    /** True when the edit was accepted and the turn started. */
     fun edit(
         id: Long,
         text: String,
-    ) {
-        if (text.isBlank() || mutableState.value.conversationId == null) return
-        generate(null, id, text)
+    ): Boolean {
+        if (text.isBlank() || mutableState.value.conversationId == null) return false
+        return generate(null, id, text)
     }
 
     fun retry() {

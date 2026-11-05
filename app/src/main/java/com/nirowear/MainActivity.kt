@@ -79,7 +79,6 @@ import androidx.wear.compose.material3.Button
 import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.Text
 import com.nirowear.chat.ChatViewModel
-import com.nirowear.chat.MAX_RETAINED_CONVERSATIONS
 import com.nirowear.chat.ReaderAction
 import com.nirowear.chat.ReaderAnchor
 import com.nirowear.chat.coalesceDelayMs
@@ -461,24 +460,30 @@ private fun ChatReader(
                 Button(
                     onClick = {
                         if (draft.isNotBlank()) {
-                            editing = false
-                            renderLab = false
-                            sectionMenu = false
-                            following = true
-                            followNewConversation = chatState.conversationId == null
-                            val editing = editedId
-                            if (editing != null) {
-                                anchors.remove(chatState.conversationId)
-                                chat.edit(editing, draft)
-                            } else {
-                                chat.send(draft)
+                            val editTarget = editedId
+                            val started =
+                                if (editTarget != null) {
+                                    anchors.remove(chatState.conversationId)
+                                    chat.edit(editTarget, draft)
+                                } else {
+                                    chat.send(draft)
+                                }
+                            // Only clear when the ViewModel ACCEPTED the turn. Clearing
+                            // unconditionally (before it could report refusal) threw away the
+                            // user's typed question whenever a send was refused — a failed init,
+                            // an unsaved answer — and closed the editor over it.
+                            if (started) {
+                                editing = false
+                                renderLab = false
+                                sectionMenu = false
+                                following = true
+                                followNewConversation = chatState.conversationId == null
+                                // The text now lives in the conversation; leaving it in the single
+                                // draft slot pre-filled the next editor with the message just sent.
+                                draft = ""
+                                notice = ""
+                                editedId = null
                             }
-                            // The sent text now lives in the conversation. Leaving it in the single
-                            // draft slot meant reopening the editor pre-filled it with the message
-                            // that had just been sent, so the next send duplicated it.
-                            draft = ""
-                            notice = ""
-                            editedId = null
                         }
                     },
                     enabled = draft.isNotBlank() && !chatState.generating && !chatState.unsaved,

@@ -462,19 +462,28 @@ fun ProviderScreen(onBack: () -> Unit) {
                         message = ""
                         try {
                             val p = profile()
+                            // Snapshot what is actually being validated. The key field is NOT disabled
+                            // while busy, so it can change during the request — and this is a real
+                            // (billable) generation, so the result belongs to the snapshot, not to
+                            // whatever the fields hold when it returns.
+                            val inputKey = key
+                            val inputProfileId = edit?.id
                             val adapter = app.provider(p.type)
                             if (adapter == null) {
                                 message = "This provider type is not available in this build."
                                 return@launch
                             }
                             val error = adapter.validate(p, secret(p))
-                            // `validate` builds its profile at call time, so any input edited during
-                            // the request is already discarded. Re-reading it assumed the captured
-                            // SecretValue (a rejected key) never changed, which was untrue the
-                            // moment the user fixed it — and blamed untouched input for the failure.
+                            // Any field changed under the request invalidates its result. Without this
+                            // an edited key still got "Connected. Selected model generated
+                            // successfully." for the OLD key, and a brand-new profile is saved
+                            // without a replacement probe, so the never-validated key was persisted
+                            // under a success message and then failed with 401.
                             if (p.type != type || p.displayName != name.trim() ||
                                 p.baseUrl != Endpoints.normalize(base, BuildConfig.DEBUG) ||
-                                p.selectedModelId != model.trim()
+                                p.selectedModelId != model.trim() ||
+                                key != inputKey ||
+                                inputProfileId != edit?.id
                             ) {
                                 message = "Inputs changed. Validate current settings again."
                                 return@launch

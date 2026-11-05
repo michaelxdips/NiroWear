@@ -75,7 +75,11 @@ class ProviderSettings(
         mutex.withLock {
             withContext(Dispatchers.IO) {
                 val current = state.first()
-                if (current.error == null) secrets.cleanup(current.profiles.map { it.credentialRef }.toSet())
+                // Same rule as save(): refs of entries this build cannot parse are still referenced,
+                // so recover() must not delete their ciphertext either.
+                if (current.error == null) {
+                    secrets.cleanup(referencedCredentialRefs(store.data.first()[profilesKey] ?: "[]"))
+                }
             }
         }
 
@@ -146,9 +150,12 @@ class ProviderSettings(
                     try {
                         if (promoted && newSecret != null) CredentialPromotionProbe.reached("REFERENCE_PROMOTED")
                         if (!promoted && newSecret != null) secrets.delete(ref)
-                        secrets.cleanup(
-                            decode(store.data.first()[profilesKey] ?: "[]").map { it.credentialRef }.toSet(),
-                        )
+                        // Referenced refs, INCLUDING entries this build cannot parse: cleanup deletes
+                        // anything absent from this set, so a dropped entry must still count.
+                        secrets
+                            .cleanup(
+                                referencedCredentialRefs(store.data.first()[profilesKey] ?: "[]"),
+                            )
                         if (newSecret != null && promoted) CredentialPromotionProbe.reached("OLD_PAYLOAD_CLEANED")
                     } catch (error: Exception) {
                         if (!promoted) throw error
@@ -211,24 +218,49 @@ class ProviderSettings(
      */
     private fun decode(source: String): List<ProviderProfile> =
         Json.parseToJsonElement(source).jsonArray.mapNotNull { element ->
-            runCatching {
-                val p = element.jsonObject
-
-                fun field(name: String): String {
-                    val value = p.getValue(name).jsonPrimitive
-                    require(value.isString) { "Invalid profile field" }
-                    return value.content
-                }
-                val ref = field("credentialRef")
-                require(Regex("[a-f0-9-]{36}").matches(ref)) { "Invalid credential reference" }
-                ProviderProfile(
-                    field("id"),
-                    ProviderType.valueOf(field("type")),
-                    field("name"),
-                    field("base"),
-                    field("model"),
-                    ref,
-                )
-            }.getOrNull()
+            runCatching { decodeOne(element) }.getOrNull()
         }
+
+    private fun decodeOne(element: kotlinx.serialization.json.JsonElement): ProviderProfile {
+        val p = element.jsonObject
+
+        fun field(name: String): String {
+            val value = p.getValue(name).jsonPrimitive
+            require(value.isString) { "Invalid profile field" }
+            return value.content
+        }
+        val ref = field("credentialRef")
+        require(Regex("[a-f0-9-]{36}").matches(ref)) { "Invalid credential reference" }
+        return ProviderProfile(
+            field("id"),
+            ProviderType.valueOf(field("type")),
+            field("name"),
+            field("base"),
+            field("model"),
+            ref,
+        )
+    }
+}
+
+/**
+ * Every credential reference the stored document still mentions, including entries decode() dropped.
+ *
+ * This is what `SecretStore.cleanup` must be given. Cleanup DELETES ciphertext whose ref is absent, so
+ * handing it only the successfully decoded refs turned one malformed entry into permanent key loss on
+ * the next save of any provider — and there is no plaintext fallback. A ref that is mentioned in the
+ * document is still referenced, whether or not this build can parse its profile.
+ */
+internal fun referencedCredentialRefs(source: String): Set<String> {
+    val elements = Json.parseToJsonElement(source).jsonArray
+    val refs = mutableSetOf<String>()
+    for (element in elements) {
+        // Best-effort on the ref alone: it is the only field cleanup cares about, and it stays valid
+        // even when the rest of the entry cannot be decoded.
+        runCatching {
+            element.jsonObject
+                .getValue("credentialRef")
+                .jsonPrimitive.content
+        }.getOrNull()?.takeIf { Regex("[a-f0-9-]{36}").matches(it) }?.let { refs += it }
+    }
+    return refs
 }
