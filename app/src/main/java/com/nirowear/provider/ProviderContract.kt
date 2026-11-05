@@ -93,6 +93,7 @@ enum class ProviderError(
     TIMEOUT("Provider timed out. Partial answer kept."),
     RESPONSE_TOO_LARGE("Response exceeded watch safety limit. Partial answer kept."),
     PROTOCOL("Stream interrupted or unsupported. Partial answer kept."),
+    PROMPT_BLOCKED("Request blocked by the provider's safety filter. Rephrase it."),
     SERVER("Provider server error. Retry later."),
     HTTP("Provider rejected request. Check configuration."),
     CREDENTIAL_REENTRY("Secure credential unavailable. Re-enter API key."),

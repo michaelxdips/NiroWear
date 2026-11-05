@@ -177,16 +177,19 @@ internal class ProviderHttp(
                                                 }
                                             if (line.isEmpty()) {
                                                 if (dispatch()) return@launch
-                                                lastFrameAt = System.currentTimeMillis()
                                             } else if (line.startsWith("data:")) {
                                                 frame.append(line.removePrefix("data:").removePrefix(" ")).append('\n')
-                                                lastFrameAt = System.currentTimeMillis()
                                                 if (frame.length >
                                                     maxFrameBytes
                                                 ) {
                                                     throw SafeProviderException(ProviderError.RESPONSE_TOO_LARGE)
                                                 }
                                             }
+                                            // Refresh on ANY line, including an SSE comment (": ping"),
+                                            // which exists precisely to prove the stream is alive. Only
+                                            // refreshing on data:/blank made a keepalive-only socket look
+                                            // silent and killed a live stream at the idle deadline.
+                                            lastFrameAt = System.currentTimeMillis()
                                             if (System.currentTimeMillis() - lastFrameAt > streamIdleTimeoutMs) {
                                                 throw SafeProviderException(ProviderError.TIMEOUT)
                                             }

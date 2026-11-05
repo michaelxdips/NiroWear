@@ -67,12 +67,13 @@ data class StoredMessage(
 )
 
 /**
- * One FTS5 match.
+ * One search hit: a message whose text matched.
  *
- * A virtual table cannot be a Room entity, and Room's processor refuses a `@Query` against a table it
- * did not create, so search goes through [searchMessages] and the raw driver instead. The table, its
- * triggers and its backfill live in [ChatDatabase.MIGRATION_2_3]. FTS5 ships inside the platform
- * SQLite, so search costs no dependency.
+ * Search does not use FTS5. Measured on the Wear emulator (Android 14), Android's bundled SQLite
+ * answers `no such module: fts5` — it ships FTS3/FTS4 only — so an FTS table would crash the app on
+ * the very migration that creates it. A LIKE scan over the messages table is the portable option, and
+ * at this data size (one user's chat history) it is also the cheapest: no virtual table, no
+ * triggers, no migration, nothing to keep in sync.
  */
 data class SearchHit(
     val messageId: Long,
@@ -82,21 +83,27 @@ data class SearchHit(
 )
 
 /**
- * Full-text search over stored message text.
+ * Case-insensitive substring search over stored message text.
  *
- * Returns an empty list for a blank or unparseable expression rather than throwing: a search box must
- * never crash the screen, and FTS5 raises on malformed syntax.
+ * Every term must appear somewhere in the message (implicit AND), which is what a person means by
+ * typing two words. `%`, `_` and the escape character in the input are escaped, so a query for
+ * "100%" is a literal match and not a wildcard. Returns empty rather than throwing: a search box must
+ * never crash its screen.
  */
 fun ChatDatabase.searchMessages(
-    expression: String,
+    input: String,
     limit: Int = 40,
-): List<SearchHit> =
-    runCatching<List<SearchHit>> {
+): List<SearchHit> {
+    val terms = likeTerms(input)
+    if (terms.isEmpty()) return emptyList()
+    val where = terms.joinToString(" AND ") { "rawContent LIKE ? ESCAPE '\\'" }
+    val args = terms.map { "%$it%" }
+    return runCatching<List<SearchHit>> {
         openHelper.readableDatabase
             .query(
-                "SELECT rowid, conversationId, role, rawContent FROM messages_fts " +
-                    "WHERE messages_fts MATCH ? ORDER BY rank LIMIT ?",
-                arrayOf<Any?>(expression, limit),
+                "SELECT id, conversationId, role, rawContent FROM messages WHERE $where " +
+                    "ORDER BY id DESC LIMIT ?",
+                (args + limit.toString()).toTypedArray(),
             ).use { cursor ->
                 val hits = mutableListOf<SearchHit>()
                 while (cursor.moveToNext()) {
@@ -105,6 +112,7 @@ fun ChatDatabase.searchMessages(
                 hits
             }
     }.getOrElse { emptyList() }
+}
 
 @Dao
 interface ChatDao {
@@ -252,7 +260,7 @@ interface ChatDao {
 
 @Database(
     entities = [Conversation::class, StoredMessage::class, StoredOpenAiPhases::class],
-    version = 3,
+    version = 2,
     exportSchema = true,
 )
 abstract class ChatDatabase : RoomDatabase() {
@@ -264,41 +272,6 @@ abstract class ChatDatabase : RoomDatabase() {
                 override fun migrate(db: SupportSQLiteDatabase) {
                     db.execSQL(
                         "CREATE TABLE IF NOT EXISTS openai_phases (messageId INTEGER NOT NULL, profileId TEXT NOT NULL, modelId TEXT NOT NULL, baseUrl TEXT NOT NULL, phases TEXT NOT NULL, PRIMARY KEY(messageId), FOREIGN KEY(messageId) REFERENCES messages(id) ON UPDATE NO ACTION ON DELETE CASCADE)",
-                    )
-                }
-            }
-
-        /**
-         * Search index over message text, backfilled from existing rows, plus the triggers that keep
-         * it in step. A virtual table cannot be an ordinary entity, so the schema is raw SQL here and
-         * `SearchHit` only maps the SELECT results.
-         */
-        val MIGRATION_2_3 =
-            object : Migration(2, 3) {
-                override fun migrate(db: SupportSQLiteDatabase) {
-                    val columns = "rowid, conversationId, role, rawContent"
-                    db.execSQL(
-                        "CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(" +
-                            "conversationId UNINDEXED, role UNINDEXED, rawContent, " +
-                            "content='messages', content_rowid='id', tokenize='unicode61')",
-                    )
-                    // Backfill: the index only sees writes made after it exists. The triggers below
-                    // then keep every future insert and edit in step.
-                    db.execSQL(
-                        "INSERT INTO messages_fts($columns) " +
-                            "SELECT id, conversationId, role, rawContent FROM messages",
-                    )
-                    db.execSQL(
-                        "CREATE TRIGGER IF NOT EXISTS messages_fts_sync AFTER INSERT ON messages BEGIN " +
-                            "INSERT INTO messages_fts($columns) VALUES " +
-                            "(new.id, new.conversationId, new.role, new.rawContent); END",
-                    )
-                    db.execSQL(
-                        "CREATE TRIGGER IF NOT EXISTS messages_fts_edit AFTER UPDATE ON messages BEGIN " +
-                            "INSERT INTO messages_fts(messages_fts, $columns) VALUES " +
-                            "('delete', old.id, old.conversationId, old.role, old.rawContent); " +
-                            "INSERT INTO messages_fts($columns) VALUES " +
-                            "(new.id, new.conversationId, new.role, new.rawContent); END",
                     )
                 }
             }

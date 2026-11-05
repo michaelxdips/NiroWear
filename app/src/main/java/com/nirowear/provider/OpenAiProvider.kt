@@ -207,10 +207,6 @@ internal class OpenAiStreamDecoder {
                             response.getValue("output").jsonArray.forEach { element ->
                                 val item = element.jsonObject
                                 when (item.getValue("type").jsonPrimitive.content) {
-                                    "reasoning" -> {
-                                        Unit
-                                    }
-
                                     "message" -> {
                                         val phase = phase(item)
                                         var length = 0
@@ -218,11 +214,15 @@ internal class OpenAiStreamDecoder {
                                         require(item.getValue("status").jsonPrimitive.content == "completed")
                                         item.getValue("content").jsonArray.forEach { content ->
                                             val part = content.jsonObject
+                                            // Only output_text and refusal carry canonical text. Part
+                                            // types this build does not render (reasoning_text, ...)
+                                            // contribute nothing rather than failing the answer: the
+                                            // equality check below still catches text it missed.
                                             val visible =
                                                 when (part.getValue("type").jsonPrimitive.content) {
-                                                    "output_text" -> requireNotNull(part["text"].stringOrNull())
-                                                    "refusal" -> requireNotNull(part["refusal"].stringOrNull())
-                                                    else -> error("Unsupported content")
+                                                    "output_text" -> part["text"].stringOrNull().orEmpty()
+                                                    "refusal" -> part["refusal"].stringOrNull().orEmpty()
+                                                    else -> ""
                                                 }
                                             length += visible.length
                                             append(visible)
@@ -230,8 +230,12 @@ internal class OpenAiStreamDecoder {
                                         phases.add(OpenAiPhase(length, phase))
                                     }
 
+                                    // ResponseOutputItem is a large union (web_search_call,
+                                    // file_search_call, function_call, compaction, ...). Items other
+                                    // than a message carry no portable text, so they are skipped. The
+                                    // old `error("Unsupported item")` discarded a fully streamed answer.
                                     else -> {
-                                        error("Unsupported item")
+                                        Unit
                                     }
                                 }
                             }
@@ -253,25 +257,23 @@ internal class OpenAiStreamDecoder {
                 }
 
                 "response.incomplete" -> {
-                    listOf(StreamEvent.Failure(ProviderError.PROTOCOL))
+                    // A response the API finished early (max_output_tokens, content filter) is a
+                    // truncation, not a broken stream. Text already arrived and is kept; the reader
+                    // must not report it as an interruption.
+                    listOf(StreamEvent.Completed)
                 }
 
                 "response.output_item.added", "response.output_item.done" -> {
+                    // Informational for every item type; only a message carries the phase metadata
+                    // this client stores. Requiring an exact type set aborted legal streams.
                     val item = root.getValue("item").jsonObject
-                    require(item.getValue("type").jsonPrimitive.content in setOf("message", "reasoning"))
-                    if (item.getValue("type").jsonPrimitive.content == "message") phase(item)
+                    if (item["type"].stringOrNull() == "message") phase(item)
                     emptyList()
                 }
 
                 "response.content_part.added", "response.content_part.done" -> {
-                    require(
-                        root
-                            .getValue("part")
-                            .jsonObject
-                            .getValue("type")
-                            .jsonPrimitive.content in
-                            setOf("output_text", "refusal"),
-                    )
+                    // output_text, refusal and reasoning_text are all legal; only the first two are
+                    // rendered, and none of them may fail the stream.
                     emptyList()
                 }
 

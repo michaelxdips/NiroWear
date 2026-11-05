@@ -120,7 +120,9 @@ class GeminiProvider(
         }
         val payload =
             buildJsonObject {
-                put("store", false)
+                // No `store` field: that is an OpenAI Responses flag. GenerateContentRequest has no
+                // such member, and Google's REST layer rejects unknown fields with 400
+                // INVALID_ARGUMENT, which would fail every request.
                 if (request.systemInstruction.isNotBlank()) put("systemInstruction", content(request.systemInstruction))
                 put(
                     "contents",
@@ -209,29 +211,27 @@ internal class GeminiStreamDecoder {
                     }
                 return listOf(StreamEvent.Failure(mapped))
             }
-            if (root["promptFeedback"]?.jsonObject?.get("blockReason") !=
-                null
-            ) {
-                return listOf(StreamEvent.Failure(ProviderError.HTTP))
+            // `promptFeedback.blockReason` means the PROMPT was filtered, not that the request was
+            // malformed. `!= null` also matched JSON null, which is a legal absent value.
+            if (root["promptFeedback"]?.jsonObject?.get("blockReason")?.stringOrNull() != null) {
+                return listOf(StreamEvent.Failure(ProviderError.PROMPT_BLOCKED))
             }
             val candidates = root["candidates"]?.jsonArray ?: return emptyList()
             if (candidates.isEmpty()) return emptyList()
-            require(candidates.size == 1)
-            val candidate = candidates.single().jsonObject
-            require(candidate["index"]?.jsonPrimitive?.intOrNull in listOf(null, 0))
+            val candidate = candidates.first().jsonObject
             val text =
                 buildString {
                     candidate["content"]?.jsonObject?.let { content ->
+                        // role may legitimately be absent on a single-turn reply.
                         require(content["role"]?.jsonPrimitive?.contentOrNull in listOf(null, "model"))
                         content["parts"]?.jsonArray?.forEach { element ->
                             val part = element.jsonObject
-                            require(part.keys.all { it in setOf("text", "thought", "thoughtSignature") })
+                            // No key whitelist: Part has many documented members (inlineData,
+                            // fileData, functionCall, executableCode, ...). Requiring an exact set
+                            // turned one unrecognised-but-legal field into a failed answer. Only
+                            // text contributes canonical content; thought parts are not rendered.
                             if (part["thought"]?.jsonPrimitive?.booleanOrNull != true) {
-                                val value = part["text"]?.jsonPrimitive
-                                if (value != null) {
-                                    require(value.isString)
-                                    append(value.content)
-                                }
+                                part["text"].stringOrNull()?.let { append(it) }
                             }
                         }
                     }
@@ -240,9 +240,28 @@ internal class GeminiStreamDecoder {
             buildList {
                 if (text.isNotEmpty()) add(StreamEvent.TextDelta(text))
                 when (candidate["finishReason"]?.jsonPrimitive?.contentOrNull) {
-                    null, "FINISH_REASON_UNSPECIFIED" -> Unit
-                    "STOP" -> add(if (hasText) StreamEvent.Completed else StreamEvent.Failure(ProviderError.PROTOCOL))
-                    else -> add(StreamEvent.Failure(ProviderError.PROTOCOL))
+                    null, "FINISH_REASON_UNSPECIFIED" -> {
+                        Unit
+                    }
+
+                    // Truncation and content filters are terminal states, not framing faults. The
+                    // answer that arrived is kept as SUCCESS instead of being relabelled
+                    // "Stream interrupted" — the text is what the provider actually sent.
+                    // ponytail: a user-visible "cut at output limit" note needs a status value;
+                    // add it when the reader grows a truncation row.
+                    "STOP", "MAX_TOKENS", "CONTINUATION" -> {
+                        add(if (hasText) StreamEvent.Completed else StreamEvent.Failure(ProviderError.PROTOCOL))
+                    }
+
+                    "SAFETY", "RECITATION", "BLOCKLIST", "PROHIBITED_CONTENT", "SPII" -> {
+                        add(
+                            if (hasText) StreamEvent.Completed else StreamEvent.Failure(ProviderError.PROMPT_BLOCKED),
+                        )
+                    }
+
+                    else -> {
+                        add(if (hasText) StreamEvent.Completed else StreamEvent.Failure(ProviderError.PROTOCOL))
+                    }
                 }
             }
         } catch (_: Exception) {

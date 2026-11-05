@@ -28,6 +28,21 @@ import okhttp3.RequestBody.Companion.toRequestBody
 /** Pinned per the reference implementation; the API version header is exact, never "latest". */
 private const val ANTHROPIC_VERSION = "2026-10-21"
 
+/**
+ * Documented StopReason values. All of them end the message; only the presence of `message_stop`
+ * proves the stream completed, so none of these may be treated as a failure.
+ */
+private val KNOWN_STOP_REASONS =
+    setOf(
+        "end_turn",
+        "max_tokens",
+        "stop_sequence",
+        "tool_use",
+        "pause_turn",
+        "refusal",
+        "model_context_window_exceeded",
+    )
+
 class AnthropicProvider(
     client: OkHttpClient = providerHttpClient(),
     private val allowLocalHttp: Boolean = false,
@@ -276,19 +291,20 @@ internal class AnthropicStreamDecoder {
                         ?.jsonPrimitive
                         ?.contentOrNull
                         ?.let { reason = it }
-                    if (reason != null &&
-                        reason !in setOf("end_turn", "stop_sequence", "refusal")
-                    ) {
-                        listOf(StreamEvent.Failure(ProviderError.PROTOCOL))
-                    } else {
-                        emptyList()
-                    }
+                    // Every StopReason value is a documented terminal state, not a framing fault:
+                    // end_turn, max_tokens, stop_sequence, tool_use, pause_turn, refusal,
+                    // model_context_window_exceeded. Rejecting max_tokens (the common case once the
+                    // answer reaches the model's cap) relabelled a complete answer as
+                    // "Stream interrupted". Only a reason this build has never heard of is suspicious,
+                    // and message_stop still has the final word.
+                    emptyList()
                 }
 
                 "message_stop" -> {
-                    require(
-                        started && block == null && hasText && reason in setOf("end_turn", "stop_sequence", "refusal"),
-                    )
+                    // `hasText` is deliberately NOT required: a refusal, or a reply made only of
+                    // thinking blocks, legitimately ends with no text. message_stop plus a known
+                    // stop_reason is the protocol's own completion proof.
+                    require(started && block == null && reason in KNOWN_STOP_REASONS)
                     listOf(StreamEvent.Completed)
                 }
 

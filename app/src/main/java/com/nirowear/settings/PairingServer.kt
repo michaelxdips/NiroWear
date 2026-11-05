@@ -180,7 +180,11 @@ internal class PairingServer(
         body: ByteArray,
     ) {
         // Expiry is checked before the token so a late request cannot burn the session's only use.
-        if (clock() > deadline) return respond(client, 410, JSON, """{"ok":false}""")
+        // `>=`, not `>`: `deadline` is the instant the session stops being valid, so a request
+        // arriving exactly at it is late. With the strict form a zero-TTL session (and any request
+        // landing in the same clock tick as a real deadline) was still accepted — the test that
+        // drives a ttl of 0 got a 200 instead of a 410 whenever the clock had not ticked yet.
+        if (clock() >= deadline) return respond(client, 410, JSON, """{"ok":false}""")
         if (consumed) return respond(client, 401, JSON, """{"ok":false}""")
         val root =
             runCatching { Json.parseToJsonElement(String(body, Charsets.UTF_8)).jsonObject }.getOrNull()

@@ -84,11 +84,11 @@ import com.nirowear.chat.ReaderAction
 import com.nirowear.chat.ReaderAnchor
 import com.nirowear.chat.coalesceDelayMs
 import com.nirowear.chat.evictStaleConversations
-import com.nirowear.chat.ftsQuery
 import com.nirowear.chat.needsParse
 import com.nirowear.data.Conversation
 import com.nirowear.data.ProviderSettingsState
 import com.nirowear.data.SearchHit
+import com.nirowear.data.likeTerms
 import com.nirowear.data.searchMessages
 import com.nirowear.renderer.ContentBlock
 import com.nirowear.renderer.DocumentBlock
@@ -938,7 +938,7 @@ private fun ChatReader(
  *
  * Search lives here rather than on a second screen because History already owns the round-screen
  * budget for a list, and a hit is just a conversation to open. FTS5 is native SQLite, so this costs no
- * dependency; `ftsQuery` owns the escaping.
+ * dependency; `likeTerms` owns the escaping.
  */
 @Composable
 private fun HistoryScreen(
@@ -956,15 +956,14 @@ private fun HistoryScreen(
     var searched by remember { mutableStateOf("") }
     // Debounced so a fast typist does not issue one SQL query per keystroke on a watch.
     LaunchedEffect(query) {
-        val expression = ftsQuery(query)
-        if (expression == null) {
+        if (likeTerms(query).isEmpty()) {
             hits = emptyList()
             searched = ""
         } else {
             kotlinx.coroutines.delay(SEARCH_DEBOUNCE_MS)
             hits =
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    app.database.searchMessages(expression, SEARCH_LIMIT)
+                    app.database.searchMessages(query, SEARCH_LIMIT)
                 }
             searched = query
         }

@@ -1,18 +1,9 @@
 package com.nirowear.provider
 
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CoroutineStart
-import kotlinx.coroutines.DelicateCoroutinesApi
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.callbackFlow
-import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
@@ -24,25 +15,28 @@ import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
-import okhttp3.Call
-import okhttp3.Callback
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
-import okhttp3.Response
 import java.io.IOException
 import java.net.SocketTimeoutException
 
 private val jsonMedia = "application/json; charset=utf-8".toMediaType()
 
-// JSON escaping can use six wire bytes per UTF-16 unit; metadata keeps a fixed allowance.
-private const val MAX_COMPATIBLE_SSE_BYTES = 6 * MAX_RESPONSE_CHARS + 256 * 1024
-
+/**
+ * Generic [OI]-compatible Chat Completions adapter.
+ *
+ * HTTP framing, redirects, idle timeout and cancellation live in [ProviderHttp], shared with the
+ * three native adapters. This file used to carry its own copy of that loop; the copy drifted (its
+ * own hardcoded idle value, different EOF classification) and is gone.
+ */
 class OpenAiCompatibleProvider(
-    private val client: OkHttpClient = providerHttpClient(),
+    client: OkHttpClient = providerHttpClient(),
     private val allowLocalHttp: Boolean = false,
 ) : LlmProvider {
+    private val http = ProviderHttp(client)
+
     override suspend fun validate(
         profile: ProviderProfile,
         secret: SecretValue,
@@ -71,7 +65,7 @@ class OpenAiCompatibleProvider(
                 .header("Authorization", "Bearer ${secret.forRequest()}")
                 .build()
         return try {
-            val body = fetch(request)
+            val body = http.fetch(request)
             val ids =
                 Json
                     .parseToJsonElement(body)
@@ -85,9 +79,7 @@ class OpenAiCompatibleProvider(
             // ponytail: 10k discovered IDs; raise after watch picker/heap acceptance.
             require(ids.size <= 10_000)
             if (ids.isEmpty()) {
-                ModelDiscoveryResult.Unavailable(
-                    ProviderError.PROTOCOL,
-                )
+                ModelDiscoveryResult.Unavailable(ProviderError.PROTOCOL)
             } else {
                 ModelDiscoveryResult.Models(ids)
             }
@@ -100,7 +92,6 @@ class OpenAiCompatibleProvider(
         }
     }
 
-    @OptIn(DelicateCoroutinesApi::class)
     override fun streamChat(
         request: ChatRequest,
         profile: ProviderProfile,
@@ -133,7 +124,7 @@ class OpenAiCompatibleProvider(
                     },
                 )
             }
-        val httpRequest =
+        val wire =
             Request
                 .Builder()
                 .url(Endpoints.compatible(profile.baseUrl, "chat/completions", allowLocalHttp))
@@ -141,164 +132,9 @@ class OpenAiCompatibleProvider(
                 .header("Accept", "text/event-stream")
                 .post(payload.toString().toRequestBody(jsonMedia))
                 .build()
-        return callbackFlow {
-            val call = client.newCall(httpRequest)
-            var reader: Job? = null
-            call.enqueue(
-                object : Callback {
-                    override fun onFailure(
-                        call: Call,
-                        e: IOException,
-                    ) {
-                        if (!call.isCanceled()) trySend(StreamEvent.Failure(networkError(e)))
-                        close()
-                    }
-
-                    override fun onResponse(
-                        call: Call,
-                        response: Response,
-                    ) {
-                        if (!isActive) {
-                            response.close()
-                            return
-                        }
-                        // Enter try/finally before cancellation can skip coroutine body and leak response.
-                        reader =
-                            launch(Dispatchers.IO, start = CoroutineStart.ATOMIC) {
-                                try {
-                                    response.use {
-                                        if (!it.isSuccessful) {
-                                            send(StreamEvent.Failure(httpError(it.code)))
-                                            return@launch
-                                        }
-                                        if (!it
-                                                .header(
-                                                    "Content-Type",
-                                                ).orEmpty()
-                                                .startsWith("text/event-stream", ignoreCase = true)
-                                        ) {
-                                            send(StreamEvent.Failure(ProviderError.PROTOCOL))
-                                            return@launch
-                                        }
-                                        val source = it.body.source()
-                                        val decoder = CompatibleStreamDecoder()
-                                        val frame = StringBuilder()
-                                        var visibleChars = 0
-                                        var lastFrameAt = System.currentTimeMillis()
-
-                                        suspend fun dispatch(): Boolean {
-                                            if (frame.isEmpty()) return false
-                                            val events = decoder.accept(frame.toString().removeSuffix("\n"))
-                                            frame.clear()
-                                            for (event in events) {
-                                                if (event is StreamEvent.TextDelta) {
-                                                    if (event.text.length > MAX_RESPONSE_CHARS - visibleChars) {
-                                                        send(StreamEvent.Failure(ProviderError.RESPONSE_TOO_LARGE))
-                                                        return true
-                                                    }
-                                                    visibleChars += event.text.length
-                                                }
-                                                send(event)
-                                            }
-                                            return events.any { event ->
-                                                event is StreamEvent.Failure ||
-                                                    event == StreamEvent.Completed
-                                            }
-                                        }
-                                        while (isActive) {
-                                            val line =
-                                                source.readUtf8LineStrictOrNull(MAX_COMPATIBLE_SSE_BYTES.toLong())
-                                                    ?: break
-                                            if (line.isEmpty()) {
-                                                if (dispatch()) return@launch
-                                                lastFrameAt = System.currentTimeMillis()
-                                            } else if (line.startsWith("data:")) {
-                                                frame.append(line.removePrefix("data:").removePrefix(" ")).append('\n')
-                                                lastFrameAt = System.currentTimeMillis()
-                                                if (frame.length >
-                                                    MAX_COMPATIBLE_SSE_BYTES
-                                                ) {
-                                                    throw SafeProviderException(ProviderError.RESPONSE_TOO_LARGE)
-                                                }
-                                            }
-                                            if (System.currentTimeMillis() - lastFrameAt > 120_000L) {
-                                                throw SafeProviderException(ProviderError.TIMEOUT)
-                                            }
-                                        }
-                                        // EOF is never promoted. A complete final frame still requires semantic stop.
-                                        if (!dispatch()) send(StreamEvent.Failure(ProviderError.PROTOCOL))
-                                    }
-                                } catch (cancelled: CancellationException) {
-                                    throw cancelled
-                                } catch (error: Exception) {
-                                    if (isActive && !call.isCanceled()) {
-                                        send(
-                                            StreamEvent.Failure(
-                                                if (error is SafeProviderException) {
-                                                    error.error
-                                                } else if (error is IOException) {
-                                                    networkError(error)
-                                                } else {
-                                                    ProviderError.PROTOCOL
-                                                },
-                                            ),
-                                        )
-                                    }
-                                } finally {
-                                    response.close()
-                                    close()
-                                }
-                            }
-                    }
-                },
-            )
-            awaitClose {
-                call.cancel()
-                reader?.cancel()
-            }
-        }
+        // A fresh decoder per collection: it is stateful (hasText across frames).
+        return flow { emitAll(http.stream(wire, CompatibleStreamDecoder()::accept)) }
     }
-
-    private suspend fun fetch(request: Request): String =
-        suspendCancellableCoroutine { continuation ->
-            val call = client.newCall(request)
-            continuation.invokeOnCancellation { call.cancel() }
-            call.enqueue(
-                object : Callback {
-                    override fun onFailure(
-                        call: Call,
-                        e: IOException,
-                    ) {
-                        if (continuation.isActive) {
-                            continuation.resumeWith(
-                                Result.failure(SafeProviderException(networkError(e))),
-                            )
-                        }
-                    }
-
-                    override fun onResponse(
-                        call: Call,
-                        response: Response,
-                    ) {
-                        val result =
-                            runCatching {
-                                response.use {
-                                    if (!it.isSuccessful) throw SafeProviderException(httpError(it.code))
-                                    val source = it.body.source()
-                                    if (source.request(
-                                            1024 * 1024 + 1L,
-                                        )
-                                    ) {
-                                        throw SafeProviderException(ProviderError.PROTOCOL)
-                                    }
-                                    source.readUtf8()
-                                }
-                            }
-                        if (continuation.isActive) continuation.resumeWith(result)
-                    }
-                },
-            )
-        }
 }
 
 private fun okio.BufferedSource.readUtf8LineStrictOrNull(limit: Long): String? {
@@ -370,7 +206,11 @@ class CompatibleStreamDecoder {
                     // `== null` check threw on the very first chunk and turned the whole answer
                     // into "Stream interrupted". The next require already used the right form.
                     require(
-                        listOf(delta["tool_calls"], delta["function_call"]).all { it == null || it == JsonNull },
+                        // An empty array is legal JSON for "no tool call"; only a non-empty one is
+                        // genuinely unrenderable here.
+                        listOf(delta["tool_calls"], delta["function_call"]).all {
+                            it == null || it == JsonNull || (it as? JsonArray)?.isEmpty() == true
+                        },
                     )
                     require(
                         listOf(delta["content"], delta["refusal"], choice["finish_reason"]).all {
@@ -382,14 +222,28 @@ class CompatibleStreamDecoder {
                     if (!text.isNullOrEmpty()) hasText = true
                     buildList {
                         if (!text.isNullOrEmpty()) add(StreamEvent.TextDelta(text))
+                        // `length` is the documented "hit the output cap" reason. That answer is
+                        // finished, not interrupted — the text is exactly what the provider sent — so
+                        // it completes instead of becoming an ERROR row. tool_calls/function_call are
+                        // genuinely unrenderable here, and content_filter stopped on policy.
                         when (finish) {
                             null -> {
                                 Unit
                             }
 
-                            "stop" -> {
+                            "stop", "length" -> {
                                 add(
                                     if (hasText) StreamEvent.Completed else StreamEvent.Failure(ProviderError.PROTOCOL),
+                                )
+                            }
+
+                            "content_filter" -> {
+                                add(
+                                    if (hasText) {
+                                        StreamEvent.Completed
+                                    } else {
+                                        StreamEvent.Failure(ProviderError.PROMPT_BLOCKED)
+                                    },
                                 )
                             }
 
