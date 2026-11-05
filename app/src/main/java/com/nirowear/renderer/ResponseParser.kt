@@ -269,9 +269,20 @@ object ResponseParser {
         val markers =
             raw
                 .substring(0, raw.length - content.length)
-                .map { if (it.isDigit() || it in ">.-*+)") ' ' else it }
-                .joinToString("")
-        val indent = content.takeWhile { it == ' ' }.length.coerceAtMost(3)
+                // A quote marker stays a quote marker: masking it to a space made "> |a|b|" and
+                // "- |---|---|" compare EQUAL, so a quote header over a list delimiter — which the
+                // library parses as a quote and a list, not a table — queued a phantom count that the
+                // next real table popped, and that table's hidden cells went unannounced.
+                .map {
+                    if (it == '>') {
+                        it
+                    } else if (it.isDigit() || it in ".-*+)") {
+                        ' '
+                    } else {
+                        it
+                    }
+                }.joinToString("")
+        val indent = content.takeWhile { it == ' ' }.length
         return markers + " ".repeat(indent)
     }
 
@@ -328,29 +339,49 @@ object ResponseParser {
         var index = 0
         var fence: Char? = null
         var fenceLength = 0
+        var fenceNested = false
+        // Mirror of the parser's list tracking: indentation is relative to the enclosing item, so a
+        // table indented past an item's content indent is a valid list continuation, not the indented
+        // code block it looks like at top level.
+        var listIndent = 0
         while (index < lines.size) {
             val raw = lines[index]
             val line = uncontainer(raw)
+            val contentLeading = line.length - line.trimStart(' ').length
+            val markerIndent = listMarkerContentIndent(raw)
+            if (markerIndent != null) {
+                listIndent = markerIndent
+            } else if (line.isNotBlank() && contentLeading < listIndent) {
+                listIndent = 0
+            }
+            val view =
+                if (listIndent > 0 && contentLeading >= listIndent) line.substring(listIndent) else line
+            val rawLeading = raw.length - raw.trimStart(' ').length
+            val listView = if (listIndent > 0 && rawLeading >= listIndent) raw.substring(listIndent) else raw
             if (fence == null) {
                 // OPEN detection tolerates container markers: replayFence leaves them in place when the
                 // body was properly marked, so a fence can reach this point as "> ```".
-                val opener = FENCE.find(raw) ?: FENCE.find(line)
+                val opener = FENCE.find(raw) ?: FENCE.find(view)
                 if (opener != null) {
                     fence = opener.groupValues[1].first()
                     fenceLength = opener.groupValues[1].length
+                    fenceNested = view != raw
                     index++
                     continue
                 }
             } else {
-                // CLOSE detection uses the RAW line only, exactly like CommonMark. A fence body is
-                // literal, so a content line "> ```" must not close it. This used to run on the
-                // stripped line, which closed a top-level block early, reopened a fence on the real
-                // closer, and skipped EVERY later table — so no overflow notice was ever shown again.
-                val closer = FENCE.find(raw)
+                // CLOSE detection mirrors the parser's rule: a top-level fence body is literal, so a
+                // content line "> ```" must not close it, while a fence that opened behind a container
+                // marker or a list indent closes on the same stripped form it opened with. Close ran on
+                // the RAW line only, so a properly marked quoted fence (which the parser replays raw)
+                // opened a fence here that never closed: every later table in the chunk queued nothing
+                // and a clamped table reported no hidden cells.
+                val closer = if (fenceNested) FENCE.find(view) else FENCE.find(raw) ?: FENCE.find(listView)
                 if (closer != null) {
                     val run = closer.groupValues[1]
                     if (run.first() == fence && run.length >= fenceLength && closer.groupValues[2].isBlank()) {
                         fence = null
+                        fenceNested = false
                     }
                 }
                 index++
@@ -363,15 +394,17 @@ object ResponseParser {
             val key = containerKey(raw)
             // Four spaces of content indentation starts an INDENTED CODE BLOCK, which CommonMark
             // never turns into a table. Counting it queued a phantom that the next real table then
-            // reported, so a clean table claimed hidden cells.
-            val indent = line.length - line.trimStart(' ').length
+            // reported, so a clean table claimed hidden cells. Measured RELATIVE to the enclosing list
+            // item, because four columns under a bullet are a list continuation and DO become a table.
+            val indent = contentLeading
+            val relativeIndent = if (listIndent > 0) (indent - listIndent).coerceAtLeast(0) else indent
             val delimiterRaw = if (index + 1 < lines.size) lines[index + 1] else ""
             val delimiter = uncontainer(delimiterRaw)
             val headerCells = if (line.contains('|')) splitTableRow(line) else emptyList()
             // GFM also requires the delimiter row to have exactly as many cells as the header; without
             // that check a header over a shorter delimiter row was counted although the library parses
             // it as a paragraph.
-            if (indent >= 4 ||
+            if (relativeIndent >= 4 ||
                 headerCells.isEmpty() ||
                 containerKey(delimiterRaw) != key ||
                 !isDelimiterRow(delimiter) ||
@@ -388,7 +421,9 @@ object ResponseParser {
                 val nextLine = uncontainer(nextRaw)
                 // A row only belongs to this table if it sits in the same container.
                 if (containerKey(nextRaw) != key) break
-                if (nextLine.length - nextLine.trimStart(' ').length >= 4) break
+                val nextIndent = nextLine.length - nextLine.trimStart(' ').length
+                val nextRelative = if (listIndent > 0) (nextIndent - listIndent).coerceAtLeast(0) else nextIndent
+                if (nextRelative >= 4) break
                 if (FENCE.find(nextRaw) != null || !nextLine.contains('|') || isDelimiterRow(nextLine)) break
                 total += (splitTableRow(nextLine).size - width).coerceAtLeast(0)
                 index++
@@ -406,6 +441,9 @@ object ResponseParser {
         var fence: Char? = null
         var fenceLength = 0
         var fenceNested = false
+        // Whether the OPEN fence sat behind a container marker. `fenceNested` is cleared at close,
+        // before the run is replayed, so the replay decision needs its own copy.
+        var fenceOpenedBehindContainer = false
         var mathPrefix = ""
         // Container prefix (`"> "`, `"- "`) the display math was opened behind, kept for the whole
         // block so continuation lines do not put stray markers into the equation source.
@@ -422,13 +460,15 @@ object ResponseParser {
         val fenceLines = mutableListOf<String>()
 
         fun replayFence() {
-            // Strip container markers only if a CONTENT line proved them ornamental. The fence lines
-            // themselves must not vote: an opening "```yaml" is unmarked and unindented, so it always
-            // looked "lazy" and forced stripping for every top-level fence — which rewrote body lines
-            // like "- name: foo" or "+ added" into "name: foo" and "added". A YAML block, a diff or a
-            // Markdown example stopped reproducing its own input. A properly container-indented body
-            // is still left alone, because its lines are indented or marked.
-            val lazy = fenceLines.any { !isFenceRun(it) && isLazyFenceContent(it) }
+            // Strip container markers only if the fence sat BEHIND one and a CONTENT line proved them
+            // ornamental. A top-level fence has no container to strip: `steps:` is a lazy content line,
+            // and letting it vote stripped the list markers out of every marked line of the SAME body —
+            // "```\nsteps:\n- build\n```" rendered as "build", i.e. the watch showed different code than
+            // the model sent. The fence lines themselves must not vote either: an opening "```yaml" is
+            // unmarked and unindented, so it always looked lazy and forced stripping for every top-level
+            // fence. A properly container-indented body is still left alone, because its lines are
+            // indented or marked.
+            val lazy = fenceOpenedBehindContainer && fenceLines.any { !isFenceRun(it) && isLazyFenceContent(it) }
             for (index in fenceLines.indices) {
                 val fenceLine = fenceLines[index]
                 // A fence-looking line is stripped only at the BOUNDARIES — the opener or closer of a
@@ -499,28 +539,60 @@ object ResponseParser {
                 // for detection only, the lines themselves buffer raw in `fenceLines`.
                 val container = uncontainer(rest)
                 val inFence = fence != null
+                // Indentation is measured RELATIVE to the enclosing list item — the same rule the
+                // display-math test below uses, and it has to run BEFORE fence detection. Anchored on
+                // the raw line, a fence indented past the item's content indent was invisible
+                // ("    ```" is four columns, which FENCE rejects), yet CommonMark builds that fence:
+                // its `$$`/`\[` body lines were then torn out as display math, so the sample rendered
+                // as an empty code block, a formula and a stray "```". Any fence inside a nested list
+                // hit this.
+                val contentLeading = container.length - container.trimStart(' ').length
+                val markerIndent = listMarkerContentIndent(rest)
+                if (markerIndent != null) {
+                    listContentIndent = markerIndent
+                } else if (container.isNotBlank() && contentLeading < listContentIndent) {
+                    // A less-indented content line ends the list.
+                    listContentIndent = 0
+                }
+                val view =
+                    if (listContentIndent > 0 && contentLeading >= listContentIndent) {
+                        container.substring(listContentIndent)
+                    } else {
+                        container
+                    }
+                // The same strip on the RAW line, quote markers included. Close detection for a
+                // top-level fence must see the raw bytes (a body line "> ```" is literal content and
+                // must not close the block), but a list-indented fence only closes once its list
+                // indentation — not its quotes — has been removed.
+                val rawLeading = rest.length - rest.trimStart(' ').length
+                val listView =
+                    if (listContentIndent > 0 && rawLeading >= listContentIndent) {
+                        rest.substring(listContentIndent)
+                    } else {
+                        rest
+                    }
                 // A hostile `>` run without spaces is not a container uncontainer() strips, so a
                 // fence buried behind one was never detected. Only the fence hunt gets this
                 // fallback; quote parsing still sees the raw line.
                 val fenced =
-                    if (FENCE.find(container) == null &&
+                    if (FENCE.find(view) == null &&
                         (rest.contains("```") || rest.contains("~~~"))
                     ) {
-                        container.replaceFirst(DEEP_QUOTE, "")
+                        view.replaceFirst(DEEP_QUOTE, "")
                     } else {
-                        container
+                        view
                     }
                 // Close detection runs on the STRIPPED line only for a fence opened behind a
-                // container, and on the raw line otherwise: a top-level fence body is literal, so a
-                // content line "> ```" must not close it, while a fence inside a quote or list closes
-                // on its marker line even when that line's prefix differs from the opener's
-                // ("> - ```" opens, ">   ```" closes).
+                // container, and on the list-relative view otherwise: a top-level fence body is
+                // literal, so a content line "> ```" must not close it, while a fence inside a quote
+                // or list closes on its marker line even when that line's prefix differs from the
+                // opener's ("> - ```" opens, ">   ```" closes).
                 //
                 // `fenced`, not `container`: a GLUED quote run (">```", ">>```") is not something
                 // uncontainer() strips — it needs the DEEP_QUOTE fallback. Using `container` here made
                 // a quoted code block open and never close, so the block rendered empty and its body
                 // spilled out as prose.
-                val fenceBody = if (fenceNested) fenced else rest
+                val fenceBody = if (fenceNested) fenced else listView
                 if (fence != null) {
                     FENCE.find(fenceBody)?.let { match ->
                         val run = match.groupValues[1]
@@ -538,23 +610,12 @@ object ResponseParser {
                         // without that check made this true for every fence (replaceFirst returns the
                         // input unchanged when it matches nothing, and FENCE matches that line), so the
                         // raw-line branch was dead code.
-                        val deep = rest.replaceFirst(DEEP_QUOTE, "")
-                        fenceNested = uncontainer(rest) != rest || (deep != rest && FENCE.find(deep) != null)
+                        val deep = view.replaceFirst(DEEP_QUOTE, "")
+                        fenceNested = uncontainer(rest) != rest || (deep != view && FENCE.find(deep) != null)
+                        fenceOpenedBehindContainer = fenceNested
                     }
                 }
                 val trimmed = container.trimStart()
-                // Indentation is measured RELATIVE to the enclosing list item. Four spaces is an
-                // indented code block at top level, but inside a list item whose content indent is 3
-                // the same four columns are ordinary prose — so `    $$x$$` under "1. item" used to
-                // render as the literal text "$$x$$" instead of a formula.
-                val contentLeading = container.length - container.trimStart(' ').length
-                val markerIndent = listMarkerContentIndent(rest)
-                if (markerIndent != null) {
-                    listContentIndent = markerIndent
-                } else if (container.isNotBlank() && contentLeading < listContentIndent) {
-                    // A less-indented content line ends the list.
-                    listContentIndent = 0
-                }
                 val relativeIndent =
                     if (listContentIndent > 0) (contentLeading - listContentIndent).coerceAtLeast(0) else contentLeading
                 val indented =

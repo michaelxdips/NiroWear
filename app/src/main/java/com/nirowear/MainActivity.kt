@@ -389,8 +389,11 @@ private fun ChatReader(
     val dragging by listState.interactionSource.collectIsDraggedAsState()
     var userScrolled by remember { mutableStateOf(false) }
     LaunchedEffect(dragging) {
-        if (dragging && !sectionMenu && !historyScreen && !providerScreen &&
-            !renderLab
+        // Detach only when the drag can actually move the list backwards, the same guard the crown
+        // uses. A drag on a conversation that fits on screen scrolled nothing, yet it hid `following`
+        // and raised the "Jump to latest" arrow over an unmoved reader.
+        if (dragging && !sectionMenu && !historyScreen && !providerScreen && !renderLab &&
+            listState.canScrollBackward
         ) {
             following = false
             followNewConversation = false
@@ -454,6 +457,7 @@ private fun ChatReader(
             HistoryScreen(
                 conversations = conversations,
                 generating = chatState.generating,
+                unsaved = chatState.unsaved,
                 currentId = chatState.conversationId,
                 onBack = { historyScreen = false },
                 onSelect = { id, messageId ->
@@ -1006,9 +1010,12 @@ private fun ChatReader(
                                 Modifier
                                     .size(48.dp)
                                     .semantics { contentDescription = "Keyboard input" }
-                                    // Re-entry keeps an unsent draft: Back out of the editor is not a discard. It also
-                                    // keeps the edit TARGET — clearing it turned a resumed edit into a
-                                    // second copy of the same question appended to the conversation.
+                                    // Re-entry keeps an unsent DRAFT: Back out of the editor is not a
+                                    // discard. The re-entry also DROPS a pending edit target —
+                                    // `editText` and `editedId` are cleared together, so a stale
+                                    // edit body can never reappear as a fresh message. (The previous
+                                    // comment claimed the target was kept; the line below contradicts
+                                    // it, and the code is the intended behaviour.)
                                     .clickable(role = Role.Button, onClick = {
                                         saveReaderPosition()
                                         // The keyboard always composes the DRAFT. `editText` and
@@ -1079,6 +1086,10 @@ private fun ChatReader(
 private fun HistoryScreen(
     conversations: List<Conversation>,
     generating: Boolean,
+    // `open`/`newChat` refuse while an answer is unsaved. The list used to stay enabled anyway, so a
+    // tap closed History, changed nothing, and took the search text with it — a dead tap over a
+    // reader that never moved. The menu's own New chat button was fixed for exactly this.
+    unsaved: Boolean,
     currentId: String?,
     onBack: () -> Unit,
     onSelect: (String?, Long?) -> Unit,
@@ -1147,7 +1158,11 @@ private fun HistoryScreen(
             )
         }
         item {
-            Button(enabled = !generating, onClick = { onSelect(null, null) }, modifier = Modifier.fillMaxWidth()) {
+            Button(
+                enabled = !generating && !unsaved,
+                onClick = { onSelect(null, null) },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
                 Text("New chat")
             }
         }
@@ -1158,7 +1173,7 @@ private fun HistoryScreen(
                 // Same guard as the conversation rows: opening during generation is refused by the
                 // ViewModel, and closing History anyway looked like a dead tap that lost the search.
                 Button(
-                    enabled = !generating,
+                    enabled = !generating && !unsaved,
                     onClick = { onSelect(hit.conversationId, hit.messageId) },
                     modifier = Modifier.fillMaxWidth(),
                 ) {
@@ -1172,7 +1187,7 @@ private fun HistoryScreen(
         } else {
             items(conversations, key = { it.id }) { conversation ->
                 androidx.wear.compose.material3.OutlinedButton(
-                    enabled = !generating || conversation.id == currentId,
+                    enabled = (!generating || conversation.id == currentId) && !unsaved,
                     onClick = { onSelect(conversation.id, null) },
                     modifier = Modifier.fillMaxWidth(),
                 ) { Text(conversation.title) }

@@ -59,6 +59,16 @@ private const val CHECKPOINT_INTERVAL_MS = 400L
 /** Attempts before history gives up and shows the error: 1 s, 2 s, 4 s, then stop. */
 private const val MAX_HISTORY_RETRIES = 3L
 
+/**
+ * A turn refused before anything was sent or written, carrying the message to show. It exists
+ * because a bare `error(...)`/`check(...)` throws IllegalStateException, which the generic catch
+ * turned into "Cannot send. Check provider setup or local storage." — so a stale edit target told
+ * the user their provider was misconfigured and their edited text was gone with no explanation.
+ */
+private class TurnRefused(
+    override val message: String,
+) : Exception(message)
+
 data class ChatState(
     val rawMarkdown: String? = null,
     val generating: Boolean = false,
@@ -298,7 +308,7 @@ class ChatViewModel(
                             // conversation the user never touched. The reason still reaches the UI
                             // through chatState.error.
                             nothingSent = true
-                            error("Edit target is not part of this conversation")
+                            throw TurnRefused("That message is no longer in this chat. Send it again.")
                         }
                         dao.edit(conversationId, editId, requireNotNull(editedText))
                     }
@@ -430,6 +440,8 @@ class ChatViewModel(
                 } catch (cancelled: CancellationException) {
                     terminal = "STOPPED"
                     throw cancelled
+                } catch (refused: TurnRefused) {
+                    failure = refused.message
                 } catch (_: CredentialUnavailable) {
                     failure = ProviderError.CREDENTIAL_REENTRY.userMessage
                 } catch (error: SafeProviderException) {
@@ -502,7 +514,12 @@ class ChatViewModel(
                         // `!nothingSent`: a turn rejected before anything was sent or written leaves no
                         // trace in the conversation either — recording it wrote a phantom "Cannot send…"
                         // answer into a conversation the user never touched.
-                        if (assistantId == null && !nothingSent) {
+                        //
+                        // Sends only (`editId == null && !retry`): an edit or a retry that was stopped
+                        // before its own truncate ran has changed NOTHING, so recording a failure row
+                        // appended an empty "Stopped before…" answer under the finished answer that is
+                        // still there. The transient error already says what happened.
+                        if (assistantId == null && !nothingSent && editId == null && !retry) {
                             mutableState.value.conversationId?.let { id ->
                                 runCatching {
                                     dao.recordFailure(
