@@ -58,6 +58,10 @@ The transport itself is plain HTTP and the handshake is not authenticated, so th
 
 **Math that covers the syllabus.** Greek letters, operators, calculus, set theory, logic, vectors, fractions, roots, powers, subscripts, integrals/sums/limits, matrices (`bmatrix`), cases, and aligned equations — natively typeset in release builds through JLaTeXMath (GPL v2-or-later **with an independent-module linking exception**, which is what permits linking it from MIT code; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and `assets/legal/`).
 
+**Searchable history.** History carries a full-text search over every stored message. It uses
+SQLite's built-in FTS5 — no dependency, no server, no extra permission — so old conversations stay
+findable without scrolling a 1.4-inch list.
+
 **Watch-sized answers by default.** The system instruction asks for the shortest answer that keeps the required facts and caveats, and to expand when you ask for detail. The client never truncates a long answer to fit the screen.
 
 **Keyboard and voice.** Both are first-class entry points. Voice delegates to the platform recognizer and always returns text you can review before sending.
@@ -228,6 +232,10 @@ Stated plainly, because a README that hides these is useless:
   marker. `$$…$$` mid-line leaves a stray `$`. A link with a rejected scheme is still painted as
   tappable even though tapping does nothing. Tables are capped at 40 rendered rows with an explicit
   "… N more rows" line. These are documented rather than fixed; each needs a design decision.
+- **Pairing does not work in a browser on a plain-HTTP LAN origin.** Browsers only expose Web Crypto
+  on a secure origin, so the watch's page explains this and points at manual entry.
+- **A physical watch has not run this build.** Every timing and input claim here was measured on an
+  emulator.
 
 ## Contributing
 

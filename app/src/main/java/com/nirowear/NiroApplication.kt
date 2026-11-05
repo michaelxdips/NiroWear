@@ -18,11 +18,8 @@ class NiroApplication : Application() {
     val settings by lazy { ProviderSettings(this, secrets) }
     val database by lazy {
         Room
-            .databaseBuilder(
-                this,
-                ChatDatabase::class.java,
-                "chats.db",
-            ).addMigrations(ChatDatabase.MIGRATION_1_2)
+            .databaseBuilder(this, ChatDatabase::class.java, "chats.db")
+            .addMigrations(ChatDatabase.MIGRATION_1_2, ChatDatabase.MIGRATION_2_3)
             .build()
     }
     private val sharedClient by lazy { providerHttpClient() }

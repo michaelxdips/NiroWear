@@ -95,17 +95,11 @@ class GeminiProvider(
             } else {
                 ModelDiscoveryResult.Models(ids.sorted())
             }
-        } catch (
-            cancelled: CancellationException,
-        ) {
+        } catch (cancelled: CancellationException) {
             throw cancelled
-        } catch (
-            error: SafeProviderException,
-        ) {
+        } catch (error: SafeProviderException) {
             ModelDiscoveryResult.Unavailable(error.error)
-        } catch (
-            _: Exception,
-        ) {
+        } catch (_: Exception) {
             ModelDiscoveryResult.Unavailable(ProviderError.PROTOCOL)
         }
 

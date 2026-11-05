@@ -53,13 +53,11 @@ object Endpoints {
             }.build()
 }
 
+/**
+ * Header names whose values are credentials. Kept as one list so a new adapter cannot silently add an
+ * unredacted auth header: the diagnostic paths and their tests both read this.
+ */
+private val CREDENTIAL_HEADERS = setOf("authorization", "x-api-key", "x-goog-api-key", "api-key")
+
 fun redactHeaders(headers: Map<String, String>): Map<String, String> =
-    headers.mapValues { (name, value) ->
-        if (name.lowercase() in
-            setOf("authorization", "x-api-key", "x-goog-api-key", "api-key")
-        ) {
-            "[REDACTED]"
-        } else {
-            value
-        }
-    }
+    headers.mapValues { (name, value) -> if (name.lowercase() in CREDENTIAL_HEADERS) "[REDACTED]" else value }

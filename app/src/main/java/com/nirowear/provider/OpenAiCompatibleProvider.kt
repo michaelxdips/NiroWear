@@ -23,7 +23,6 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import okhttp3.Call
 import okhttp3.Callback
@@ -92,17 +91,11 @@ class OpenAiCompatibleProvider(
             } else {
                 ModelDiscoveryResult.Models(ids)
             }
-        } catch (
-            cancelled: CancellationException,
-        ) {
+        } catch (cancelled: CancellationException) {
             throw cancelled
-        } catch (
-            error: SafeProviderException,
-        ) {
+        } catch (error: SafeProviderException) {
             ModelDiscoveryResult.Unavailable(error.error)
-        } catch (
-            _: Exception,
-        ) {
+        } catch (_: Exception) {
             ModelDiscoveryResult.Unavailable(ProviderError.PROTOCOL)
         }
     }

@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -57,6 +58,7 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
@@ -82,8 +84,12 @@ import com.nirowear.chat.ReaderAction
 import com.nirowear.chat.ReaderAnchor
 import com.nirowear.chat.coalesceDelayMs
 import com.nirowear.chat.evictStaleConversations
+import com.nirowear.chat.ftsQuery
 import com.nirowear.chat.needsParse
+import com.nirowear.data.Conversation
 import com.nirowear.data.ProviderSettingsState
+import com.nirowear.data.SearchHit
+import com.nirowear.data.searchMessages
 import com.nirowear.renderer.ContentBlock
 import com.nirowear.renderer.DocumentBlock
 import com.nirowear.renderer.InlineContent
@@ -163,7 +169,6 @@ private fun ChatReader(
             (chatState.rawMarkdown != null || storedMessages.isNotEmpty())
     val listState = rememberLazyListState()
     val menuState = rememberLazyListState()
-    val historyState = rememberLazyListState()
     val labState = rememberLazyListState()
     // ponytail: saved-instance anchors, not durable force-stop bookmarks; add local persistence only if cold-launch restore is required.
     val anchors =
@@ -406,62 +411,27 @@ private fun ChatReader(
         if (providerScreen) {
             ProviderScreen { providerScreen = false }
         } else if (historyScreen) {
-            LazyColumn(
-                Modifier.fillMaxSize(),
-                state = historyState,
-                contentPadding = PaddingValues(horizontal = 30.dp, vertical = 30.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                item {
-                    Text(
-                        "History",
-                        modifier = Modifier.fillMaxWidth(),
-                        textAlign = TextAlign.Center,
-                        fontSize = 18.sp,
-                    )
-                }
-                item {
-                    Button(
-                        onClick = {
-                            historyScreen = false
-                        },
-                        modifier =
-                            Modifier.fillMaxWidth().wrapContentWidth(
-                                Alignment.CenterHorizontally,
-                            ),
-                    ) { Text("Back") }
-                }
-                item {
-                    Button(enabled = !chatState.generating, onClick = {
+            HistoryScreen(
+                chat = chat,
+                conversations = conversations,
+                generating = chatState.generating,
+                currentId = chatState.conversationId,
+                onBack = { historyScreen = false },
+                onSelect = { id ->
+                    if (id == null) {
                         chat.newChat()
-                        historyScreen = false
-                        renderLab =
-                            false
                         following = true
                         followNewConversation = false
-                    }, modifier = Modifier.fillMaxWidth()) { Text("New chat") }
-                }
-                items(conversations, key = { it.id }) { conversation ->
-                    androidx.wear.compose.material3.OutlinedButton(
-                        enabled =
-                            !chatState.generating || conversation.id == chatState.conversationId,
-                        onClick = {
-                            if (conversation.id !=
-                                chatState.conversationId
-                            ) {
-                                chat.open(conversation.id)
-                                restoredConversation = null
-                                following =
-                                    false
-                                followNewConversation = false
-                            }
-                            ; historyScreen = false
-                            renderLab = false
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) { Text(conversation.title) }
-                }
-            }
+                    } else if (id != chatState.conversationId) {
+                        chat.open(id)
+                        restoredConversation = null
+                        following = false
+                        followNewConversation = false
+                    }
+                    historyScreen = false
+                    renderLab = false
+                },
+            )
         } else if (editing) {
             Column(
                 Modifier.fillMaxSize().padding(horizontal = 32.dp, vertical = 28.dp),
@@ -595,7 +565,7 @@ private fun ChatReader(
                     (chatState.rawMarkdown != null || storedMessages.isNotEmpty())
                 ) {
                     val count =
-                        blocks.size + historyBlocks.size + (if (chatState.prompt.isNotEmpty()) 1 else 0) +
+                        blocks.size + historyBlocks.size +
                             (if (notice.isNotEmpty()) 1 else 0) + (if (chatState.error != null) 1 else 0) +
                             (if (chatState.generating || transientStopped) 1 else 0) +
                             (if (!chatState.generating && storedMessages.lastOrNull()?.role == "ASSISTANT") 1 else 0)
@@ -752,11 +722,9 @@ private fun ChatReader(
                     }
                 } else {
                     if (notice.isNotEmpty()) item { Text(notice, fontSize = 14.sp) }
-                    if (!renderLab &&
-                        chatState.prompt.isNotEmpty()
-                    ) {
-                        item { Text(chatState.prompt, fontSize = 14.sp, color = Color(0xFFA8C7FA)) }
-                    }
+                    // The newest USER row is already rendered from Room. Painting the composer
+                    // prompt again as a second copy ("You · hold to edit" heading plus this line)
+                    // showed every question twice.
                     if (!renderLab && parsedConversation == chatState.conversationId) {
                         itemsIndexed(
                             renderedHistory,
@@ -964,6 +932,115 @@ private fun ChatReader(
         }
     }
 }
+
+/**
+ * History: recent conversations plus a full-text search over every message ever stored.
+ *
+ * Search lives here rather than on a second screen because History already owns the round-screen
+ * budget for a list, and a hit is just a conversation to open. FTS5 is native SQLite, so this costs no
+ * dependency; `ftsQuery` owns the escaping.
+ */
+@Composable
+private fun HistoryScreen(
+    chat: ChatViewModel,
+    conversations: List<Conversation>,
+    generating: Boolean,
+    currentId: String?,
+    onBack: () -> Unit,
+    onSelect: (String?) -> Unit,
+) {
+    val context = LocalContext.current
+    val app = context.applicationContext as NiroApplication
+    var query by rememberSaveable { mutableStateOf("") }
+    var hits by remember { mutableStateOf<List<SearchHit>>(emptyList()) }
+    var searched by remember { mutableStateOf("") }
+    // Debounced so a fast typist does not issue one SQL query per keystroke on a watch.
+    LaunchedEffect(query) {
+        val expression = ftsQuery(query)
+        if (expression == null) {
+            hits = emptyList()
+            searched = ""
+        } else {
+            kotlinx.coroutines.delay(SEARCH_DEBOUNCE_MS)
+            hits =
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    app.database.searchMessages(expression, SEARCH_LIMIT)
+                }
+            searched = query
+        }
+    }
+    LazyColumn(
+        Modifier.fillMaxSize(),
+        state = rememberLazyListState(),
+        contentPadding = PaddingValues(horizontal = 30.dp, vertical = 30.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        item {
+            Text("History", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center, fontSize = 18.sp)
+        }
+        item {
+            Button(
+                onClick = onBack,
+                modifier = Modifier.fillMaxWidth().wrapContentWidth(Alignment.CenterHorizontally),
+            ) {
+                Text("Back")
+            }
+        }
+        item {
+            BasicTextField(
+                value = query,
+                onValueChange = { query = it },
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .background(Color(0xFF202124))
+                        .padding(12.dp)
+                        .semantics { contentDescription = "Search messages" },
+                singleLine = true,
+                textStyle = TextStyle(color = Color.White, fontSize = 16.sp),
+                cursorBrush =
+                    androidx.compose.ui.graphics
+                        .SolidColor(Color.White),
+                decorationBox = { field ->
+                    if (query.isEmpty()) Text("Search all messages", fontSize = 16.sp, color = Color(0xFF8E939B))
+                    field()
+                },
+            )
+        }
+        item {
+            Button(enabled = !generating, onClick = { onSelect(null) }, modifier = Modifier.fillMaxWidth()) {
+                Text("New chat")
+            }
+        }
+        if (query.isNotBlank()) {
+            if (hits.isEmpty() && searched.isNotBlank()) item { Text("No matches.", fontSize = 14.sp) }
+            items(hits, key = { "hit-${it.messageId}" }) { hit ->
+                val label = hit.rawContent.replace(Regex("\\s+"), " ").take(80)
+                Button(onClick = { onSelect(hit.conversationId) }, modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        "${if (hit.role == "USER") "You" else "Answer"}: $label",
+                        fontSize = 13.sp,
+                        maxLines = 4,
+                    )
+                }
+            }
+        } else {
+            items(conversations, key = { it.id }) { conversation ->
+                androidx.wear.compose.material3.OutlinedButton(
+                    enabled = !generating || conversation.id == currentId,
+                    onClick = { onSelect(conversation.id) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text(conversation.title) }
+            }
+        }
+    }
+}
+
+private const val SEARCH_DEBOUNCE_MS = 250L
+
+/** ponytail: 40 hits; a watch list never shows more without another query. */
+private const val SEARCH_LIMIT = 40
 
 /**
  * Mark a clip sensitive so Android 13+ does not show a content preview of a conversation answer on

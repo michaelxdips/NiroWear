@@ -25,6 +25,9 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 
+/** Pinned per the reference implementation; the API version header is exact, never "latest". */
+private const val ANTHROPIC_VERSION = "2026-10-21"
+
 class AnthropicProvider(
     client: OkHttpClient = providerHttpClient(),
     private val allowLocalHttp: Boolean = false,
@@ -89,23 +92,15 @@ class AnthropicProvider(
                 )
             } while (cursor != null)
             if (ids.isEmpty()) {
-                ModelDiscoveryResult.Unavailable(
-                    ProviderError.PROTOCOL,
-                )
+                ModelDiscoveryResult.Unavailable(ProviderError.PROTOCOL)
             } else {
                 ModelDiscoveryResult.Models(ids.sorted())
             }
-        } catch (
-            cancelled: CancellationException,
-        ) {
+        } catch (cancelled: CancellationException) {
             throw cancelled
-        } catch (
-            error: SafeProviderException,
-        ) {
+        } catch (error: SafeProviderException) {
             ModelDiscoveryResult.Unavailable(error.error)
-        } catch (
-            _: Exception,
-        ) {
+        } catch (_: Exception) {
             ModelDiscoveryResult.Unavailable(ProviderError.PROTOCOL)
         }
 
@@ -169,17 +164,11 @@ class AnthropicProvider(
                         .post(payload.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
                         .build()
                 emitAll(http.stream(wire, AnthropicStreamDecoder()::accept))
-            } catch (
-                cancelled: CancellationException,
-            ) {
+            } catch (cancelled: CancellationException) {
                 throw cancelled
-            } catch (
-                error: SafeProviderException,
-            ) {
+            } catch (error: SafeProviderException) {
                 emit(StreamEvent.Failure(error.error))
-            } catch (
-                _: Exception,
-            ) {
+            } catch (_: Exception) {
                 emit(StreamEvent.Failure(ProviderError.PROTOCOL))
             }
         }
@@ -190,8 +179,10 @@ class AnthropicProvider(
     ) = Request
         .Builder()
         .url(url)
-        .header("Authorization", "Bearer ${secret.forRequest()}")
-        .header("anthropic-version", "2023-06-01")
+        // Official Messages reference authenticates with x-api-key; `Authorization: Bearer` is the
+        // OAuth-token path only. Sending the API key as a bearer token is not the documented header.
+        .header("x-api-key", secret.forRequest())
+        .header("anthropic-version", ANTHROPIC_VERSION)
 }
 
 internal class AnthropicStreamDecoder {

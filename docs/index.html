@@ -2636,7 +2636,7 @@ A failed decrypt is a generic rejection: the caller learns that the payload is n
           <div class="mpanel" id="mx-anthropic" role="tabpanel" aria-labelledby="mt-anthropic">
             <dl style="margin:0">
               <div class="mrow"><dt>Protocol</dt><dd>Messages API · <code>POST {base}/messages</code></dd></div>
-              <div class="mrow"><dt>Auth</dt><dd><code>Authorization: Bearer &lt;key&gt;</code> plus <code>anthropic-version: 2023-06-01</code></dd></div>
+              <div class="mrow"><dt>Auth</dt><dd><code>x-api-key: &lt;key&gt;</code> plus <code>anthropic-version: 2026-10-21</code></dd></div>
               <div class="mrow"><dt>Terminal event</dt><dd><b>message_stop</b> — reachable only after <code>message_delta</code> reported a <code>stop_reason</code> of <code>end_turn</code>, <code>stop_sequence</code> or <code>refusal</code>, and only if text was seen.</dd></div>
               <div class="mrow"><dt>Refuses to guess</dt><dd class="refuse"><code>max_tokens</code> is required, so it is read from the model's own metadata. It is never derived from a model name. When metadata is unavailable the code uses 8192 and says so in a comment — a fallback, not a documented default.</dd></div>
               <div class="mrow"><dt>Roles</dt><dd>Adjacent same-role turns are merged at the wire boundary; canonical history stays provider-neutral.</dd></div>
@@ -2759,7 +2759,7 @@ HTTP/1.1 400
             <tbody>
               <tr><td>Lifetime</td><td>Foreground only, 120 s, one use</td></tr>
               <tr><td>Payload</td><td>AES-GCM, token compared in constant time before any crypto</td></tr>
-              <tr><td>Body cap</td><td>4 KiB, one connection at a time</td></tr>
+              <div class="mrow"><dt>Body cap</dt><dd>16 KiB, one connection at a time</dd></div>
               <tr><td>On failure</td><td>Generic rejection; nothing partial is written</td></tr>
               <tr><td>Permissions</td><td>INTERNET only. No new permission was added.</td></tr>
             </tbody>
@@ -2984,8 +2984,8 @@ adb install -r app-release.apk</pre>
               <td>Release notes, v0.1.0</td>
             </tr>
             <tr>
-              <td>Credential pairing encrypts end to end</td>
-              <td><span class="pill pill-emu">Emulator</span> Exercised over loopback only. A real phone on a real LAN has not been tested — the emulator sits behind NAT.</td>
+              <td>Credential pairing encrypts the payload</td>
+              <td><span class="pill pill-emu">Emulator</span> ECDH P-256 + AES-GCM over loopback only. The transport is plain HTTP and the handshake is unauthenticated. Browsers refuse Web Crypto on a plain-HTTP LAN origin, so in practice the page tells you to enter the key on the watch. A real phone on a real LAN has not been tested.</td>
               <td>PairingServerTest; 0.1.0 release notes</td>
             </tr>
             <tr>

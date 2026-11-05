@@ -51,7 +51,6 @@ import kotlinx.serialization.json.put
 private const val CHECKPOINT_INTERVAL_MS = 120L
 
 data class ChatState(
-    val prompt: String = "",
     val rawMarkdown: String? = null,
     val generating: Boolean = false,
     val interrupted: Boolean = false,
@@ -177,6 +176,19 @@ class ChatViewModel(
         }
         liveAnswer.value = null
         mutableState.value = mutableState.value.copy(generating = true, error = null, rawMarkdown = null)
+        // The conversation is created as the FIRST thing the job does, before the settings and
+        // credential reads. It used to be created after them, so a failure earlier than that (no
+        // profile, missing key, unreadable settings) left `conversationId` null and the typed prompt
+        // only in the composer — which the reader unmounts while generating. That send silently cost
+        // the user their question.
+        val newConversationId =
+            if (mutableState.value.conversationId == null) {
+                java.util.UUID
+                    .randomUUID()
+                    .toString()
+            } else {
+                null
+            }
         generation =
             viewModelScope.launch {
                 var assistantId: Long? = null
@@ -186,6 +198,17 @@ class ChatViewModel(
                 var localPhases: StoredOpenAiPhases? = null
                 var checkpoints: Job? = null
                 try {
+                    if (newConversationId != null) {
+                        dao.insertConversation(
+                            Conversation(
+                                newConversationId,
+                                prompt.orEmpty().take(60).ifBlank { "New chat" },
+                                System.currentTimeMillis(),
+                            ),
+                        )
+                        mutableState.value = mutableState.value.copy(conversationId = newConversationId)
+                        observe(newConversationId)
+                    }
                     ready.await()
                     val config = settings.first()
                     check(config.error == null) { "Provider settings unavailable" }
@@ -193,25 +216,21 @@ class ChatViewModel(
                     val provider =
                         app.provider(profile.type) ?: throw SafeProviderException(ProviderError.PROVIDER_UNSUPPORTED)
                     val secret = withContext(Dispatchers.IO) { app.secrets.read(profile.credentialRef) }
-                    val conversationId =
-                        mutableState.value.conversationId ?: java.util.UUID.randomUUID().toString().also { id ->
-                            dao.insertConversation(
-                                Conversation(
-                                    id,
-                                    prompt.orEmpty().take(60).ifBlank { "New chat" },
-                                    System.currentTimeMillis(),
-                                ),
-                            )
-                            mutableState.value = mutableState.value.copy(conversationId = id)
-                            observe(id)
-                        }
+                    // Created above for a new chat; edit/retry only run on an existing one.
+                    val conversationId = mutableState.value.conversationId ?: error("No conversation")
                     if (editId != null) dao.edit(conversationId, editId, requireNotNull(editedText))
                     if (retry) {
                         val user =
                             dao.snapshot(conversationId).lastOrNull { it.role == "USER" } ?: error("No user message")
                         dao.truncate(conversationId, user.id)
                     }
-                    assistantId = dao.admit(conversationId, prompt?.trim(), profile)
+                    val newAssistantId = dao.admit(conversationId, prompt?.trim(), profile)
+                    assistantId = newAssistantId
+                    // A chat opened from a seeded or empty row carries the "New chat" fallback title
+                    // forever. Name it from the first prompt actually stored.
+                    prompt?.trim()?.takeIf { it.isNotEmpty() }?.let { text ->
+                        runCatching { dao.retitle(conversationId, text.take(60)) }
+                    }
                     val admitted = dao.snapshot(conversationId)
                     liveAnswer.value = admitted.first { it.id == assistantId }
                     val rows = admitted.filter { it.id != assistantId && it.rawContent.isNotEmpty() }
@@ -371,6 +390,16 @@ class ChatViewModel(
                                 "Answer not saved. Keep app open; Copy unsaved answer or Retry saving. New chat/send blocked until saved."
                             mutableState.value = mutableState.value.copy(rawMarkdown = savedText, unsaved = true)
                         }
+                        // A provider failure with no partial text left the USER row already written
+                        // with nothing after it, so the next send read as a continuation of a
+                        // question whose answer never happened. Record the failure on the
+                        // conversation so history agrees with what the reader shows. Sends only:
+                        // edit and retry already truncate their own turn and show it transiently.
+                        if (assistantId == null && prompt != null) {
+                            mutableState.value.conversationId?.let { id ->
+                                runCatching { dao.recordFailure(id, failure) }
+                            }
+                        }
                         liveAnswer.value =
                             liveAnswer.value?.copy(rawContent = text.toString(), status = terminal, error = failure)
                         mutableState.value =
@@ -427,7 +456,7 @@ class ChatViewModel(
         }
         history?.cancel()
         messages.value = emptyList()
-        mutableState.value = ChatState(prompt = prompt.trim(), rawMarkdown = "", generating = true)
+        mutableState.value = ChatState(rawMarkdown = "", generating = true)
         generation =
             viewModelScope.launch {
                 try {
