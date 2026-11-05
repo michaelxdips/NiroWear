@@ -275,10 +275,17 @@ private fun RichText(
         }
     BoxWithConstraints(modifier.fillMaxWidth()) {
         val width = with(density) { maxWidth.toPx() }
-        // ponytail: memoize per (content, maxWidth); recompute only when spans, width, or
-        // heading size change, instead of re-measuring on every recomposition.
+        // ponytail: memoize per (content, maxWidth, drawables); recompute only when spans, width,
+        // heading size or a typeset formula arrives.
+        //
+        // `math` is a KEY, not just a captured value. rememberMath is a produceState that yields null
+        // on its first composition, so on the first pass every formula was measured from its raw
+        // LaTeX source (never what gets drawn) and that wrong width was cached for the life of the
+        // item. A formula wider than the screen stayed inline with no pan affordance, and a narrow one
+        // was hoisted onto its own row for nothing. Keying on the drawables recomputes once the real
+        // widths exist.
         val wide =
-            remember(content, width, heading) {
+            remember(content, width, heading, math) {
                 content.indices.filter { index ->
                     content[index].math && (
                         math[index]?.intrinsicWidth?.toFloat()
