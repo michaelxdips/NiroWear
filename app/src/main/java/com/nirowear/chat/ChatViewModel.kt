@@ -55,6 +55,9 @@ import kotlinx.serialization.json.put
 // only thing this interval buys, while cutting that traffic by two thirds.
 private const val CHECKPOINT_INTERVAL_MS = 400L
 
+/** Attempts before history gives up and shows the error: 1 s, 2 s, 4 s, then stop. */
+private const val MAX_HISTORY_RETRIES = 3L
+
 data class ChatState(
     val rawMarkdown: String? = null,
     val generating: Boolean = false,
@@ -99,10 +102,18 @@ class ChatViewModel(
             .conversations()
             .retryWhen { error, attempt ->
                 if (error is CancellationException) throw error
-                mutableState.value = mutableState.value.copy(error = "History cannot be read. Retrying.")
-                // 1 s, 2 s, 4 s, capped. A watch has no user-visible way to force a retry.
-                delay((1000L shl attempt.coerceAtMost(2L).toInt()).coerceAtMost(4000L))
-                true
+                if (attempt >= MAX_HISTORY_RETRIES) {
+                    // Bounded on purpose: retrying every few seconds forever is a radio-and-CPU leak
+                    // on a watch when the database is genuinely broken. The error stays on screen,
+                    // and reopening the app starts a fresh subscription.
+                    mutableState.value =
+                        mutableState.value.copy(error = "History cannot be read. No messages deleted.")
+                    false
+                } else {
+                    mutableState.value = mutableState.value.copy(error = "History cannot be read. Retrying.")
+                    delay((1000L shl attempt.coerceAtMost(2L).toInt()).coerceAtMost(4000L))
+                    true
+                }
             }
     val messages = MutableStateFlow<List<StoredMessage>>(emptyList())
     private val liveAnswer = MutableStateFlow<StoredMessage?>(null)
@@ -171,12 +182,19 @@ class ChatViewModel(
                         }
                     }.retryWhen { error, attempt ->
                         // Same reason as `conversations`: one transient read error must not end the
-                        // observation of the open conversation forever.
+                        // observation of the open conversation forever — but bounded, so a broken
+                        // database does not retry forever in the background.
                         if (error is CancellationException) throw error
-                        mutableState.value =
-                            mutableState.value.copy(error = "History cannot be read. Retrying.")
-                        delay((1000L shl attempt.coerceAtMost(2L).toInt()).coerceAtMost(4000L))
-                        true
+                        if (attempt >= MAX_HISTORY_RETRIES) {
+                            mutableState.value =
+                                mutableState.value.copy(error = "History cannot be read. No messages deleted.")
+                            false
+                        } else {
+                            mutableState.value =
+                                mutableState.value.copy(error = "History cannot be read. Retrying.")
+                            delay((1000L shl attempt.coerceAtMost(2L).toInt()).coerceAtMost(4000L))
+                            true
+                        }
                     }.collect { messages.value = it }
                 } catch (cancelled: CancellationException) {
                     throw cancelled
