@@ -119,8 +119,16 @@ internal fun openHttpLink(
 }
 
 /**
- * Rows a single table may render. A table composes inside one LazyColumn item, so its cost is paid
- * in full on every measure; 40 rows is already more than fits on a 466 px watch face.
+ * Rows a single table may render.
+ *
+ * The reason is COMPOSITION COST, not screen size: a table is one LazyColumn item, so every row
+ * composes and measures in a single pass, and a 1000x4 table from a model becomes ~8000 Text nodes at
+ * once — seconds of main-thread work and an ANR candidate. AGENTS.md forbids shortening an answer for
+ * the screen, so this is a cost ceiling and the reader is told how many rows it did not show; it is not
+ * a "fits the watch" opinion.
+ *
+ * ponytail: raise this only with a per-row LazyColumn item so the cost is paid lazily; the cap exists
+ * to bound one measuring pass.
  */
 private const val MAX_TABLE_ROWS = 40
 
