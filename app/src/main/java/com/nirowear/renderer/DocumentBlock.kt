@@ -11,7 +11,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -137,15 +139,22 @@ fun DocumentBlock(block: ContentBlock) {
         }
 
         is ContentBlock.ListEntry -> {
-            val depthPadding = (block.depth.coerceAtMost(3) * 8).dp
-            val rowModifier = Modifier.padding(start = depthPadding)
+            // 16dp per level, and a FIXED marker column. 8dp per level with an intrinsic-width marker
+            // put a depth-1 child bullet to the LEFT of its parent's text column (parent text starts at
+            // marker + 6dp ≈ 12dp for "•", the child bullet at 8dp), so nesting read backwards. The
+            // fixed column also lines up an item's continuation paragraph, which carries no marker.
+            val depthPadding = (block.depth.coerceAtMost(4) * 16).dp
             Row(
-                modifier = rowModifier.semantics(mergeDescendants = true) {},
+                modifier = Modifier.padding(start = depthPadding).semantics(mergeDescendants = true) {},
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                // No fixed width: sp scales with font size, so a 2-3 digit marker
-                // ("12.", "123.") keeps its full glyphs at large font scales.
-                Text(block.marker, fontSize = 16.sp, maxLines = 1, softWrap = false)
+                Text(
+                    block.marker,
+                    fontSize = 16.sp,
+                    maxLines = 1,
+                    softWrap = false,
+                    modifier = Modifier.widthIn(min = 22.dp),
+                )
                 RichText(block.content, modifier = Modifier.weight(1f))
             }
         }
@@ -156,11 +165,18 @@ fun DocumentBlock(block: ContentBlock) {
             // contentDescription, so TalkBack stopped on a 2dp bar labelled "Quote" and then announced
             // the same label again on the text node next to it. The label stays on the parent because
             // QuoteSemanticsTest requires a localized label on the node that holds the text.
-            Row(Modifier.semantics(mergeDescendants = true) { contentDescription = quoteLabel }) {
+            Row(
+                // IntrinsicSize.Min so the bar spans the WHOLE quote: a fixed 24dp bar covered only the
+                // first line of any multi-line quote, and a multi-paragraph quote showed detached
+                // dashes.
+                Modifier
+                    .height(IntrinsicSize.Min)
+                    .semantics(mergeDescendants = true) { contentDescription = quoteLabel },
+            ) {
                 Box(
                     Modifier
                         .width(2.dp)
-                        .height(24.dp)
+                        .fillMaxHeight()
                         .background(Color(0xFF99AABB))
                         .clearAndSetSemantics {},
                 )
@@ -198,6 +214,20 @@ fun DocumentBlock(block: ContentBlock) {
             val resources = LocalResources.current
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (block.rows.isEmpty()) block.headers.forEach { RichText(it, heading = 4) }
+                if (hidden > 0) {
+                    RichText(
+                        listOf(
+                            InlineContent(
+                                resources.getQuantityString(R.plurals.renderer_hidden_rows, hidden, hidden),
+                            ),
+                        ),
+                        // NOT a heading: level 4 is bold at body size, so the truncation note looked
+                        // like one more table header instead of a note about missing rows.
+                        heading = null,
+                    )
+                }
+                // The rows follow the notice on purpose: at 40 rows (~70dp each) the notice sat ten
+                // screens below the header, so a reader saw a table that simply ended.
                 shown.forEachIndexed { rowIndex, cells ->
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         cells.forEachIndexed { index, cell ->
@@ -210,17 +240,10 @@ fun DocumentBlock(block: ContentBlock) {
                             RichText(cell)
                         }
                     }
-                    Box(Modifier.fillMaxWidth().height(1.dp).background(Color(0xFF5F646C)))
-                }
-                if (hidden > 0) {
-                    RichText(
-                        listOf(
-                            InlineContent(
-                                resources.getQuantityString(R.plurals.renderer_hidden_rows, hidden, hidden),
-                            ),
-                        ),
-                        heading = 4,
-                    )
+                    // No rule after the LAST row: a trailing rule read as a table that continued below.
+                    if (rowIndex < shown.lastIndex) {
+                        Box(Modifier.fillMaxWidth().height(1.dp).background(Color(0xFF5F646C)))
+                    }
                 }
                 if (block.droppedCells > 0) {
                     RichText(
@@ -233,7 +256,7 @@ fun DocumentBlock(block: ContentBlock) {
                                 ),
                             ),
                         ),
-                        heading = 4,
+                        heading = null,
                     )
                 }
             }
@@ -270,7 +293,15 @@ private fun RichText(
     val fallbackSize =
         when (heading) {
             1 -> 20.sp
+
             2 -> 18.sp
+
+            // 3 and 4 used to share the `else` branch, so an H3 was visually identical to body text
+            // and an H4 differed from it only by weight.
+            3 -> 17.sp
+
+            4 -> 15.sp
+
             else -> 16.sp
         }
     BoxWithConstraints(modifier.fillMaxWidth()) {
@@ -465,7 +496,15 @@ private fun InlineRichText(
     val size =
         when (heading) {
             1 -> 20.sp
+
             2 -> 18.sp
+
+            // 3 and 4 used to share the `else` branch, so an H3 was visually identical to body text
+            // and an H4 differed from it only by weight.
+            3 -> 17.sp
+
+            4 -> 15.sp
+
             else -> 16.sp
         }
     if (math.any { it != null }) {
