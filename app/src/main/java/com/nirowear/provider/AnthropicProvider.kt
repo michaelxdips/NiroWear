@@ -160,8 +160,15 @@ class AnthropicProvider(
                     } catch (_: Exception) {
                         null
                     }
-                // ponytail: null or unusable metadata uses 8192; replace with provider limit metadata when available.
-                val maxTokens = reportedMaxTokens?.takeIf { it > 0 } ?: 8192
+                // Fallback output budget when model metadata is unavailable.
+                //
+                // 4096, not 8192: metadata is the only honest source, and a value ABOVE a model's own
+                // cap is rejected with a 400, which fails the whole turn. 4096 is within the documented
+                // maximum for every Messages model, so the worst case with unknown metadata is a
+                // disclosed Truncated answer instead of no answer at all.
+                // ponytail: raise only from provider limit metadata; a one-shot retry with a smaller cap
+                // on a 400 would let this be optimistic again.
+                val maxTokens = reportedMaxTokens?.takeIf { it > 0 } ?: 4_096
                 val payload =
                     buildJsonObject {
                         put("model", profile.selectedModelId)
