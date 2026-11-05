@@ -608,6 +608,20 @@ private fun ChatReader(
             val answerId = storedMessages.lastOrNull()?.takeIf { it.role == "ASSISTANT" }?.id
             val answerRow = parsedRows.keys.lastOrNull()?.takeIf { it.id == answerId }
             val transientStopped = chatState.interrupted && !chatState.generating && storedMessages.isEmpty()
+            // ONE source of truth for which trailing rows exist. The follow effect counts them and the
+            // LazyColumn emits them, and the two had drifted: the count ignored the unsaved-answer row
+            // and the provider-error row, and it counted live blocks even while they were suppressed —
+            // so auto-follow stopped short of the real last item.
+            val liveBlocksShown = !chatState.unsaved || historyBlocks.isEmpty()
+            val transientErrorShown =
+                !renderLab && chatState.error != null && storedMessages.none { it.error == chatState.error }
+            val unsavedRowShown = !renderLab && chatState.unsaved
+            val providerErrorShown = providerState.error != null
+            val emptyPromptShown = !renderLab && storedMessages.isEmpty() && chatState.rawMarkdown == null
+            val retryRowShown =
+                !renderLab && !chatState.generating && storedMessages.lastOrNull()?.role == "ASSISTANT"
+            val streamingRowShown = !renderLab && (chatState.generating || transientStopped)
+            val noticeRowShown = notice.isNotEmpty()
             // Memoised like its two neighbours: it used to allocate an index list, a filter result and
             // two more copies on every recomposition, i.e. once per checkpoint emission.
             val answerIndices =
@@ -641,10 +655,15 @@ private fun ChatReader(
                     (chatState.rawMarkdown != null || storedMessages.isNotEmpty())
                 ) {
                     val count =
-                        blocks.size + historyBlocks.size +
-                            (if (notice.isNotEmpty()) 1 else 0) + (if (chatState.error != null) 1 else 0) +
-                            (if (chatState.generating || transientStopped) 1 else 0) +
-                            (if (!chatState.generating && storedMessages.lastOrNull()?.role == "ASSISTANT") 1 else 0)
+                        historyBlocks.size +
+                            (if (liveBlocksShown) blocks.size else 0) +
+                            (if (noticeRowShown) 1 else 0) +
+                            (if (transientErrorShown) 1 else 0) +
+                            (if (unsavedRowShown) 1 else 0) +
+                            (if (providerErrorShown) 1 else 0) +
+                            (if (emptyPromptShown) 1 else 0) +
+                            (if (retryRowShown) 1 else 0) +
+                            (if (streamingRowShown) 1 else 0)
                     val firstAnswer = answerIndices.firstOrNull()?.plus(if (notice.isNotEmpty()) 1 else 0)
                     if (!chatState.generating && !measuredAnswer && firstAnswer != null) {
                         measuredAnswer = true
@@ -813,7 +832,7 @@ private fun ChatReader(
                         }
                     }
                 } else {
-                    if (notice.isNotEmpty()) item { Text(notice, fontSize = 14.sp) }
+                    if (noticeRowShown) item { Text(notice, fontSize = 14.sp) }
                     // The newest USER row is already rendered from Room. Painting the composer
                     // prompt again as a second copy ("You · hold to edit" heading plus this line)
                     // showed every question twice.
@@ -852,17 +871,17 @@ private fun ChatReader(
                     // already merged into `historyBlocks` — rendering both duplicated the whole
                     // answer and pushed the "Copy unsaved answer / Retry saving" row below the copy.
                     // The empty-history guard keeps the answer visible if the merge did not happen.
-                    if (!chatState.unsaved || historyBlocks.isEmpty()) {
+                    if (liveBlocksShown) {
                         items(blocks) { DocumentBlock(it) }
                     }
                     // One copy of the transient failure only. The same string also renders on
                     // the persisted assistant row (:255-266), so a bare `error?.let` prints it
                     // twice once the row exists. Cleared history (edit/retry/new chat) keeps the
                     // transient row as the only copy.
-                    if (!renderLab && storedMessages.none { it.error == chatState.error }) {
+                    if (transientErrorShown) {
                         chatState.error?.let { message -> item { Text(message, fontSize = 14.sp) } }
                     }
-                    if (!renderLab && chatState.unsaved) {
+                    if (unsavedRowShown) {
                         item {
                             val context = androidx.compose.ui.platform.LocalContext.current
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -887,8 +906,12 @@ private fun ChatReader(
                             }
                         }
                     }
-                    providerState.error?.let { message -> item { Text(message, fontSize = 14.sp) } }
-                    if (!renderLab && storedMessages.isEmpty() && chatState.rawMarkdown == null) {
+                    if (providerErrorShown) {
+                        providerState.error?.let { message ->
+                            item { Text(message, fontSize = 14.sp) }
+                        }
+                    }
+                    if (emptyPromptShown) {
                         item {
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Text("Ask anything", fontSize = 18.sp)
@@ -907,7 +930,7 @@ private fun ChatReader(
                             }
                         }
                     }
-                    if (!renderLab && !chatState.generating && storedMessages.lastOrNull()?.role == "ASSISTANT") {
+                    if (retryRowShown) {
                         item {
                             ReaderAction(retry = true, onClick = {
                                 anchors.remove(chatState.conversationId)
@@ -917,7 +940,7 @@ private fun ChatReader(
                             })
                         }
                     }
-                    if (!renderLab && (chatState.generating || transientStopped)) {
+                    if (streamingRowShown) {
                         item {
                             Text(
                                 if (chatState.generating) "Streaming…" else "Stopped · partial answer kept",
