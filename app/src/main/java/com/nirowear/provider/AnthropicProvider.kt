@@ -28,6 +28,9 @@ import okhttp3.RequestBody.Companion.toRequestBody
 /** Pinned per the reference implementation; the API version header is exact, never "latest". */
 private const val ANTHROPIC_VERSION = "2026-10-21"
 
+/** Deadline for the per-turn model metadata GET, which sits before the messages POST. */
+private const val METADATA_TIMEOUT_MS = 4_000L
+
 /**
  * Documented StopReason values. All of them end the message; only the presence of `message_stop`
  * proves the stream completed, so none of these may be treated as a failure.
@@ -121,6 +124,11 @@ class AnthropicProvider(
                 // limit from a model name. Discovery and generation are separate, so a metadata failure
                 // falls back to the documented default instead of blocking the turn. A bad credential or
                 // unreachable host still fails on the messages call itself.
+                //
+                // Time-boxed: this GET sits on the critical path of EVERY turn, so the shared 90 s
+                // stream read timeout would let a hanging metadata endpoint delay the first token by a
+                // minute and a half while the UI already says "generating". 4 s is generous for a
+                // single JSON object and the fallback below is correct anyway.
                 val reportedMaxTokens =
                     try {
                         val modelUrl =
@@ -130,8 +138,9 @@ class AnthropicProvider(
                                 .addPathSegment(profile.selectedModelId)
                                 .build()
                         Json
-                            .parseToJsonElement(http.fetch(authenticated(modelUrl, secret).build()))
-                            .jsonObject["max_tokens"]
+                            .parseToJsonElement(
+                                http.fetch(authenticated(modelUrl, secret).build(), METADATA_TIMEOUT_MS),
+                            ).jsonObject["max_tokens"]
                             ?.jsonPrimitive
                             ?.intOrNull
                     } catch (cancelled: CancellationException) {

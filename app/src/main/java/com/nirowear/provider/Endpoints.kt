@@ -22,9 +22,21 @@ object Endpoints {
             "HTTPS required"
         }
         val segments = url.pathSegments.filter { it.isNotEmpty() }.toMutableList()
+        // Reject a full ENDPOINT pasted as a base. Only `chat/completions` and a trailing
+        // `models`/`responses` were guarded, so the URL from Anthropic's own cURL example
+        // ("…/v1/messages") was accepted and every request went to "/v1/messages/messages"; a Gemini
+        // ":generateContent" URL produced "…:generateContent/models/…"; and "…/v1/models/{id}" looked
+        // like a base. All of them 404, and 404 maps to "Model unavailable. Choose another model." — so
+        // a URL typo was reported as a model problem.
+        //
+        // A resource segment ANYWHERE in the path means the user pasted a request URL, not a base. A
+        // ':' segment is a Gemini action ("models/x:streamGenerateContent"), never a base. "chat" is
+        // only checked as a trailing pair, because a proxy path may legitimately contain it.
+        val resourceSegments = setOf("messages", "models", "responses", "embeddings", "completions")
         require(
             segments.takeLast(2) != listOf("chat", "completions") &&
-                segments.lastOrNull() !in setOf("models", "responses"),
+                segments.none { it.lowercase() in resourceSegments } &&
+                url.pathSegments.none { ':' in it },
         ) {
             "Enter API base, not request endpoint"
         }

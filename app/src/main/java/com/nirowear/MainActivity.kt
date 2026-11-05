@@ -158,6 +158,10 @@ private fun ChatReader(
     var editedId by rememberSaveable { mutableStateOf<Long?>(null) }
     var editing by rememberSaveable { mutableStateOf(false) }
     var draft by rememberSaveable { mutableStateOf("") }
+    // The composer keeps one draft slot, and the draft deliberately survives backing out of the
+    // editor. Long-pressing a message to edit it overwrote that slot, so a typed-but-unsent prompt was
+    // destroyed with no undo; the previous draft is parked here and restored when the edit is abandoned.
+    var draftBackup by rememberSaveable { mutableStateOf("") }
     var notice by rememberSaveable { mutableStateOf("") }
     var renderLab by rememberSaveable { mutableStateOf(initialSection != null) }
     var sectionMenu by rememberSaveable { mutableStateOf(false) }
@@ -376,14 +380,17 @@ private fun ChatReader(
                     historyKeys.lastOrNull()
                 }
             val lastContent = info.visibleItemsInfo.find { it.key == lastContentKey }
-            following = chatState.generating && (
+            // `following` describes the READER, not the stream: it must be true whenever the reader is at the
+            // bottom, finished answer or not. Gating the whole assignment on `generating` meant that
+            // after an answer completed, dragging back to the very bottom set following=false, so
+            // `idleLatest` kept the jump-to-latest arrow on screen permanently at maximum scroll.
+            following =
                 if (lastContentKey != null) {
                     lastContent != null &&
                         lastContent.offset + lastContent.size <= info.viewportEndOffset + 48
                 } else {
                     !listState.canScrollForward
                 }
-            )
             saveReaderPosition()
         }
     }
@@ -395,18 +402,29 @@ private fun ChatReader(
                     ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
                     ?.firstOrNull()
                     ?.takeIf { it.isNotBlank() }
-                    ?.let {
-                        draft = it
+                    ?.let { spoken ->
+                        // Voice ADDS to the draft. The draft deliberately survives backing out of the
+                        // editor, so replacing it here destroyed a typed prompt with no undo.
+                        draft = if (draft.isBlank()) spoken else draft.trimEnd() + " " + spoken
                         editedId = null
                         editing = true
                     }
             }
         }
-    BackHandler(editing) { editing = false }
+    BackHandler(editing) {
+        editing = false
+        editedId = null
+        if (draftBackup.isNotBlank()) {
+            draft = draftBackup
+            draftBackup = ""
+        }
+    }
     BackHandler(providerScreen) { providerScreen = false }
     BackHandler(historyScreen) { historyScreen = false }
     BackHandler(sectionMenu && !historyScreen && !providerScreen && !editing) { sectionMenu = false }
-    BackHandler(renderLab && !editing && !providerScreen && !historyScreen) {
+    // `!sectionMenu` matters: BackHandlers are LIFO and this one is registered after the menu's, so
+    // without the guard one Back press closed the menu AND discarded the RenderLab fixture.
+    BackHandler(renderLab && !editing && !providerScreen && !historyScreen && !sectionMenu) {
         renderLab = false
         sectionMenu = false
     }
@@ -648,7 +666,16 @@ private fun ChatReader(
                     if (editing) {
                         false
                     } else {
-                        if (delta < 0 && !renderLab && !sectionMenu) following = false
+                        // Only detach when the crown can actually move the list backwards: an upward
+                        // tick on a conversation that fits on screen scrolled nothing, yet it used to
+                        // hide following and raise the jump-to-latest arrow over an unmoved reader.
+                        if (delta < 0 && !renderLab && !sectionMenu && rotaryList.canScrollBackward) {
+                            following = false
+                            followNewConversation = false
+                            // Let the scroll-end effect re-decide following by position, the same way
+                            // a finger drag does.
+                            userScrolled = true
+                        }
                         rotaryScope.launch { rotaryList.scrollBy(delta) }
                         true
                     }
@@ -728,7 +755,10 @@ private fun ChatReader(
                         }, modifier = Modifier.fillMaxWidth()) { Text("History") }
                     }
                     item {
-                        Button(enabled = !chatState.generating, onClick = {
+                        // `unsaved` implies generating == false, so the old gate enabled this button exactly in
+                        // the state where ChatViewModel.newChat() refuses: the tap closed the menu and
+                        // nothing else happened, with no explanation.
+                        Button(enabled = !chatState.generating && !chatState.unsaved, onClick = {
                             chat.newChat()
                             renderLab = false
                             sectionMenu =
@@ -776,6 +806,9 @@ private fun ChatReader(
                                         .combinedClickable(onClick = {
                                         }, onLongClickLabel = "Edit message", onLongClick = {
                                             saveReaderPosition()
+                                            // Park a typed-but-unsent prompt so abandoning this edit
+                                            // does not destroy it.
+                                            draftBackup = if (draft == message.rawContent) draftBackup else draft
                                             editedId = messageId
                                             draft = message.rawContent
                                             editing = true
@@ -790,7 +823,14 @@ private fun ChatReader(
                             ) { DocumentBlock(block) }
                         }
                     }
-                    items(blocks) { DocumentBlock(it) }
+                    // The live blocks render the IN-FLIGHT answer only. When a terminal write fails, the ViewModel
+                    // puts the same text in `rawMarkdown` (so it is not lost) while the live row is
+                    // already merged into `historyBlocks` — rendering both duplicated the whole
+                    // answer and pushed the "Copy unsaved answer / Retry saving" row below the copy.
+                    // The empty-history guard keeps the answer visible if the merge did not happen.
+                    if (!chatState.unsaved || historyBlocks.isEmpty()) {
+                        items(blocks) { DocumentBlock(it) }
+                    }
                     // One copy of the transient failure only. The same string also renders on
                     // the persisted assistant row (:255-266), so a bare `error?.let` prints it
                     // twice once the row exists. Cleared history (edit/retry/new chat) keeps the
@@ -919,10 +959,11 @@ private fun ChatReader(
                                 Modifier
                                     .size(48.dp)
                                     .semantics { contentDescription = "Keyboard input" }
-                                    // Re-entry keeps an unsent draft: Back out of the editor is not a discard.
+                                    // Re-entry keeps an unsent draft: Back out of the editor is not a discard. It also
+                                    // keeps the edit TARGET — clearing it turned a resumed edit into a
+                                    // second copy of the same question appended to the conversation.
                                     .clickable(role = Role.Button, onClick = {
                                         saveReaderPosition()
-                                        editedId = null
                                         editing = true
                                     }),
                                 contentAlignment = Alignment.Center,

@@ -48,9 +48,21 @@ internal class ProviderHttp(
      */
     private val streamIdleTimeoutMs = 120_000L
 
-    suspend fun fetch(request: Request): String =
+    /**
+     * Plain JSON GET.
+     *
+     * @param timeoutMs optional deadline for THIS call. Side requests that sit on the critical path of a
+     *   send (Anthropic's per-turn model metadata) must not inherit the 90 s stream read timeout: a
+     *   hanging metadata endpoint would delay the first token of every turn by a minute and a half with
+     *   the UI already showing "generating".
+     */
+    suspend fun fetch(
+        request: Request,
+        timeoutMs: Long? = null,
+    ): String =
         suspendCancellableCoroutine { continuation ->
             val call = client.newCall(request)
+            if (timeoutMs != null) call.timeout().timeout(timeoutMs, TimeUnit.MILLISECONDS)
             continuation.invokeOnCancellation { call.cancel() }
             call.enqueue(
                 object : Callback {
