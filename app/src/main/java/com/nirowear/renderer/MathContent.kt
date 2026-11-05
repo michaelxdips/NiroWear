@@ -21,6 +21,15 @@ import androidx.compose.ui.unit.sp
 import androidx.wear.compose.material3.Text
 import com.nirowear.R
 
+/**
+ * The renderer the app draws with.
+ *
+ * Typed as [MathRenderer] on purpose: ARCHITECTURE.md requires the UI not to bind to one math
+ * library, and this is that seam. The interface previously had one implementation, no type
+ * reference, and a direct call to the singleton — so the abstraction was decorative.
+ */
+private val mathRenderer: MathRenderer = NativeMathRenderer
+
 @Composable
 fun rememberMath(
     source: String,
@@ -28,7 +37,7 @@ fun rememberMath(
 ): Drawable? {
     val px = with(LocalDensity.current) { 18.sp.toPx() }
     return produceState<Drawable?>(null, source, complete, px) {
-        value = if (complete) NativeMathRenderer.render(source, px) else null
+        value = if (complete) mathRenderer.render(source, px) else null
     }.value
 }
 

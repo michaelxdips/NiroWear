@@ -40,19 +40,7 @@ class OpenAiCompatibleProvider(
     override suspend fun validate(
         profile: ProviderProfile,
         secret: SecretValue,
-    ): ProviderError? {
-        // Selected-model generation tests auth separately from optional model listing.
-        val request = ChatRequest(listOf(ChatMessage(ChatRole.USER, "Reply OK.")))
-        var result: ProviderError? = ProviderError.PROTOCOL
-        streamChat(request, profile, secret).collect { event ->
-            when (event) {
-                StreamEvent.Completed -> result = null
-                is StreamEvent.Failure -> result = event.error
-                else -> Unit
-            }
-        }
-        return result
-    }
+    ): ProviderError? = validateWithProbe(profile, secret)
 
     override suspend fun listModels(
         profile: ProviderProfile,

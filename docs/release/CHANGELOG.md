@@ -74,7 +74,7 @@ ships in `assets/legal/`).
 - Application source released publicly under the **MIT license**.
 - **Credential transport:** new LAN pairing page. The watch serves a one-time URL; you paste the key
   into a normal form on a phone or laptop. The payload is encrypted with ephemeral ECDH P-256 and
-  AES-GCM, single-use, 120 s TTL, 4 KiB cap, foreground-only. Manual entry remains available.
+  AES-GCM, single-use, 120 s TTL, 16 KiB cap, foreground-only. Manual entry remains available.
 - **Precise validation errors:** `Validate · uses API` now reports the actual cause — a rejected key
   reads "API key rejected", a missing model reads "Model unavailable" — instead of one message
   blaming three fields at once.

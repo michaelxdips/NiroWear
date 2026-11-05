@@ -3,7 +3,7 @@
 ## High-level
 
 Current foundation: single Android `app` module, `com.nirowear`, minSdk 30,
-compile/targetSdk 36. Wear-only standalone activity using Wear Compose Material 3.
+compile/targetSdk 37. Wear-only standalone activity using Wear Compose Material 3.
 Current implementation: ChatViewModel coordinates generation and Room directly;
 NiroApplication owns provider/settings/secret/database instances. No additional
 repository/registry/generation framework until concrete complexity requires it.

@@ -52,17 +52,7 @@ class AnthropicProvider(
     override suspend fun validate(
         profile: ProviderProfile,
         secret: SecretValue,
-    ): ProviderError? {
-        var error: ProviderError? = ProviderError.PROTOCOL
-        streamChat(ChatRequest(listOf(ChatMessage(ChatRole.USER, "Reply OK."))), profile, secret).collect {
-            when (it) {
-                StreamEvent.Completed -> error = null
-                is StreamEvent.Failure -> error = it.error
-                else -> Unit
-            }
-        }
-        return error
-    }
+    ): ProviderError? = validateWithProbe(profile, secret)
 
     override suspend fun listModels(
         profile: ProviderProfile,

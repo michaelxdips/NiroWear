@@ -170,3 +170,23 @@ interface LlmProvider {
         secret: SecretValue,
     ): Flow<StreamEvent>
 }
+
+/**
+ * The one implementation of validate(): a real generation proves the key AND the selected model,
+ * which listing alone cannot. It is protocol-neutral — only the terminal event an adapter emits
+ * decides success — so the four byte-identical copies in the adapters were four places to drift.
+ */
+suspend fun LlmProvider.validateWithProbe(
+    profile: ProviderProfile,
+    secret: SecretValue,
+): ProviderError? {
+    var error: ProviderError? = ProviderError.PROTOCOL
+    streamChat(ChatRequest(listOf(ChatMessage(ChatRole.USER, "Reply OK."))), profile, secret).collect {
+        when (it) {
+            StreamEvent.Completed -> error = null
+            is StreamEvent.Failure -> error = it.error
+            else -> Unit
+        }
+    }
+    return error
+}
