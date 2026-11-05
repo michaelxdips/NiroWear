@@ -275,6 +275,34 @@ object ResponseParser {
         return markers + " ".repeat(indent)
     }
 
+    /**
+     * Columns of content indent a list marker introduces on this line, or null when the line is not a
+     * list item. Used only to measure indentation relative to the enclosing item.
+     */
+    private fun listMarkerContentIndent(line: String): Int? {
+        var i = 0
+        var spaces = 0
+        while (i < line.length && line[i] == ' ' && spaces < 3) {
+            i++
+            spaces++
+        }
+        if (i >= line.length) return null
+        if (line[i] == '-' || line[i] == '*' || line[i] == '+') {
+            val end = i + 1
+            return if (end < line.length && line[end] == ' ') end + 1 else null
+        }
+        if (line[i].isDigit()) {
+            var digits = i
+            while (digits < line.length && line[digits].isDigit() && digits - i < 9) digits++
+            if (digits > i && digits < line.length && (line[digits] == '.' || line[digits] == ')') &&
+                digits + 1 < line.length && line[digits + 1] == ' '
+            ) {
+                return digits + 2
+            }
+        }
+        return null
+    }
+
     private fun isDelimiterRow(line: String): Boolean {
         val cells = splitTableRow(line)
         return cells.isNotEmpty() &&
@@ -382,6 +410,8 @@ object ResponseParser {
         // Container prefix (`"> "`, `"- "`) the display math was opened behind, kept for the whole
         // block so continuation lines do not put stray markers into the equation source.
         var mathContainer = ""
+        // Content indent of the list item we are inside, 0 when not in a list.
+        var listContentIndent = 0
 
         /**
          * Lines of the currently open fence, fed raw so CommonMark sees the exact bytes.
@@ -513,9 +543,22 @@ object ResponseParser {
                     }
                 }
                 val trimmed = container.trimStart()
+                // Indentation is measured RELATIVE to the enclosing list item. Four spaces is an
+                // indented code block at top level, but inside a list item whose content indent is 3
+                // the same four columns are ordinary prose — so `    $$x$$` under "1. item" used to
+                // render as the literal text "$$x$$" instead of a formula.
+                val contentLeading = container.length - container.trimStart(' ').length
+                val markerIndent = listMarkerContentIndent(rest)
+                if (markerIndent != null) {
+                    listContentIndent = markerIndent
+                } else if (container.isNotBlank() && contentLeading < listContentIndent) {
+                    // A less-indented content line ends the list.
+                    listContentIndent = 0
+                }
+                val relativeIndent =
+                    if (listContentIndent > 0) (contentLeading - listContentIndent).coerceAtLeast(0) else contentLeading
                 val indented =
-                    rest.startsWith("    ") || rest.startsWith('\t') ||
-                        container.startsWith("    ") || container.startsWith('\t')
+                    relativeIndent >= 4 || rest.startsWith('\t') || container.startsWith('\t')
                 var opening =
                     when {
                         fence != null -> null
