@@ -261,6 +261,14 @@ interface ChatDao {
         text: String,
     ): Int
 
+    /**
+     * Test-support only.
+     *
+     * The product has no delete-a-conversation affordance (History lists and opens, the menu offers New
+     * chat), so nothing in `app/src/main` calls this. It stays because the instrumentation suite uses it
+     * to isolate fixtures between cases; deleting it would force rewriting those cases for no
+     * user-visible gain. Marked rather than removed so it does not read as an orphan.
+     */
     @Query("DELETE FROM conversations WHERE id = :id")
     suspend fun deleteConversation(id: String)
 

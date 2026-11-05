@@ -443,8 +443,9 @@ private fun ChatReader(
     // `!sectionMenu` matters: BackHandlers are LIFO and this one is registered after the menu's, so
     // without the guard one Back press closed the menu AND discarded the RenderLab fixture.
     BackHandler(renderLab && !editing && !providerScreen && !historyScreen && !sectionMenu) {
+        // No `sectionMenu = false` here: the guard already requires the menu to be closed, so that
+        // assignment could never change anything.
         renderLab = false
-        sectionMenu = false
     }
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         if (providerScreen) {
