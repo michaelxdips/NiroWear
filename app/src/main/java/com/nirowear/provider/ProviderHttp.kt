@@ -52,9 +52,11 @@ internal class ProviderHttp(
      * Plain JSON GET.
      *
      * @param timeoutMs optional deadline for THIS call. Side requests that sit on the critical path of a
-     *   send (Anthropic's per-turn model metadata) must not inherit the 90 s stream read timeout: a
-     *   hanging metadata endpoint would delay the first token of every turn by a minute and a half with
-     *   the UI already showing "generating".
+     *   send (Anthropic's per-turn model metadata) get their own deadline, and it is the SMALLER of this
+     *   value and the client's configured read timeout: a caller that built a client with a tighter
+     *   budget (a test, or a future low-latency configuration) keeps it, while production is bounded
+     *   instead of inheriting the 90 s stream read timeout — a hanging metadata endpoint would otherwise
+     *   delay the first token by a minute and a half with the UI already showing "generating".
      */
     suspend fun fetch(
         request: Request,
@@ -62,7 +64,11 @@ internal class ProviderHttp(
     ): String =
         suspendCancellableCoroutine { continuation ->
             val call = client.newCall(request)
-            if (timeoutMs != null) call.timeout().timeout(timeoutMs, TimeUnit.MILLISECONDS)
+            if (timeoutMs != null) {
+                val clientRead = client.readTimeoutMillis.toLong()
+                val effective = if (clientRead > 0) minOf(timeoutMs, clientRead) else timeoutMs
+                call.timeout().timeout(effective, TimeUnit.MILLISECONDS)
+            }
             continuation.invokeOnCancellation { call.cancel() }
             call.enqueue(
                 object : Callback {
@@ -163,9 +169,17 @@ internal class ProviderHttp(
                                                 }
                                                 send(event)
                                             }
+                                            // Terminal proof. EOF alone is NOT success, so the read loop stops only on an event
+                                            // that proves the protocol ended. Truncated is such a proof: the
+                                            // provider sent its output-cap reason, which ends the answer. It
+                                            // was left out here, so a truncated stream kept looping to EOF and
+                                            // then appended Failure(PROTOCOL) — a cut answer reported as a
+                                            // broken stream, which is why the adapters could not disclose
+                                            // truncation.
                                             return events.any { event ->
                                                 event is StreamEvent.Failure ||
-                                                    event == StreamEvent.Completed
+                                                    event == StreamEvent.Completed ||
+                                                    event == StreamEvent.Truncated
                                             }
                                         }
                                         // Idle deadline. readTimeout is per read and resets on every

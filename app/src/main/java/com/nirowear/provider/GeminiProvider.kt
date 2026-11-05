@@ -240,12 +240,18 @@ internal class GeminiStreamDecoder {
                     }
 
                     // Truncation and content filters are terminal states, not framing faults. The
-                    // answer that arrived is kept as SUCCESS instead of being relabelled
-                    // "Stream interrupted" — the text is what the provider actually sent.
-                    // ponytail: a user-visible "cut at output limit" note needs a status value;
-                    // add it when the reader grows a truncation row.
-                    "STOP", "MAX_TOKENS", "CONTINUATION" -> {
+                    // answer that arrived is kept instead of being relabelled "Stream interrupted" — the
+                    // text is what the provider actually sent.
+                    //
+                    // MAX_TOKENS and CONTINUATION are reported as Truncated: the text stays SUCCESS and
+                    // gains the visible "reached the output limit" note. Reporting them as Completed
+                    // made a cut answer indistinguishable from a finished one.
+                    "STOP" -> {
                         add(if (hasText) StreamEvent.Completed else StreamEvent.Failure(ProviderError.PROTOCOL))
+                    }
+
+                    "MAX_TOKENS", "CONTINUATION" -> {
+                        add(if (hasText) StreamEvent.Truncated else StreamEvent.Failure(ProviderError.PROTOCOL))
                     }
 
                     "SAFETY", "RECITATION", "BLOCKLIST", "PROHIBITED_CONTENT", "SPII" -> {

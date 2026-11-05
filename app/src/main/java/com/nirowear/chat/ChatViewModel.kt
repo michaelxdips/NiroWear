@@ -17,6 +17,7 @@ import com.nirowear.provider.ProviderError
 import com.nirowear.provider.ProviderType
 import com.nirowear.provider.SafeProviderException
 import com.nirowear.provider.StreamEvent
+import com.nirowear.provider.TRUNCATION_NOTE
 import com.nirowear.security.CredentialUnavailable
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -405,6 +406,18 @@ class ChatViewModel(
 
                                 StreamEvent.Completed -> {
                                     if (failure == null) terminal = "SUCCESS"
+                                }
+
+                                StreamEvent.Truncated -> {
+                                    // The answer is valid but was CUT at the provider's output cap. It
+                                    // stays SUCCESS so phases and the transcript are unchanged, and the
+                                    // note rides along as the status line: the reader renders `error`
+                                    // under the answer, so the one shortening this app cannot prevent is
+                                    // no longer silent.
+                                    if (failure == null) {
+                                        terminal = "SUCCESS"
+                                        failure = TRUNCATION_NOTE
+                                    }
                                 }
                             }
                         }

@@ -248,9 +248,10 @@ internal class OpenAiStreamDecoder {
 
                 "response.incomplete" -> {
                     // A response the API finished early (max_output_tokens, content filter) is a
-                    // truncation, not a broken stream. Text already arrived and is kept; the reader
-                    // must not report it as an interruption.
-                    listOf(StreamEvent.Completed)
+                    // truncation, not a broken stream. Text already arrived and is kept as SUCCESS, and
+                    // it is now reported as Truncated so the reader says the answer was cut instead of
+                    // presenting it as finished.
+                    listOf(StreamEvent.Truncated)
                 }
 
                 "response.output_item.added", "response.output_item.done" -> {

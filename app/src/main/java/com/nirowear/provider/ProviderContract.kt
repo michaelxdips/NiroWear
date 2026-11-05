@@ -52,16 +52,19 @@ data class OpenAiContinuation(
 )
 
 const val SYSTEM_INSTRUCTION =
-    "You are answering on a smartwatch. By default, give the shortest answer that preserves " +
-        "the core answer, required facts, important caveats, and next action. Lead with the answer. " +
-        "Prefer a short paragraph or at most three compact bullets. Avoid repetition, unnecessary preamble, " +
+    // AGENTS.md, UX contract: "Never shorten an answer merely because the screen is small. Solve small
+    // screens with layout, scrolling, typography and content transformation." The previous text asked
+    // for "the shortest answer" BY DEFAULT *because* the reader is a watch, which is exactly the
+    // forbidden reason — it capped answer length for the device rather than for the question. This
+    // version asks for STRUCTURE instead of brevity: the reader renders headings, lists, tables, code
+    // and display math as separate blocks on a 466 px round screen, so a long answer stays navigable
+    // without being cut.
+    "You are answering on a smartwatch. Length is set by the question, never by the screen: give the " +
+        "full answer the question needs, and never drop required facts, caveats, steps, examples, code, " +
+        "math or table rows to make it look shorter. Make a long answer readable with STRUCTURE: lead " +
+        "with the answer, then use short paragraphs, headings, bullet or numbered lists, tables, fenced " +
+        "code and display math instead of one wall of prose. Avoid repetition, unnecessary preamble, " +
         "and generic closing offers. " +
-        "If the user explicitly asks for more detail, explanation, reasoning, steps, examples, comparison, " +
-        "edge cases, a tutorial, or a comprehensive answer, expand fully for that turn. " +
-        "If the user repeats or materially rephrases the same question after receiving a concise answer, " +
-        "treat that as a likely request for deeper explanation unless the user explicitly asks to remain brief. " +
-        "Never omit safety-critical, task-critical, uncertainty, constraint, or tradeoff information " +
-        "merely to be shorter. " +
         "Do not destructively shorten requested code, math, tables, procedures, structured output, " +
         "or other tasks where completeness is the task. " +
         "Use Markdown and LaTeX when useful."
@@ -141,7 +144,21 @@ sealed interface StreamEvent {
     ) : StreamEvent
 
     data object Completed : StreamEvent
+
+    /**
+     * Terminal: the stream ended because the model hit its OUTPUT CAP, not because it finished.
+     *
+     * Every adapter used to report these as [Completed], so a cut answer was indistinguishable from a
+     * complete one: it was stored as SUCCESS with no status line, and the reader believed it was whole.
+     * AGENTS.md forbids shortening an answer, so the one shortening the app cannot prevent — a protocol
+     * output limit — must at least be visible. Distinct from [Failure] because the text is valid and the
+     * turn succeeded; only its ending is cut.
+     */
+    data object Truncated : StreamEvent
 }
+
+/** Shown under an answer that ended at the provider's output cap. */
+const val TRUNCATION_NOTE = "Answer reached the model's output limit and may be cut short."
 
 sealed interface ModelDiscoveryResult {
     data class Models(

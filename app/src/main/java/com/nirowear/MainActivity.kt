@@ -157,15 +157,19 @@ private fun ChatReader(
     var historyScreen by rememberSaveable { mutableStateOf(false) }
     // NOT saveable, deliberately. After process death the ViewModel re-opens the NEWEST conversation,
     // so a restored `editedId` points into a conversation that is no longer open: the edit targeted the
-    // wrong conversation, threw, and the composer had already cleared itself. The typed draft IS
-    // saveable.
+    // wrong conversation, threw, and the composer had already cleared itself.
     var editedId by remember { mutableStateOf<Long?>(null) }
     var editing by remember { mutableStateOf(false) }
     var draft by rememberSaveable { mutableStateOf("") }
-    // The composer keeps one draft slot, and the draft deliberately survives backing out of the
-    // editor. Long-pressing a message to edit it overwrote that slot, so a typed-but-unsent prompt was
-    // destroyed with no undo; the previous draft is parked here and restored when the edit is abandoned.
-    var draftBackup by rememberSaveable { mutableStateOf("") }
+    // The EDIT BODY lives in its own slot, not in `draft`.
+    //
+    // Sharing one slot meant an edit had to overwrite the user's typed prompt and then "restore" it on
+    // Back — a backup that had to be cleared in three places and could still outlive its edit, and that
+    // resurrected the message body as a draft after process death (which then sent a duplicate of the
+    // question instead of editing it). Separate slots make the two independent: abandoning an edit
+    // cannot touch the draft, and a restored draft is always a draft. `editText` is not saveable, like
+    // `editedId`, so the two always agree.
+    var editText by remember { mutableStateOf("") }
     var notice by rememberSaveable { mutableStateOf("") }
     var renderLab by rememberSaveable { mutableStateOf(initialSection != null) }
     var sectionMenu by rememberSaveable { mutableStateOf(false) }
@@ -396,26 +400,14 @@ private fun ChatReader(
     LaunchedEffect(listState.isScrollInProgress) {
         if (!listState.isScrollInProgress && !dragging && userScrolled) {
             userScrolled = false
-            val info = listState.layoutInfo
-            val lastMessage = parsedRows.keys.lastOrNull()
-            val lastContentKey =
-                if (lastMessage?.status == "STOPPED" || lastMessage?.error != null) {
-                    historyKeys.dropLast(1).lastOrNull()
-                } else {
-                    historyKeys.lastOrNull()
-                }
-            val lastContent = info.visibleItemsInfo.find { it.key == lastContentKey }
-            // `following` describes the READER, not the stream: it must be true whenever the reader is at the
-            // bottom, finished answer or not. Gating the whole assignment on `generating` meant that
-            // after an answer completed, dragging back to the very bottom set following=false, so
-            // `idleLatest` kept the jump-to-latest arrow on screen permanently at maximum scroll.
-            following =
-                if (lastContentKey != null) {
-                    lastContent != null &&
-                        lastContent.offset + lastContent.size <= info.viewportEndOffset + 48
-                } else {
-                    !listState.canScrollForward
-                }
+            // "At the bottom" means the list cannot scroll forward any more. The previous test was
+            // "the last content block's bottom is inside the viewport", which stays TRUE when the
+            // reader scrolls UP one notch during streaming — the block merely moves up and remains
+            // visible — so following flipped straight back to true and the next delta snapped the
+            // reader to the newest token. One crown notch could never detach, which contradicts the
+            // rule that scrolling up must not pull the reader back down. canScrollBackward is not the
+            // test either: with a long answer it is still true at the bottom.
+            following = !listState.canScrollForward
             saveReaderPosition()
         }
     }
@@ -431,8 +423,8 @@ private fun ChatReader(
                         // Voice ADDS to the draft. The draft deliberately survives backing out of the
                         // editor, so replacing it here destroyed a typed prompt with no undo.
                         draft = if (draft.isBlank()) spoken else draft.trimEnd() + " " + spoken
-                        // A fresh compose: never inherit an abandoned edit's parked draft.
-                        draftBackup = ""
+                        // Voice is a fresh compose, never a resumed edit.
+                        editText = ""
                         editedId = null
                         editing = true
                     }
@@ -440,16 +432,10 @@ private fun ChatReader(
         }
     BackHandler(editing) {
         editing = false
-        // Backing out of an EDIT discards the message body it injected into the composer and restores
-        // whatever draft was parked — including a blank one. Guarding on `draftBackup.isNotBlank()`
-        // left the message body in the single draft slot, so reopening the keyboard showed the user's
-        // own previous question and Send appended a DUPLICATE of it instead of editing.
-        if (editedId != null) {
-            draft = draftBackup
-            draftBackup = ""
-            editedId = null
-        }
-        // A plain compose keeps what was typed: Back is not a discard.
+        // Backing out abandons the edit body and NOTHING else: the user's unsent draft lives in its own
+        // slot, so it is neither restored nor destroyed here. A plain compose keeps what was typed.
+        editText = ""
+        editedId = null
     }
     BackHandler(providerScreen) { providerScreen = false }
     BackHandler(historyScreen) { historyScreen = false }
@@ -501,9 +487,11 @@ private fun ChatReader(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Text("Prompt", modifier = Modifier.align(Alignment.CenterHorizontally))
+                val composing = editedId != null
+                val editorText = if (composing) editText else draft
                 BasicTextField(
-                    value = draft,
-                    onValueChange = { draft = it },
+                    value = editorText,
+                    onValueChange = { if (composing) editText = it else draft = it },
                     modifier =
                         Modifier
                             .weight(1f)
@@ -517,14 +505,14 @@ private fun ChatReader(
                 )
                 Button(
                     onClick = {
-                        if (draft.isNotBlank()) {
+                        if (editorText.isNotBlank()) {
                             val editTarget = editedId
                             val started =
                                 if (editTarget != null) {
                                     anchors.remove(chatState.conversationId)
-                                    chat.edit(editTarget, draft)
+                                    chat.edit(editTarget, editorText)
                                 } else {
-                                    chat.send(draft)
+                                    chat.send(editorText)
                                 }
                             // Only clear when the ViewModel ACCEPTED the turn. Clearing
                             // unconditionally (before it could report refusal) threw away the
@@ -536,19 +524,18 @@ private fun ChatReader(
                                 sectionMenu = false
                                 following = true
                                 followNewConversation = chatState.conversationId == null
-                                // The text now lives in the conversation; leaving it in the single
-                                // draft slot pre-filled the next editor with the message just sent.
-                                draft = ""
-                                // The parked pre-edit draft is consumed by this turn too: keeping it
-                                // meant a later abandoned editor restored a prompt that had already
-                                // been sent (or was never current).
-                                draftBackup = ""
+                                // The text now lives in the conversation. Clearing the slot that was
+                                // actually used leaves the OTHER one untouched, so an edit never eats
+                                // the user's unsent prompt and a send never eats the other way round.
+                                if (editTarget != null) editText = "" else draft = ""
                                 notice = ""
                                 editedId = null
                             }
                         }
                     },
-                    enabled = draft.isNotBlank() && !chatState.generating && !chatState.unsaved,
+                    enabled =
+                        (if (editedId != null) editText else draft).isNotBlank() &&
+                            !chatState.generating && !chatState.unsaved,
                     modifier = Modifier.align(Alignment.CenterHorizontally),
                 ) {
                     Text(
@@ -842,11 +829,11 @@ private fun ChatReader(
                                         .combinedClickable(onClick = {
                                         }, onLongClickLabel = "Edit message", onLongClick = {
                                             saveReaderPosition()
-                                            // Park a typed-but-unsent prompt so abandoning this edit
-                                            // does not destroy it.
-                                            draftBackup = if (draft == message.rawContent) draftBackup else draft
+                                            // The edit body goes to its OWN slot: the unsent draft is
+                                            // left exactly as it was, so abandoning the edit cannot
+                                            // destroy it and cannot resurrect it later either.
+                                            editText = message.rawContent
                                             editedId = messageId
-                                            draft = message.rawContent
                                             editing = true
                                         })
                                 } else {
@@ -1000,8 +987,11 @@ private fun ChatReader(
                                     // second copy of the same question appended to the conversation.
                                     .clickable(role = Role.Button, onClick = {
                                         saveReaderPosition()
-                                        // A fresh compose: never restore a parked pre-edit draft.
-                                        draftBackup = ""
+                                        // The keyboard always composes the DRAFT. `editText` and
+                                        // `editedId` are cleared together, so a stale edit body can
+                                        // never reappear as a fresh message.
+                                        editText = ""
+                                        editedId = null
                                         editing = true
                                     }),
                                 contentAlignment = Alignment.Center,

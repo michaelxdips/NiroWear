@@ -142,9 +142,14 @@ class ProviderSettings(
                         // Selecting is a separate, explicit action (select()). Replacing a key on an
                         // existing profile must not retarget the next send: editing provider B while
                         // A is active used to silently make B the active provider and model, which is
-                        // exactly the "never silently change a model" rule. Only a brand-new profile
-                        // becomes selected.
-                        if (previous == null) prefs[selectedKey] = profile.id
+                        // exactly the "never silently change a model" rule.
+                        //
+                        // "Brand-new profile" is NOT the same as "nothing is selected". A new profile
+                        // mints a fresh id, so `previous == null` was true every time one was ADDED, and
+                        // adding B while A worked silently moved the next send to B with only "Saved
+                        // securely." as feedback. The selection is defaulted only when no selection
+                        // exists at all; otherwise the user picks with select().
+                        if (previous == null && !prefs.contains(selectedKey)) prefs[selectedKey] = profile.id
                     }
                     ; promoted = true
                 }

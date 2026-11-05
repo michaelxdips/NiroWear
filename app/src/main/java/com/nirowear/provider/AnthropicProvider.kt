@@ -28,8 +28,20 @@ import okhttp3.RequestBody.Companion.toRequestBody
 /** Pinned per the reference implementation; the API version header is exact, never "latest". */
 private const val ANTHROPIC_VERSION = "2026-10-21"
 
-/** Deadline for the per-turn model metadata GET, which sits before the messages POST. */
-private const val METADATA_TIMEOUT_MS = 4_000L
+/**
+ * Deadline for the per-turn model metadata GET, which sits before the messages POST.
+ *
+ * Short enough that a hanging metadata endpoint cannot delay the first token for long, long enough that
+ * a COLD connection succeeds: Call.timeout() covers DNS + TCP + TLS + write + read, and on a watch with
+ * the radio asleep (or proxied over Bluetooth) that handshake alone can take several seconds. A 4 s
+ * deadline aborted those, silently falling back to 8192 — the very outcome the metadata fetch exists to
+ * avoid. Still far below the 90 s stream read timeout.
+ *
+ * ponytail: when the fetch fails we still send 8192, which a model with a smaller output cap answers
+ * with a 400. Fix by retrying once with a conservative cap when the POST 400s on an assumed value —
+ * not by guessing a limit from the model name.
+ */
+private const val METADATA_TIMEOUT_MS = 15_000L
 
 /**
  * Documented StopReason values. All of them end the message; only the presence of `message_stop`
@@ -307,7 +319,14 @@ internal class AnthropicStreamDecoder {
                     // thinking blocks, legitimately ends with no text. message_stop plus a known
                     // stop_reason is the protocol's own completion proof.
                     require(started && block == null && reason in KNOWN_STOP_REASONS)
-                    listOf(StreamEvent.Completed)
+                    // max_tokens means the model was CUT at its output cap. Reporting it as Completed
+                    // presented a truncated answer as a finished one; Truncated keeps the text as
+                    // SUCCESS and adds the visible note. model_context_window_exceeded is a cut too.
+                    if (reason == "max_tokens" || reason == "model_context_window_exceeded") {
+                        listOf(StreamEvent.Truncated)
+                    } else {
+                        listOf(StreamEvent.Completed)
+                    }
                 }
 
                 "error" -> {
