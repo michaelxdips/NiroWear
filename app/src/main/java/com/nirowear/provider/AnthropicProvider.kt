@@ -323,13 +323,18 @@ internal class AnthropicStreamDecoder {
 
                 "message_stop" -> {
                     // `hasText` is deliberately NOT required: a refusal, or a reply made only of
-                    // thinking blocks, legitimately ends with no text. message_stop plus a known
-                    // stop_reason is the protocol's own completion proof.
-                    require(started && block == null && reason in KNOWN_STOP_REASONS)
-                    // max_tokens means the model was CUT at its output cap. Reporting it as Completed
-                    // presented a truncated answer as a finished one; Truncated keeps the text as
-                    // SUCCESS and adds the visible note. model_context_window_exceeded is a cut too.
-                    if (reason == "max_tokens" || reason == "model_context_window_exceeded") {
+                    // thinking blocks, legitimately ends with no text. message_stop plus a stop_reason
+                    // is the protocol's own completion proof.
+                    //
+                    // A MISSING stop_reason is not a framing fault either (the SDK types it
+                    // `StopReason | null`): requiring it turned a fully delivered answer into
+                    // "Stream interrupted" with the whole text underneath. But text IS required when
+                    // the reason is absent — a stream that ends here having said nothing proves
+                    // nothing, and saving it as SUCCESS left a permanently blank answer.
+                    require(started && block == null && (reason == null || reason in KNOWN_STOP_REASONS))
+                    if (reason == null && !hasText) {
+                        listOf(StreamEvent.Failure(ProviderError.PROTOCOL))
+                    } else if (reason == "max_tokens" || reason == "model_context_window_exceeded") {
                         listOf(StreamEvent.Truncated)
                     } else {
                         listOf(StreamEvent.Completed)

@@ -197,25 +197,34 @@ class CompatibleStreamDecoder {
                     if (!text.isNullOrEmpty()) hasText = true
                     buildList {
                         if (!text.isNullOrEmpty()) add(StreamEvent.TextDelta(text))
-                        // `length` is the documented "hit the output cap" reason. That answer is
-                        // finished, not interrupted — the text is exactly what the provider sent — so
-                        // it completes instead of becoming an ERROR row. tool_calls/function_call are
-                        // genuinely unrenderable here, and content_filter stopped on policy.
+                        // `length` is the documented "hit the output cap" reason, i.e. the answer was
+                        // CUT. It used to complete silently here, which made this adapter the one
+                        // provider that never disclosed a cut answer (Anthropic max_tokens, Gemini
+                        // MAX_TOKENS and Responses max_output_tokens all report Truncated). A policy
+                        // finish that already emitted text is a cut too: the text survives, the note
+                        // says it may be incomplete. tool_calls/function_call are genuinely
+                        // unrenderable, and an unknown reason is a framing fault.
                         when (finish) {
                             null -> {
                                 Unit
                             }
 
-                            "stop", "length" -> {
+                            "stop" -> {
                                 add(
                                     if (hasText) StreamEvent.Completed else StreamEvent.Failure(ProviderError.PROTOCOL),
+                                )
+                            }
+
+                            "length" -> {
+                                add(
+                                    if (hasText) StreamEvent.Truncated else StreamEvent.Failure(ProviderError.PROTOCOL),
                                 )
                             }
 
                             "content_filter" -> {
                                 add(
                                     if (hasText) {
-                                        StreamEvent.Completed
+                                        StreamEvent.Truncated
                                     } else {
                                         StreamEvent.Failure(ProviderError.PROMPT_BLOCKED)
                                     },

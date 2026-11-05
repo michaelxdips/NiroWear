@@ -202,8 +202,15 @@ internal class ProviderHttp(
                                                     )
                                                 }
                                             if (line.isEmpty()) {
+                                                // A blank line with no data field behind it is the terminator
+                                                // of an empty frame — i.e. a keepalive separator, not
+                                                // progress. Resetting the deadline on it made the bound
+                                                // below dead: `: ping\n\n` every 89 s kept a stalled
+                                                // answer alive forever, which is the exact case it exists
+                                                // to stop.
+                                                val hadFrame = frame.isNotEmpty()
                                                 if (dispatch()) return@launch
-                                                lastFrameAt = System.currentTimeMillis()
+                                                if (hadFrame) lastFrameAt = System.currentTimeMillis()
                                             } else if (line.startsWith("data:")) {
                                                 frame.append(line.removePrefix("data:").removePrefix(" ")).append('\n')
                                                 lastFrameAt = System.currentTimeMillis()

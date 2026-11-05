@@ -257,8 +257,11 @@ internal class GeminiStreamDecoder {
                     "SAFETY", "RECITATION", "BLOCKLIST", "PROHIBITED_CONTENT", "SPII",
                     "IMAGE_SAFETY", "IMAGE_PROHIBITED_CONTENT", "IMAGE_RECITATION",
                     -> {
+                        // Text already on screen here means the reply was CUT by policy, not that it
+                        // finished. Reporting Completed hid the cut behind a plausible-looking
+                        // ending; Truncated keeps the text and adds the visible note.
                         add(
-                            if (hasText) StreamEvent.Completed else StreamEvent.Failure(ProviderError.PROMPT_BLOCKED),
+                            if (hasText) StreamEvent.Truncated else StreamEvent.Failure(ProviderError.PROMPT_BLOCKED),
                         )
                     }
 
@@ -274,8 +277,11 @@ internal class GeminiStreamDecoder {
                         add(StreamEvent.Failure(ProviderError.PROTOCOL))
                     }
 
+                    // A reason this build does not know (LANGUAGE, OTHER, IMAGE_OTHER, NO_IMAGE, and
+                    // whatever the next API version adds) is a terminal state of unknown cause. With
+                    // text it is a cut of unknown cause — say so instead of guessing "finished".
                     else -> {
-                        add(if (hasText) StreamEvent.Completed else StreamEvent.Failure(ProviderError.PROTOCOL))
+                        add(if (hasText) StreamEvent.Truncated else StreamEvent.Failure(ProviderError.PROTOCOL))
                     }
                 }
             }
