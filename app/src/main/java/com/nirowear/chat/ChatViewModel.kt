@@ -48,7 +48,12 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 
-private const val CHECKPOINT_INTERVAL_MS = 120L
+// Durability vs cost. Each checkpoint is an UPDATE carrying the WHOLE answer so far, and Room
+// invalidates the conversation's message query with it, so the reader re-reads and re-lists every
+// message. At 120 ms that was ~8 full writes and 8 full reads per second while streaming — O(n²)
+// bytes for one answer. 400 ms keeps process-death loss under half a second of text, which is the
+// only thing this interval buys, while cutting that traffic by two thirds.
+private const val CHECKPOINT_INTERVAL_MS = 400L
 
 data class ChatState(
     val rawMarkdown: String? = null,

@@ -415,12 +415,14 @@ private fun ChatReader(
             ProviderScreen { providerScreen = false }
         } else if (historyScreen) {
             HistoryScreen(
-                chat = chat,
                 conversations = conversations,
                 generating = chatState.generating,
                 currentId = chatState.conversationId,
                 onBack = { historyScreen = false },
                 onSelect = { id ->
+                    // A notice belongs to the screen that raised it (clipboard, voice). Leaving it
+                    // set pinned that line above every later conversation for the whole process.
+                    notice = ""
                     if (id == null) {
                         chat.newChat()
                         following = true
@@ -470,10 +472,15 @@ private fun ChatReader(
                             } else {
                                 chat.send(draft)
                             }
+                            // The sent text now lives in the conversation. Leaving it in the single
+                            // draft slot meant reopening the editor pre-filled it with the message
+                            // that had just been sent, so the next send duplicated it.
+                            draft = ""
+                            notice = ""
                             editedId = null
                         }
                     },
-                    enabled = draft.isNotBlank() && !chatState.generating,
+                    enabled = draft.isNotBlank() && !chatState.generating && !chatState.unsaved,
                     modifier = Modifier.align(Alignment.CenterHorizontally),
                 ) {
                     Text(
@@ -530,18 +537,26 @@ private fun ChatReader(
                         kotlinx.coroutines.Dispatchers.Default,
                     ) { ResponseParser.parse(source) }
             }
+            // Keyed by the list's own stable key string, not by the block value. `ContentBlock.Paragraph` is
+// a data class holding the whole inline run, so a value key hashes the entire streaming paragraph
+// on every layout write and inserts a fresh entry per parse; `retainAll` then re-hashed every block
+// of the conversation once per frame. A String key is an identity compare.
             val blockHeights =
                 remember(chatState.conversationId, LocalDensity.current) {
-                    androidx.compose.runtime.mutableStateMapOf<Pair<Long, ContentBlock>, Int>()
+                    androidx.compose.runtime.mutableStateMapOf<String, Int>()
                 }
-            LaunchedEffect(renderedHistory) { blockHeights.keys.retainAll(renderedHistory.toSet()) }
+            LaunchedEffect(historyKeys) { blockHeights.keys.retainAll(historyKeys.toSet()) }
             val spacingPx = with(LocalDensity.current) { 12.dp.roundToPx() }
             val answerId = storedMessages.lastOrNull()?.takeIf { it.role == "ASSISTANT" }?.id
             val answerRow = parsedRows.keys.lastOrNull()?.takeIf { it.id == answerId }
             val transientStopped = chatState.interrupted && !chatState.generating && storedMessages.isEmpty()
+            // Memoised like its two neighbours: it used to allocate an index list, a filter result and
+            // two more copies on every recomposition, i.e. once per checkpoint emission.
             val answerIndices =
-                historyBlocks.indices.filter { historyBlocks[it].first == answerId }.drop(1).let {
-                    if (answerRow?.status == "STOPPED" || answerRow?.error != null) it.dropLast(1) else it
+                remember(historyBlocks, answerId, answerRow?.status, answerRow?.error) {
+                    historyBlocks.indices.filter { historyBlocks[it].first == answerId }.drop(1).let {
+                        if (answerRow?.status == "STOPPED" || answerRow?.error != null) it.dropLast(1) else it
+                    }
                 }
             var measuredAnswer by remember(answerId, following, chatState.generating) { mutableStateOf(false) }
             LaunchedEffect(
@@ -578,7 +593,7 @@ private fun ChatReader(
                         listState.scrollToItem(firstAnswer)
                         androidx.compose.runtime.withFrameNanos { }
                     }
-                    val heights = answerIndices.map { blockHeights[historyBlocks[it]] }
+                    val heights = answerIndices.map { blockHeights[historyKeys[it]] }
                     val viewport = listState.layoutInfo.let { it.viewportEndOffset - it.viewportStartOffset }
                     val answerFits =
                         heights.isNotEmpty() && heights.all { it != null } &&
@@ -590,7 +605,7 @@ private fun ChatReader(
                         listState.scrollToItem(firstAnswer)
                     } else if (listState.canScrollForward) {
                         val lastContent = answerIndices.lastOrNull()
-                        val height = lastContent?.let { blockHeights[historyBlocks[it]] }
+                        val height = lastContent?.let { blockHeights[historyKeys[it]] }
                         if (!chatState.generating && lastContent != null && height != null) {
                             listState.scrollToItem(
                                 lastContent + if (notice.isNotEmpty()) 1 else 0,
@@ -653,7 +668,11 @@ private fun ChatReader(
                                         it.viewportEndOffset - it.viewportStartOffset
                                     }};answer=" +
                                     answerIndices.joinToString(",") { index ->
-                                        historyBlocks.getOrNull(index)?.let { blockHeights[it] }?.toString()
+                                        historyBlocks
+                                            .getOrNull(
+                                                index,
+                                            )?.let { blockHeights[historyKeys[index]] }
+                                            ?.toString()
                                             ?: "unknown"
                                     } +
                                     ";index=${listState.firstVisibleItemIndex}" +
@@ -749,7 +768,7 @@ private fun ChatReader(
                                     Modifier
                                 }
                             Box(
-                                Modifier.onSizeChanged { blockHeights[messageId to block] = it.height }.then(
+                                Modifier.onSizeChanged { blockHeights[historyKeys[index]] = it.height }.then(
                                     editModifier,
                                 ),
                             ) { DocumentBlock(block) }
@@ -949,7 +968,6 @@ private fun ChatReader(
  */
 @Composable
 private fun HistoryScreen(
-    chat: ChatViewModel,
     conversations: List<Conversation>,
     generating: Boolean,
     currentId: String?,
@@ -1023,7 +1041,13 @@ private fun HistoryScreen(
             if (hits.isEmpty() && searched.isNotBlank()) item { Text("No matches.", fontSize = 14.sp) }
             items(hits, key = { "hit-${it.messageId}" }) { hit ->
                 val label = hit.rawContent.replace(Regex("\\s+"), " ").take(80)
-                Button(onClick = { onSelect(hit.conversationId) }, modifier = Modifier.fillMaxWidth()) {
+                // Same guard as the conversation rows: opening during generation is refused by the
+                // ViewModel, and closing History anyway looked like a dead tap that lost the search.
+                Button(
+                    enabled = !generating,
+                    onClick = { onSelect(hit.conversationId) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
                     Text(
                         "${if (hit.role == "USER") "You" else "Answer"}: $label",
                         fontSize = 13.sp,

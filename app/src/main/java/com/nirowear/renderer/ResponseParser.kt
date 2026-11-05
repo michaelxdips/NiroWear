@@ -294,7 +294,11 @@ object ResponseParser {
         var closing = ""
         var fence: Char? = null
         var fenceLength = 0
+        var fenceNested = false
         var mathPrefix = ""
+        // Container prefix (`"> "`, `"- "`) the display math was opened behind, kept for the whole
+        // block so continuation lines do not put stray markers into the equation source.
+        var mathContainer = ""
 
         /**
          * Lines of the currently open fence, fed raw so CommonMark sees the exact bytes.
@@ -337,19 +341,29 @@ object ResponseParser {
             while (rest != null) {
                 val open = math
                 if (open != null) {
-                    val index = closingIndex(rest, closing, 0)
+                    // A quoted display's continuation line still carries "> "; strip exactly the
+                    // prefix the block was opened behind, so the equation reads "x + y" and not
+                    // "> x + y" (which typeset as literal greater-than glyphs).
+                    val body =
+                        if (mathContainer.isNotEmpty() && rest.startsWith(mathContainer)) {
+                            rest.substring(mathContainer.length)
+                        } else {
+                            rest
+                        }
+                    val index = closingIndex(body, closing, 0)
                     if (index < 0) {
                         // Every consumed line is newline-terminated so an unfinished display keeps
                         // the exact source after its opening delimiter. Later lines arrive raw, so
                         // the opening line's container prefix must not leak into the equation.
                         mathPrefix = ""
-                        open.append(rest).append('\n')
+                        open.append(body).append('\n')
                         rest = null
                     } else {
-                        open.append(rest, 0, index).append('\n')
+                        open.append(body, 0, index).append('\n')
                         blocks += ContentBlock.Math(open.toString().trim(), true)
                         math = null
-                        rest = mathPrefix + rest.substring(index + closing.length)
+                        mathContainer = ""
+                        rest = mathPrefix + body.substring(index + closing.length)
                         mathPrefix = ""
                         if (rest.isBlank()) rest = null
                     }
@@ -370,13 +384,26 @@ object ResponseParser {
                     } else {
                         container
                     }
-                FENCE.find(fenced)?.let { match ->
-                    val run = match.groupValues[1]
-                    if (fence == null) {
+                // Close detection runs on the STRIPPED line only for a fence that was opened behind a
+                // container, and on the raw line otherwise. A top-level fence treats its body as
+                // literal, so a content line "> ```" must not close it; a fence opened inside a quote or
+                // list still closes on its marker line, whose prefix need not match the opener's
+                // exactly ("> - ```" opens, ">   ```" closes).
+                val fenceBody = if (fenceNested) container else rest
+                if (fence != null) {
+                    FENCE.find(fenceBody)?.let { match ->
+                        val run = match.groupValues[1]
+                        if (run.first() == fence && run.length >= fenceLength && match.groupValues[2].isBlank()) {
+                            fence = null
+                            fenceNested = false
+                        }
+                    }
+                } else {
+                    FENCE.find(fenced)?.let { match ->
+                        val run = match.groupValues[1]
                         fence = run.first()
                         fenceLength = run.length
-                    } else if (run.first() == fence && run.length >= fenceLength && match.groupValues[2].isBlank()) {
-                        fence = null
+                        fenceNested = uncontainer(rest) != rest || FENCE.find(rest.replaceFirst(DEEP_QUOTE, "")) != null
                     }
                 }
                 val trimmed = container.trimStart()
@@ -396,13 +423,20 @@ object ResponseParser {
                     // (`a$$x$$b`) both dollars stay literal, like currency.
                     val mid = findMidlineDisplay(container)
                     if (mid >= 0) {
+                        val prefix = rest.substring(0, rest.length - container.length)
+                        // The prose before the opener belongs to the answer. This used to be thrown
+                        // away: "The area is $$A=\pi r^2$$ where r" lost "The area is" entirely,
+                        // because flush() only emits what was already buffered and the current line
+                        // had not been appended yet.
+                        val before = prefix + container.substring(0, mid)
                         opening = "$$" to "$$"
-                        val after = container.substring(mid + 2)
+                        if (before.isNotBlank()) markdown.appendLine(before)
                         flush()
                         closing = "$$"
                         math = StringBuilder()
-                        mathPrefix = rest.substring(0, rest.length - container.length)
-                        rest = after
+                        mathPrefix = prefix
+                        mathContainer = prefix
+                        rest = container.substring(mid + 2)
                         continue
                     }
                 }
@@ -425,6 +459,7 @@ object ResponseParser {
                     closing = opening.second
                     math = StringBuilder()
                     mathPrefix = rest.substring(0, rest.length - container.length)
+                    mathContainer = mathPrefix
                     rest = trimmed.removePrefix(opening.first)
                 }
             }
