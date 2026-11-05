@@ -282,7 +282,20 @@ class ChatViewModel(
                     val secret = withContext(Dispatchers.IO) { app.secrets.read(profile.credentialRef) }
                     // Created above for a new chat; edit/retry only run on an existing one.
                     val conversationId = mutableState.value.conversationId ?: error("No conversation")
-                    if (editId != null) dao.edit(conversationId, editId, requireNotNull(editedText))
+                    if (editId != null) {
+                        // Verify the target belongs to THIS conversation BEFORE mutating anything. An
+                        // edit target can outlive its conversation (a restored screen state, or a
+                        // conversation switch that did not clear it); the failing `require` inside
+                        // dao.edit threw after the caller had already cleared the composer, so the
+                        // typed text was lost and a spurious ERROR row landed in the open conversation.
+                        val owned = dao.snapshot(conversationId).any { it.id == editId && it.role == "USER" }
+                        if (!owned) {
+                            // Generic failure text, not "add a provider": the provider is fine, the
+                            // edit simply belongs to another conversation.
+                            error("Edit target is not part of this conversation")
+                        }
+                        dao.edit(conversationId, editId, requireNotNull(editedText))
+                    }
                     if (retry) {
                         val user =
                             dao.snapshot(conversationId).lastOrNull { it.role == "USER" } ?: error("No user message")

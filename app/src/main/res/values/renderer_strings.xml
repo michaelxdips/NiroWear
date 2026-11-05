@@ -6,6 +6,8 @@
     <string name="renderer_quote">Quote</string>
     <string name="renderer_links">Links</string>
     <string name="renderer_open_link">Open link %1$s</string>
+    <string name="reader_stopped_partial">Stopped · partial answer kept</string>
+    <string name="reader_stopped_before_start">Stopped before the answer started</string>
     <plurals name="renderer_hidden_rows">
         <item quantity="one">… one more row. The table was cut to keep the reader responsive.</item>
         <item quantity="other">… %1$d more table rows. The table was cut to keep the reader responsive.</item>

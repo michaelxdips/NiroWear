@@ -6,6 +6,8 @@
     <string name="renderer_quote">Kutipan</string>
     <string name="renderer_links">Tautan</string>
     <string name="renderer_open_link">Buka tautan %1$s</string>
+    <string name="reader_stopped_partial">Dihentikan · jawaban sebagian disimpan</string>
+    <string name="reader_stopped_before_start">Dihentikan sebelum jawaban dimulai</string>
     <plurals name="renderer_hidden_rows">
         <item quantity="other">… %1$d baris lagi. Tabel dipotong agar pembaca tetap responsif.</item>
     </plurals>

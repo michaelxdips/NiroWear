@@ -155,8 +155,12 @@ private fun ChatReader(
     val conversations by chat.conversations.collectAsStateWithLifecycle(initialValue = emptyList())
     var providerScreen by rememberSaveable { mutableStateOf(false) }
     var historyScreen by rememberSaveable { mutableStateOf(false) }
-    var editedId by rememberSaveable { mutableStateOf<Long?>(null) }
-    var editing by rememberSaveable { mutableStateOf(false) }
+    // NOT saveable, deliberately. After process death the ViewModel re-opens the NEWEST conversation,
+    // so a restored `editedId` points into a conversation that is no longer open: the edit targeted the
+    // wrong conversation, threw, and the composer had already cleared itself. The typed draft IS
+    // saveable.
+    var editedId by remember { mutableStateOf<Long?>(null) }
+    var editing by remember { mutableStateOf(false) }
     var draft by rememberSaveable { mutableStateOf("") }
     // The composer keeps one draft slot, and the draft deliberately survives backing out of the
     // editor. Long-pressing a message to edit it overwrote that slot, so a typed-but-unsent prompt was
@@ -224,6 +228,13 @@ private fun ChatReader(
     // thousands of comparisons per frame while streaming.
     val messageById = remember(storedMessages) { storedMessages.associateBy { it.id } }
     val currentSource by rememberUpdatedState(chatState.conversationId to storedMessages)
+    // Resolved here: the presentation effect below is not a composable scope.
+    val stoppedBeforeStart =
+        androidx.compose.ui.res
+            .stringResource(R.string.reader_stopped_before_start)
+    val stoppedPartial =
+        androidx.compose.ui.res
+            .stringResource(R.string.reader_stopped_partial)
     // Presentation includes status/error/provenance, not just Markdown. All fields invalidate it.
     LaunchedEffect(storedMessages, chatState.conversationId) {
         val id = chatState.conversationId
@@ -271,10 +282,24 @@ private fun ChatReader(
                             if (message.status == "STOPPED" ||
                                 message.error != null
                             ) {
+                                // The status line must match the row's actual content. A Stop that lands before any
+                                // row exists (the credential read window) records a STOPPED row with no
+                                // text, and the generic "partial answer kept" claimed a partial answer
+                                // that did not exist — the same lie this fix set out to remove, just
+                                // persisted instead of transient.
                                 listOf(
                                     message.id to
                                         ContentBlock.Paragraph(
-                                            listOf(InlineContent(message.error ?: "Stopped · partial answer kept")),
+                                            listOf(
+                                                InlineContent(
+                                                    message.error
+                                                        ?: if (message.rawContent.isBlank()) {
+                                                            stoppedBeforeStart
+                                                        } else {
+                                                            stoppedPartial
+                                                        },
+                                                ),
+                                            ),
                                         ),
                                 )
                             } else {
@@ -415,11 +440,16 @@ private fun ChatReader(
         }
     BackHandler(editing) {
         editing = false
-        editedId = null
-        if (draftBackup.isNotBlank()) {
+        // Backing out of an EDIT discards the message body it injected into the composer and restores
+        // whatever draft was parked — including a blank one. Guarding on `draftBackup.isNotBlank()`
+        // left the message body in the single draft slot, so reopening the keyboard showed the user's
+        // own previous question and Send appended a DUPLICATE of it instead of editing.
+        if (editedId != null) {
             draft = draftBackup
             draftBackup = ""
+            editedId = null
         }
+        // A plain compose keeps what was typed: Back is not a discard.
     }
     BackHandler(providerScreen) { providerScreen = false }
     BackHandler(historyScreen) { historyScreen = false }

@@ -54,7 +54,8 @@ class ProviderSettings(
         store.data
             .map { prefs ->
                 try {
-                    ProviderSettingsState(decode(prefs[profilesKey] ?: "[]"), prefs[selectedKey])
+                    val profiles = decode(prefs[profilesKey] ?: "[]")
+                    ProviderSettingsState(profiles, readableSelection(profiles, prefs[selectedKey]))
                 } catch (
                     _: Exception,
                 ) {
@@ -325,3 +326,18 @@ internal fun nextSelection(
     if (current != deletedId && remaining.any { it.id == current }) return current
     return remaining.firstOrNull()?.id
 }
+
+/**
+ * The selection a build can actually USE, given what it could read.
+ *
+ * decode() drops entries it cannot parse (an unknown `type` after a downgrade, one missing field), but
+ * the stored `selected_profile` key was passed through untouched. The result was
+ * `{profiles: 3, selectedId: "X", selected: null, error: null}`: the reader said "Add provider" while
+ * three were listed, every send failed with "Add or select provider from menu.", and nothing ever
+ * repaired it. Falling back to the first readable profile keeps the app usable; the STORED key is left
+ * alone, so a build that can read the entry gets the user's real choice back.
+ */
+internal fun readableSelection(
+    profiles: List<ProviderProfile>,
+    selectedId: String?,
+): String? = selectedId?.takeIf { id -> profiles.any { it.id == id } } ?: profiles.firstOrNull()?.id
