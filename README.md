@@ -191,7 +191,7 @@ Every number below was read from a result file produced on this tree, not quoted
 
 | Check | Result (measured) | Where |
 |---|---|---|
-| JVM unit tests | 222 / 222, 0 failures, 0 errors, 0 skipped (38 suites) | `app/build/test-results/testDebugUnitTest/*.xml` |
+| JVM unit tests | 221 / 221, 0 failures, 0 errors, 0 skipped (37 suites) | `app/build/test-results/testDebugUnitTest/*.xml` |
 | Connected suite (emulator `NiroWear_Rebook_20261020`, destructive — not a CI gate) | 48 / 48 last recorded 2026-11-02; **not re-run** for this revision | `app/build/outputs/androidTest-results/connected/debug/*.xml` |
 | Lint | 0 errors, 1 warning: `GradleDependency` (test runner 1.5.0→1.5.2) | `app/build/reports/lint-results-debug.xml` |
 | Release APK | Source builds an **unsigned** `app-release-unsigned.apk`, 3589237 B, SHA-256 `66ABE409…BC6E`. The published `app-release.apk` (3609553 B, `319AE1CF…34D71`) is signed by the release pipeline, not by a local build. Both are `com.nirowear` v10 / `0.1.0`, minSdk 30, targetSdk 37 | `app/build/outputs/apk/release/`, `output-metadata.json` |
