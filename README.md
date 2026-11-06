@@ -70,7 +70,7 @@ SQLite `LIKE` scan with escaped wildcards — no dependency, no virtual table, n
 permission. FTS5 was tried first and measured impossible here: Android's bundled SQLite answers
 `no such module: fts5` on a Wear OS emulator, so an FTS index would have crashed the upgrade.
 
-**Watch-sized answers by default.** The system instruction asks for the shortest answer that keeps the required facts and caveats, and to expand when you ask for detail. The client never truncates a long answer to fit the screen.
+**Answers sized by the question, never by the screen.** The system instruction asks for the full answer the question needs — facts, caveats, steps, examples, code, math, table rows — and to make a long answer navigable with structure (headings, lists, tables, fences, display math) rather than shorter. The client never truncates an answer to fit the display; the earlier instruction asked for the shortest answer *because* the device is a watch, which is exactly the reason the UX contract forbids.
 
 **Keyboard and voice.** Both are first-class entry points. Voice delegates to the platform recognizer and always returns text you can review before sending.
 
@@ -118,8 +118,20 @@ Get-FileHash .\app-release.apk -Algorithm SHA256
 ```
 
 ```powershell
+# Verify the published signature before installing (android build-tools)
+apksigner verify --print-certs .\app-release.apk
+# expect: certificate DN: CN=NiroWear Release, OU=Android, O=NiroWear, L=Jakarta, C=ID
+# expect: certificate SHA-256 digest: 0dc50fc0191b36f37433074fc7898b4d165298ca73654f416f8f50f05186543e
+```
+
+```powershell
 adb install -r .\app-release.apk
 ```
+
+> **Updating from 0.1.0 requires an uninstall.** 0.1.0 was signed with the Android debug lineage
+> (`7D:4E:6E:99:…:AB:E3`); 0.1.1 is signed with the NiroWear release key, so Android refuses an in-place
+> update. Uninstalling removes local conversations and saved keys — credentials are device-bound by
+> design — so re-enter your provider afterwards.
 
 > Stable releases live at [`michaelxdips/NiroWear`](https://github.com/michaelxdips/NiroWear) from `v0.1.0` on. From `v0.1.1` the release key is a dedicated NiroWear identity (`CN=NiroWear Release`, SHA-256 `0D:C5:0F:C0:19:1B:36:F3:74:33:07:4F:C7:89:8B:4D:16:52:98:CA:73:65:4F:41:6F:8F:50:F0:51:86:54:3E`, valid to 2056), built and signed by `.github/workflows/release.yml`; `v0.1.0` used the Android debug lineage, so **0.1.0 installs must be uninstalled before installing 0.1.1** (uninstalling removes local chats and saved keys). Historical beta APKs remain at [`NiroWear-Beta`](https://github.com/michaelxdips/NiroWear-Beta) (archived, read-only).
 
@@ -165,7 +177,7 @@ That design is implemented, and it needed a transport fix to work: a browser ref
 
 ## Architecture
 
-One application module, no over-engineering (28 Kotlin sources under `app/src/main`):
+One application module, no over-engineering (29 Kotlin sources, ~8.2k lines, under `app/src/main`):
 
 ```
 Wear Compose UI  →  ChatViewModel  →  LlmProvider adapter  →  OkHttp → provider
@@ -193,7 +205,8 @@ Every number below was read from a result file produced on this tree, not quoted
 | Check | Result (measured) | Where |
 |---|---|---|
 | JVM unit tests | 264 / 264, 0 failures, 0 errors, 0 skipped (42 suites) | `app/build/test-results/testDebugUnitTest/*.xml` |
-| Connected suite (emulator `NiroWear_Rebook_20261020`, destructive — not a CI gate) | 48 / 48 last recorded 2026-11-02; **not re-run** for this revision | `app/build/outputs/androidTest-results/connected/debug/*.xml` |
+| Connected suite (emulator `NiroWear_Rebook_20261020`, destructive — not a CI gate) | 48 / 48 last recorded **2026-11-02**; **not re-run since** — three audit rounds changed chat lifecycle, Keystore and renderer code after that run, and no device or AVD is available here | `app/build/outputs/androidTest-results/connected/debug/*.xml` |
+| Host-gated instrumentation (6 tests, `@HostDrivenGate`) | written, **never executed** | `app/src/androidTest` (gitignored by policy) |
 | Lint | 0 errors, 1 warning: `GradleDependency` (test runner 1.5.0→1.5.2) | `app/build/reports/lint-results-debug.xml` |
 | Release APK | Published `v0.1.1` asset: 3,621,253 B, SHA-256 `0BA7DDEF…B207`, `com.nirowear` v11 / `0.1.1`, minSdk 30, targetSdk 37 — built and signed by `.github/workflows/release.yml`. A local cut is **not** bit-identical (a local build of the same tree measured 3,619,181 B); the hash of the asset that ships is the one in that release's body. Signing is driven by the environment (`NIROWEAR_KEYSTORE`/`_PASSWORD`, `NIROWEAR_KEY_ALIAS`, `NIROWEAR_KEY_PASSWORD`); with no keystore present the build emits an unsigned `app-release-unsigned.apk` | `app/build/outputs/apk/release/`, `output-metadata.json` |
 | Signing identity | `CN=NiroWear Release`, SHA-256 `0D:C5:0F:C0:19:…:86:54:3E` (valid to 2056); 0.1.0 was `CN=Android Debug` `7D:4E:6E:99:…:AB:E3`, so 0.1.0 installs need an uninstall before updating | `apksigner verify --print-certs`, release notes |
@@ -226,18 +239,14 @@ Stated plainly, because a README that hides these is useless:
 - **Voice transcription quality is unaccepted.** The intent launch/return path is tested; recognition accuracy is the platform's.
 - **Link taps** open via the system handler; destination completion on a real paired device is unverified.
 - **Live smoke tests** are documented against controlled endpoints and one third-party Responses endpoint — not against every official provider with production credentials.
-- **TalkBack audio** acceptance is incomplete. There is still one dead stop in the reader (a linked
-  paragraph's "Links" group node carries no action) and the composer's field relies on the visible
-  "Prompt" heading rather than a label of its own.
-- **Stop within the first few milliseconds of a new chat can cost the typed prompt.** The conversation
-  row is inserted before the screen's state carries its id, and a cancel that lands inside that insert
-  finds no conversation to record the stopped turn against. Warm-DB timings make the window small; it
-  is stated rather than fixed because the repair (an insert-if-absent before the terminal write) needs
-  a device run to verify and there is none here.
-- **Stable releases live at `michaelxdips/NiroWear` from `v0.1.0` on.** `releases/latest`
-  redirects to the newest stable build. The signing identity is still the Android debug key,
-  which is disclosed in the release notes — shipping with a production keystore is an owner
-  decision, not a code change.
+- **TalkBack audio** acceptance is incomplete. Two dead stops remain in the reader: a linked
+  paragraph's "Links" group node carries no action, and the composer's field relies on the visible
+  "Prompt" heading rather than a label of its own. A credential entry's label is also read twice, and
+  the provider header (`130 dp`, `maxLines = 1`) truncates at large font scales.
+- **Releases are signed by the NiroWear release key, not the debug key.** `v0.1.1` uses
+  `CN=NiroWear Release` (SHA-256 `0D:C5:0F:C0:19:…:86:54:3E`, valid to 2056), built and signed by
+  `.github/workflows/release.yml` from the tag. `v0.1.0` used the Android debug lineage, so an in-place
+  update from 0.1.0 needs an uninstall.
 - **The connected suite (48 tests) is a local gate, not a CI gate.** It needs an emulator, so CI runs
   the JVM tests, lint, ktlint and both assembles only. Run `connectedDebugAndroidTest` before a
   release; nothing will remind you.
@@ -249,12 +258,15 @@ Stated plainly, because a README that hides these is useless:
   once at a smaller size — never below half — before falling back to source text. A display inside a
   list item keeps the item's indentation; the bullet itself is not reproduced, because the formula is
   extracted before the list is parsed.
-- **Known renderer limits.** A fence opened inside a quote or list still closes on a `> ``` ` line
-  inside its own sample. A link with a rejected scheme is still painted as tappable even though
-  tapping does nothing. A table row wider than its header has its extra cells dropped by the
-  Markdown library; the parser counts them and the reader says "… N more cells", but a table nested
-  deeper than one list level can still misreport that count. Tables are capped at 40 rendered rows
-  with an explicit "… N more rows" line.
+- **Known renderer limits.** A fence opened inside a quote can still be closed by a `> ``` ` line inside
+  its own sample (the top-level case is fixed and pinned). A table row wider than its header has its
+  extra cells dropped by the Markdown library; the parser counts them and the reader says "… N more
+  cells" — correct for the list, quote and HTML-block shapes the overflow scan has tests for, unverified
+  for shapes beyond those. Tables are capped at 40 rendered rows with an explicit "… N more rows" line.
+- **Not verified on hardware.** The Keystore, Room and Compose work in 0.1.1 — the split of a failed key
+  save from a failed key, the STOPPED/ERROR recovery of an interrupted edit or retry, the editor recovery
+  after a refused edit, and the Stop-button sizing — has no JVM test and no device run behind it. It
+  compiles and is reasoned from the code; a physical watch is the proof.
 - **Pairing needs the certificate warning accepted.** The watch mints a certificate per session, so
   the phone browser shows "not private" until you proceed; the page says so before you try. The
   phone-side click-through itself has not been exercised on a physical watch here (no device is

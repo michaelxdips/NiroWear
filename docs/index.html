@@ -2637,8 +2637,8 @@ A failed decrypt is a generic rejection: the caller learns that the payload is n
             <dl style="margin:0">
               <div class="mrow"><dt>Protocol</dt><dd>Messages API · <code>POST {base}/messages</code></dd></div>
               <div class="mrow"><dt>Auth</dt><dd><code>x-api-key: &lt;key&gt;</code> plus <code>anthropic-version: 2026-10-21</code></dd></div>
-              <div class="mrow"><dt>Terminal event</dt><dd><b>message_stop</b> — accepted for every documented <code>stop_reason</code>: <code>end_turn</code>, <code>max_tokens</code>, <code>stop_sequence</code>, <code>tool_use</code>, <code>pause_turn</code>, <code>refusal</code>, <code>model_context_window_exceeded</code>. Text is not required — a refusal, or a reply made only of thinking blocks, ends with none. An unrecognised reason still fails.</dd></div>
-              <div class="mrow"><dt>Refuses to guess</dt><dd class="refuse"><code>max_tokens</code> is required, so it is read from the model's own metadata. It is never derived from a model name. When metadata is unavailable the code uses 8192 and says so in a comment — a fallback, not a documented default.</dd></div>
+              <div class="mrow"><dt>Terminal event</dt><dd><b>message_stop</b> — accepted for every documented <code>stop_reason</code>: <code>end_turn</code>, <code>max_tokens</code>, <code>stop_sequence</code>, <code>tool_use</code>, <code>pause_turn</code>, <code>refusal</code>, <code>model_context_window_exceeded</code>. Text is not required — a refusal, or a reply made only of thinking blocks, ends with none. An unrecognised reason still fails. <code>max_tokens</code>, <code>model_context_window_exceeded</code>, <code>pause_turn</code> and <code>tool_use</code> end the answer <em>early</em>, so they surface the truncation note instead of reading as a finished answer.</dd></div>
+              <div class="mrow"><dt>Refuses to guess</dt><dd class="refuse"><code>max_tokens</code> is required, so it is read from the model's own metadata and cached per endpoint and model — one lookup, not one per send. It is never derived from a model name. When metadata is unavailable the code sends 4096 (inside every Messages model's documented cap) and discloses the resulting cut as a truncation note rather than guessing a bigger number that a 400 would reject.</dd></div>
               <div class="mrow"><dt>Roles</dt><dd>Adjacent same-role turns are merged at the wire boundary; canonical history stays provider-neutral.</dd></div>
             </dl>
           </div>
@@ -2844,8 +2844,11 @@ HTTP/1.1 400
 
         <div class="panel on" id="p-apk">
           <p style="color:var(--steel);font-size:15px">
-            Download the stable release, then install over ADB. Upgrading from an earlier beta keeps
-            your conversations — the signing identity is unchanged.
+            Download the latest release, then install over ADB. <strong>Updating from 0.1.0 requires an
+            uninstall first</strong>: 0.1.0 was signed with the Android debug lineage and 0.1.1 with the
+            NiroWear release key, so Android refuses an in-place update. Uninstalling removes local
+            conversations and saved keys — credentials are device-bound by design — so re-enter your
+            provider afterwards.
           </p>
           <div class="code">
             <button class="cp" type="button">Copy</button>
@@ -2928,7 +2931,15 @@ adb install -r app-release.apk</pre>
           </div>
           <div class="limit">
             <dt>Screen reader</dt>
-            <dd>TalkBack audio acceptance is incomplete. Headings expose semantics; the full reading order has not been signed off.</dd>
+            <dd>TalkBack audio acceptance is incomplete. Headings expose semantics, but a linked paragraph's "Links" group node carries no action, the composer's field relies on the visible "Prompt" heading rather than a label, a credential entry's label is read twice, and the 130 dp provider header truncates at large font scales.</dd>
+          </div>
+          <div class="limit">
+            <dt>0.1.1 lifecycle fixes</dt>
+            <dd>The Keystore split, the STOPPED/ERROR recovery of an interrupted edit or retry, the editor recovery after a refused edit and the Stop-button sizing compile and are reasoned from the code, but have no JVM test and no device run. A physical watch is the proof.</dd>
+          </div>
+          <div class="limit">
+            <dt>Updating from 0.1.0</dt>
+            <dd>0.1.0 shipped under the Android debug signing lineage; from 0.1.1 the release key is <code>CN=NiroWear Release</code>. Android refuses an in-place update across that change, so uninstall first — that removes local conversations and saved keys.</dd>
           </div>
           <div class="limit">
             <dt>Live provider smoke</dt>
@@ -2963,6 +2974,11 @@ adb install -r app-release.apk</pre>
             <tr><th scope="col">Claim</th><th scope="col">Evidence</th><th scope="col">Where</th></tr>
           </thead>
           <tbody>
+            <tr>
+              <td>The published APK is signed by the release identity</td>
+              <td><span class="pill pill-source">Source</span> <span class="pill pill-device">JVM</span> <code>apksigner verify --print-certs</code> on the downloaded <code>v0.1.1</code> asset reports <code>CN=NiroWear Release</code> / <code>0dc50fc0…543e</code>; the release workflow asserts the same certificate before it publishes. 0.1.0 was signed with the Android debug lineage, so a 0.1.0 install must be uninstalled before updating.</td>
+              <td>.github/workflows/release.yml; release body</td>
+            </tr>
             <tr>
               <td>Four adapters, four distinct wire protocols</td>
               <td><span class="pill pill-source">Source</span> One class per provider type; request builders and decoders are separate files.</td>
@@ -3030,9 +3046,12 @@ adb install -r app-release.apk</pre>
 
         <p class="status-note">
           The JVM and lint figures above were read from the result XML produced by a forced re-run on
-          2026-11-03, not quoted from memory. The connected-test suite is deliberately absent
-          from this table: its last recorded run was on the emulator, and it was not re-run while this
-          page was written, so presenting it as current would be the exact kind of claim this section
+          2026-11-06 (<code>264 tests / 42 suites</code>, lint 1 warning), not quoted from memory. This
+          page describes <strong>0.1.1</strong>; the three audit rounds that produced it changed chat
+          lifecycle, Keystore, adapter and renderer code, so any claim here that cites an earlier
+          emulator run is dated rather than current. The connected-test suite is deliberately absent
+          from this table: its last recorded run was 2026-11-02 on an emulator, and it has not been
+          re-run since, so presenting it as current would be the exact kind of claim this section
           exists to prevent. Test sources are not published in this repository by policy, so the result
           XML is not linkable from here.
         </p>
