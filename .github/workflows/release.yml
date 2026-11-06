@@ -1,0 +1,111 @@
+name: Release
+
+# Cut a release by pushing a tag: `git tag -a v0.1.1 && git push origin v0.1.1`.
+#
+# The APK is built and SIGNED here, from the same keystore a local cut uses, so the artifact and its
+# certificate are reproducible from the tag instead of depending on whoever built it. The keystore is
+# never committed and never archived: it is decoded from secrets into the runner's temp directory,
+# used for one assemble, and deleted before any upload step can see it.
+
+permissions:
+  contents: write
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: release
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      # gradle/gradle-daemon-jvm.properties pins toolchainVersion=25.
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      # Same SDK discovery as ci.yml: sdkmanager is not on PATH and the
+      # preinstalled platforms are used when it cannot be found.
+      - name: Put the Android SDK tools on PATH
+        run: |
+          set -euo pipefail
+          test -d "$ANDROID_HOME" || { echo "::error::no Android SDK at $ANDROID_HOME"; exit 1; }
+          CMDLINE=$(find "$ANDROID_HOME/cmdline-tools" -maxdepth 2 -name bin -type d 2>/dev/null | head -1)
+          if [ -n "${CMDLINE:-}" ]; then echo "$CMDLINE" >> "$GITHUB_PATH"; fi
+          ls "$ANDROID_HOME/build-tools" || true
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle.kts', 'gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: gradle-${{ runner.os }}-
+
+      - name: Decode the release keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.NIROWEAR_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          test -n "$KEYSTORE_BASE64" || { echo "::error::NIROWEAR_KEYSTORE_BASE64 is not set"; exit 1; }
+          printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/nirowear-release.jks"
+          test -s "$RUNNER_TEMP/nirowear-release.jks"
+
+      - name: Build the signed release APK
+        env:
+          NIROWEAR_KEYSTORE: ${{ runner.temp }}/nirowear-release.jks
+          NIROWEAR_KEYSTORE_PASSWORD: ${{ secrets.NIROWEAR_KEYSTORE_PASSWORD }}
+          NIROWEAR_KEY_ALIAS: ${{ secrets.NIROWEAR_KEY_ALIAS }}
+          NIROWEAR_KEY_PASSWORD: ${{ secrets.NIROWEAR_KEY_PASSWORD }}
+        run: ./gradlew :app:assembleRelease --console=plain
+
+      # The keystore has done its job; nothing downstream needs it.
+      - name: Remove the keystore
+        if: always()
+        run: rm -f "$RUNNER_TEMP/nirowear-release.jks"
+
+      - name: Verify the signature and record the artifact
+        run: |
+          set -euo pipefail
+          apk=$(find app/build/outputs/apk/release -name '*.apk' | head -1)
+          test -n "$apk" || { echo "::error::no release APK produced"; exit 1; }
+          BUILD_TOOLS=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          "$BUILD_TOOLS/apksigner" verify --print-certs "$apk" | tee certs.txt
+          grep -q "Signer #1 certificate DN: CN=NiroWear Release" certs.txt \
+            || { echo "::error::the APK is not signed by the release identity"; exit 1; }
+          "$BUILD_TOOLS/aapt2" dump badging "$apk" | grep '^package:' | tee package.txt
+          sha256sum "$apk" | tee sha256.txt
+          echo "### Signed artifact" >> "$GITHUB_STEP_SUMMARY"
+          cat package.txt sha256.txt >> "$GITHUB_STEP_SUMMARY"
+          grep "certificate SHA-256" certs.txt >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          notes="docs/release/RELEASE_NOTES_${version}.md"
+          test -f "$notes" || { echo "::error::missing $notes"; exit 1; }
+          apk=$(find app/build/outputs/apk/release -name '*.apk' | head -1)
+          sha=$(cut -d' ' -f1 sha256.txt)
+          {
+            cat "$notes"
+            echo
+            echo "---"
+            echo "Artifact: \`$(basename "$apk")\` — SHA-256 \`$sha\`"
+          } > "$RUNNER_TEMP/notes.md"
+          gh release create "$GITHUB_REF_NAME" "$apk" \
+            --title "NiroWear $version" \
+            --notes-file "$RUNNER_TEMP/notes.md"

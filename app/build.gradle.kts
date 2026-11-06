@@ -31,8 +31,8 @@ android {
         applicationId = "com.nirowear"
         minSdk = 30
         targetSdk = 37
-        versionCode = 10
-        versionName = "0.1.0"
+        versionCode = 11
+        versionName = "0.1.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         testInstrumentationRunnerArguments["notAnnotation"] = "com.nirowear.HostDrivenGate"
     }
@@ -48,6 +48,22 @@ android {
         manifestPlaceholders["debugAppLabel"] = if (iconPreview) "NiroWear Icon Preview" else "NiroWear"
     }
 
+    // Release signing is driven by the environment, so the tag workflow and a local cut use the SAME
+    // identity instead of whichever keystore happened to be on the machine. No keystore in the
+    // environment means an UNSIGNED release APK, which is what a plain local build has always
+    // produced; the certificate that ships is the one the release notes disclose.
+    signingConfigs {
+        val storePath = System.getenv("NIROWEAR_KEYSTORE").orEmpty()
+        if (storePath.isNotBlank() && file(storePath).exists()) {
+            create("release") {
+                storeFile = file(storePath)
+                storePassword = System.getenv("NIROWEAR_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("NIROWEAR_KEY_ALIAS")
+                keyPassword = System.getenv("NIROWEAR_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes.named("release") {
         optimization { enable = true }
         // R8 already ran with no repository-controlled rules at all; this wires the file the
@@ -56,6 +72,7 @@ android {
             getDefaultProguardFile("proguard-android-optimize.txt"),
             "proguard-rules.pro",
         )
+        signingConfigs.findByName("release")?.let { signingConfig = it }
     }
 
     sourceSets["debug"].assets.directories.add(file("../fixtures").path)
