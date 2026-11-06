@@ -6,6 +6,7 @@ import android.security.keystore.KeyProperties
 import android.util.AtomicFile
 import com.nirowear.provider.SecretValue
 import java.io.File
+import java.security.InvalidKeyException
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
@@ -33,11 +34,24 @@ class SecretStore(
     ) {
         // Encrypt first, in its own failure domain. Only a crypto failure here means the key
         // itself cannot do its job, and only that justifies replacing the key.
+        //
+        // Obtaining the key is NOT that failure domain. KeyStore.load and generateKey are Keystore IPC:
+        // a daemon restart, a first access right after boot, or a transient provider error throws there
+        // without saying anything about the existing key. Replacing the entry on such an error made
+        // every OTHER profile's ciphertext permanently undecryptable (there is no plaintext fallback),
+        // to save one new provider. Losing one save is recoverable; losing the shared key is not.
+        val secret =
+            try {
+                key(create = true)
+            } catch (_: Exception) {
+                dropCachedKey()
+                throw CredentialUnavailable()
+            }
         val iv: ByteArray
         val encrypted: ByteArray
         try {
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-            cipher.init(Cipher.ENCRYPT_MODE, key(create = true))
+            cipher.init(Cipher.ENCRYPT_MODE, secret)
             cipher.updateAAD(ref.toByteArray(Charsets.UTF_8))
             val plaintext = value.forRequest().toByteArray(Charsets.UTF_8)
             encrypted =
@@ -48,8 +62,15 @@ class SecretStore(
                 }
             iv = cipher.iv
             check(iv.size == 12)
-        } catch (error: Exception) {
+        } catch (_: InvalidKeyException) {
+            // The one proof that this key can no longer encrypt (permanently invalidated by a
+            // lock-screen change, restored from another device, wrong purpose or size).
             invalidateKey()
+            throw CredentialUnavailable()
+        } catch (_: Exception) {
+            // Anything else is a transient encryption failure: keep the entry so sibling profiles stay
+            // readable, and only drop the cached handle.
+            dropCachedKey()
             throw CredentialUnavailable()
         }
         CredentialPromotionProbe.reached("CANDIDATE_ENCRYPTED")

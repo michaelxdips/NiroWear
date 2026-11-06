@@ -7,6 +7,7 @@ import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.RoomDatabase
@@ -130,6 +131,24 @@ interface ChatDao {
     suspend fun snapshot(id: String): List<StoredMessage>
 
     @Insert suspend fun insertConversation(conversation: Conversation)
+
+    /**
+     * Insert a conversation only if it is not already there.
+     *
+     * A turn cancelled in the window between `insertConversation` and the state write left the prompt
+     * with no row at all, so the failure record had nowhere to land (and a committed insert made the
+     * retry a duplicate-key crash). IGNORE makes the recovery path idempotent: either the row exists
+     * and the record is written, or it is created now.
+     */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun ensureConversation(conversation: Conversation)
+
+    /** Unconditional rename, used when the FIRST message of a chat is edited. */
+    @Query("UPDATE conversations SET title = :title WHERE id = :id")
+    suspend fun retitle(
+        id: String,
+        title: String,
+    )
 
     @Insert suspend fun insertMessage(message: StoredMessage): Long
 

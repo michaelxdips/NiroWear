@@ -82,6 +82,16 @@ class AnthropicProvider(
 ) : LlmProvider {
     private val http = ProviderHttp(client)
 
+    /**
+     * Model metadata answers, per endpoint and model, for the process lifetime.
+     *
+     * Both a cache hit and a miss ended in the same `max_tokens` before this: the GET ran on EVERY
+     * turn, so a watch paid a radio wakeup per send and a hanging metadata host delayed the first token
+     * by the whole deadline. Only a positive answer is stored, so a transport failure is retried on the
+     * next turn instead of pinning the fallback.
+     */
+    private val maxTokensByModel = java.util.concurrent.ConcurrentHashMap<String, Int>()
+
     override suspend fun validate(
         profile: ProviderProfile,
         secret: SecretValue,
@@ -155,29 +165,35 @@ class AnthropicProvider(
                 // falls back to the documented default instead of blocking the turn. A bad credential or
                 // unreachable host still fails on the messages call itself.
                 //
-                // Time-boxed: this GET sits on the critical path of EVERY turn, so the shared 90 s
-                // stream read timeout would let a hanging metadata endpoint delay the first token by a
-                // minute and a half while the UI already says "generating". 4 s is generous for a
-                // single JSON object and the fallback below is correct anyway.
+                // Cached per endpoint+model for the process: this GET sits on the critical path of EVERY
+                // turn, so an uncached watch paid a radio wakeup per send before the first token.
+                val metadataKey = profile.baseUrl + "|" + profile.selectedModelId
                 val reportedMaxTokens =
-                    try {
-                        val modelUrl =
-                            Endpoints
-                                .compatible(profile.baseUrl, "models", allowLocalHttp)
-                                .newBuilder()
-                                .addPathSegment(profile.selectedModelId)
-                                .build()
-                        Json
-                            .parseToJsonElement(
-                                http.fetch(authenticated(modelUrl, secret).build(), METADATA_TIMEOUT_MS),
-                            ).jsonObject["max_tokens"]
-                            ?.jsonPrimitive
-                            ?.intOrNull
-                    } catch (cancelled: CancellationException) {
-                        throw cancelled
-                    } catch (_: Exception) {
-                        null
-                    }
+                    maxTokensByModel[metadataKey]
+                        ?: (
+                            try {
+                                val modelUrl =
+                                    Endpoints
+                                        .compatible(profile.baseUrl, "models", allowLocalHttp)
+                                        .newBuilder()
+                                        .addPathSegment(profile.selectedModelId)
+                                        .build()
+                                Json
+                                    .parseToJsonElement(
+                                        http.fetch(authenticated(modelUrl, secret).build(), METADATA_TIMEOUT_MS),
+                                    ).jsonObject["max_tokens"]
+                                    ?.jsonPrimitive
+                                    ?.intOrNull
+                            } catch (cancelled: CancellationException) {
+                                throw cancelled
+                            } catch (_: Exception) {
+                                null
+                            }
+                        ).let { reported ->
+                            // Only a POSITIVE answer is cached: a transport failure must not pin the
+                            // fallback for the whole session.
+                            reported?.takeIf { it > 0 }?.also { maxTokensByModel[metadataKey] = it }
+                        }
                 // Fallback output budget when model metadata is unavailable.
                 //
                 // 4096, not 8192: metadata is the only honest source, and a value ABOVE a model's own
@@ -214,7 +230,13 @@ class AnthropicProvider(
                         .header("Accept", "text/event-stream")
                         .post(payload.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
                         .build()
-                emitAll(http.stream(wire, AnthropicStreamDecoder()::accept))
+                emitAll(
+                    http.stream(
+                        wire,
+                        AnthropicStreamDecoder()::accept,
+                        decodeError = { _, body -> anthropicHttpError(body) },
+                    ),
+                )
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: SafeProviderException) {
@@ -364,20 +386,15 @@ internal class AnthropicStreamDecoder {
                 "error" -> {
                     listOf(
                         StreamEvent.Failure(
-                            when (
-                                root
-                                    .getValue("error")
-                                    .jsonObject
-                                    .getValue("type")
-                                    .jsonPrimitive.content
-                            ) {
-                                "authentication_error" -> ProviderError.INVALID_CREDENTIAL
-                                "permission_error" -> ProviderError.PERMISSION_DENIED
-                                "not_found_error" -> ProviderError.MODEL_UNAVAILABLE
-                                "rate_limit_error" -> ProviderError.RATE_LIMITED
-                                "api_error", "overloaded_error" -> ProviderError.SERVER
-                                else -> ProviderError.HTTP
-                            },
+                            anthropicError(
+                                runCatching {
+                                    root
+                                        .getValue("error")
+                                        .jsonObject
+                                        .getValue("type")
+                                        .jsonPrimitive.content
+                                }.getOrNull(),
+                            ),
                         ),
                     )
                 }
@@ -390,4 +407,45 @@ internal class AnthropicStreamDecoder {
         } catch (_: Exception) {
             listOf(StreamEvent.Failure(ProviderError.PROTOCOL))
         }
+}
+
+/** One mapping for the error type, whether it arrives in the stream or in a non-2xx body. */
+private fun anthropicError(type: String?): ProviderError =
+    when (type) {
+        "authentication_error" -> ProviderError.INVALID_CREDENTIAL
+        "permission_error" -> ProviderError.PERMISSION_DENIED
+        "not_found_error" -> ProviderError.MODEL_UNAVAILABLE
+        "rate_limit_error" -> ProviderError.RATE_LIMITED
+        "api_error", "overloaded_error" -> ProviderError.SERVER
+        else -> ProviderError.HTTP
+    }
+
+/**
+ * The reason Anthropic gives in a non-2xx body, which the status alone cannot express.
+ *
+ * A 400 is `invalid_request_error` for a malformed request, a `max_tokens` above the model's cap (the
+ * case the 4096 fallback invites) or an exhausted credit balance — three different user actions behind
+ * one status. Only a type this build recognises is returned; null lets the status mapping stand.
+ */
+internal fun anthropicHttpError(body: String): ProviderError? {
+    val type =
+        runCatching {
+            Json
+                .parseToJsonElement(body)
+                .jsonObject["error"]
+                ?.jsonObject
+                ?.get("type")
+                .stringOrNull()
+        }.getOrNull()
+    return when (type) {
+        "authentication_error",
+        "permission_error",
+        "not_found_error",
+        "rate_limit_error",
+        "api_error",
+        "overloaded_error",
+        -> anthropicError(type)
+
+        else -> null
+    }
 }

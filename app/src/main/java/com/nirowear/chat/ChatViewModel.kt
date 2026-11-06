@@ -274,6 +274,11 @@ class ChatViewModel(
                 // Set when the turn was rejected BEFORE anything was sent or written, so the failure
                 // must not be recorded as an answer row in a conversation the user never touched.
                 var nothingSent = false
+                // True once this turn has CHANGED the conversation: the edited text written, the retry's
+                // tail truncated, or the answer row admitted. Nothing before that may be recorded as a
+                // failed turn; after it the opposite holds — a Stop in that gap used to delete the
+                // previous answer and leave the reader with neither a row, a status line nor a Retry.
+                var wrote = false
                 try {
                     if (newConversationId != null) {
                         dao.insertConversation(
@@ -294,14 +299,19 @@ class ChatViewModel(
                     val provider =
                         app.provider(profile.type) ?: throw SafeProviderException(ProviderError.PROVIDER_UNSUPPORTED)
                     val secret = withContext(Dispatchers.IO) { app.secrets.read(profile.credentialRef) }
-                    // Created above for a new chat; edit/retry only run on an existing one.
-                    val conversationId = mutableState.value.conversationId ?: error("No conversation")
+                    // Created above for a new chat; edit/retry only run on an existing one. The local id
+                    // is the fallback: a cancel between `insertConversation` and the state write used to
+                    // throw here, which cost the typed prompt because the terminal block had no id to
+                    // record the stopped turn against.
+                    val conversationId =
+                        mutableState.value.conversationId ?: newConversationId ?: error("No conversation")
                     if (editId != null) {
                         // Verify the target belongs to THIS conversation BEFORE mutating anything. An
                         // edit target can outlive its conversation (a restored screen state, or a
                         // conversation switch that did not clear it), and the failing `require` inside
                         // dao.edit threw after the caller had already cleared the composer.
-                        val owned = dao.snapshot(conversationId).any { it.id == editId && it.role == "USER" }
+                        val rows = dao.snapshot(conversationId)
+                        val owned = rows.any { it.id == editId && it.role == "USER" }
                         if (!owned) {
                             // Nothing was sent and nothing was written, so this must NOT be recorded as a
                             // failed turn: recording it put a phantom "Cannot send…" answer row into a
@@ -310,12 +320,21 @@ class ChatViewModel(
                             nothingSent = true
                             throw TurnRefused("That message is no longer in this chat. Send it again.")
                         }
+                        val renamesChat = rows.firstOrNull { it.role == "USER" }?.id == editId
                         dao.edit(conversationId, editId, requireNotNull(editedText))
+                        wrote = true
+                        // History names a chat from its FIRST prompt, so editing that prompt must follow
+                        // it. `retitleIfUnnamed` cannot: a new chat is created already titled with its
+                        // prompt, so its `title = 'New chat'` guard never matches.
+                        if (renamesChat) {
+                            runCatching { dao.retitle(conversationId, requireNotNull(editedText).trim().take(60)) }
+                        }
                     }
                     if (retry) {
                         val user =
                             dao.snapshot(conversationId).lastOrNull { it.role == "USER" } ?: error("No user message")
                         dao.truncate(conversationId, user.id)
+                        wrote = true
                     }
                     val newAssistantId = dao.admit(conversationId, prompt?.trim(), profile)
                     assistantId = newAssistantId
@@ -525,23 +544,38 @@ class ChatViewModel(
                         // trace in the conversation either — recording it wrote a phantom "Cannot send…"
                         // answer into a conversation the user never touched.
                         //
-                        // Sends only (`editId == null && !retry`): an edit or a retry that was stopped
-                        // before its own truncate ran has changed NOTHING, so recording a failure row
-                        // appended an empty "Stopped before…" answer under the finished answer that is
-                        // still there. The transient error already says what happened.
-                        if (assistantId == null && !nothingSent && editId == null && !retry) {
-                            mutableState.value.conversationId?.let { id ->
-                                runCatching {
-                                    dao.recordFailure(
-                                        id,
-                                        prompt?.trim(),
-                                        usedProfile,
-                                        failure,
-                                        // A user cancel is STOPPED, not ERROR: the reader renders the
-                                        // same line it already shows for a stopped answer.
-                                        status = if (failure == null) "STOPPED" else "ERROR",
-                                    )
-                                }
+                        // `wrote` instead of "sends only": an edit or a retry that failed BEFORE writing
+                        // changed nothing, so recording a row appended an empty "Stopped before…" answer
+                        // under the finished answer that is still there. Once it HAS written (the edit
+                        // replaced the text, the retry truncated the tail) the conversation no longer
+                        // matches what the reader shows: a Stop there used to delete the previous answer
+                        // and leave nothing — no row, no status line, no Retry.
+                        //
+                        // The id falls back to the one minted for this turn: a cancel between
+                        // `insertConversation` and the state write left the prompt with nowhere to go.
+                        val recordingId = mutableState.value.conversationId ?: newConversationId
+                        if (assistantId == null && !nothingSent && recordingId != null &&
+                            ((editId == null && !retry) || wrote)
+                        ) {
+                            runCatching {
+                                dao.ensureConversation(
+                                    Conversation(
+                                        recordingId,
+                                        prompt.orEmpty().take(60).ifBlank { "New chat" },
+                                        System.currentTimeMillis(),
+                                    ),
+                                )
+                                dao.recordFailure(
+                                    recordingId,
+                                    // The plural prompt row belongs to a SEND. An edit already replaced
+                                    // its own user row, and a retry's user row is still there.
+                                    if (editId == null && !retry) prompt?.trim() else null,
+                                    usedProfile,
+                                    failure,
+                                    // A user cancel is STOPPED, not ERROR: the reader renders the
+                                    // same line it already shows for a stopped answer.
+                                    status = if (failure == null) "STOPPED" else "ERROR",
+                                )
                             }
                         }
                         liveAnswer.value =

@@ -85,6 +85,22 @@ object ResponseParser {
     // Hoisted out of the per-line loop: the pattern is constant, so building a Regex for every
     // line of every streamed answer was pure overhead. One instance, reused.
     private val FENCE = Regex("^ {0,3}(`{3,}|~{3,})(.*)$")
+
+    /**
+     * A fence OPENER, honouring CommonMark's rule that a backtick fence's info string may not itself
+     * contain a backtick.
+     *
+     * "```npm i``` runs it." is prose, not a fence. Opening one there suppressed display-math extraction
+     * for the whole chunk and replayed the following lines as sample text, so a display a few lines
+     * later rendered as literal dollars. Tilde fences may carry backticks, so only the backtick form is
+     * constrained.
+     */
+    private fun fenceOpening(line: String): MatchResult? =
+        FENCE.find(line)?.takeIf { match ->
+            val run = match.groupValues[1]
+            run[0] == '~' || !match.groupValues[2].contains('`')
+        }
+
     private val DEEP_QUOTE = Regex("^\\s*(?:>\\s*)+")
     private val DELIMITER_CELL = Regex(":?-{1,}:?")
 
@@ -401,7 +417,7 @@ object ResponseParser {
             if (fence == null) {
                 // OPEN detection tolerates container markers: replayFence leaves them in place when the
                 // body was properly marked, so a fence can reach this point as "> ```".
-                val opener = FENCE.find(raw) ?: FENCE.find(view)
+                val opener = fenceOpening(raw) ?: fenceOpening(view)
                 if (opener != null) {
                     fence = opener.groupValues[1].first()
                     fenceLength = opener.groupValues[1].length
@@ -464,7 +480,7 @@ object ResponseParser {
                 val nextIndent = nextLine.length - nextLine.trimStart(' ').length
                 val nextRelative = if (listIndent > 0) (nextIndent - listIndent).coerceAtLeast(0) else nextIndent
                 if (nextRelative >= 4) break
-                if (FENCE.find(nextRaw) != null || !nextLine.contains('|') || isDelimiterRow(nextLine)) break
+                if (fenceOpening(nextRaw) != null || !nextLine.contains('|') || isDelimiterRow(nextLine)) break
                 total += (splitTableRow(nextLine).size - width).coerceAtLeast(0)
                 index++
             }
@@ -642,7 +658,7 @@ object ResponseParser {
                 // fence buried behind one was never detected. Only the fence hunt gets this
                 // fallback; quote parsing still sees the raw line.
                 val fenced =
-                    if (FENCE.find(view) == null &&
+                    if (fenceOpening(view) == null &&
                         (rest.contains("```") || rest.contains("~~~"))
                     ) {
                         view.replaceFirst(DEEP_QUOTE, "")
@@ -669,7 +685,7 @@ object ResponseParser {
                         }
                     }
                 } else {
-                    FENCE.find(fenced)?.let { match ->
+                    fenceOpening(fenced)?.let { match ->
                         val run = match.groupValues[1]
                         fence = run.first()
                         fenceLength = run.length
@@ -678,7 +694,7 @@ object ResponseParser {
                         // input unchanged when it matches nothing, and FENCE matches that line), so the
                         // raw-line branch was dead code.
                         val deep = view.replaceFirst(DEEP_QUOTE, "")
-                        fenceNested = uncontainer(rest) != rest || (deep != view && FENCE.find(deep) != null)
+                        fenceNested = uncontainer(rest) != rest || (deep != view && fenceOpening(deep) != null)
                         fenceOpenedBehindContainer = fenceNested
                     }
                 }
@@ -713,6 +729,11 @@ object ResponseParser {
                         math = StringBuilder()
                         mathPrefix = prefix
                         mathContainer = prefix
+                        // A mid-line display is TOP-LEVEL prose. Reusing the previous display's level
+                        // indented a top-level formula as if it sat inside a list, and a stale dedent
+                        // kept stripping the following lines' indentation.
+                        mathDepth = 0
+                        mathDedent = 0
                         rest = container.substring(mid + 2)
                         continue
                     }
@@ -768,7 +789,7 @@ object ResponseParser {
     /** True when the line is itself a fence run, possibly behind container markers. */
     private fun isFenceRun(line: String): Boolean {
         val stripped = uncontainer(line)
-        if (FENCE.find(stripped) != null) return true
+        if (fenceOpening(stripped) != null) return true
         return line.contains("```") || line.contains("~~~")
     }
 
@@ -783,10 +804,10 @@ object ResponseParser {
     /** Strips container markers for a replayed fence line, including `>` runs without spaces. */
     private fun stripForReplay(line: String): String {
         val stripped = uncontainer(line)
-        if (FENCE.find(stripped) != null) return stripped
+        if (fenceOpening(stripped) != null) return stripped
         if (line.contains("```") || line.contains("~~~")) {
             val deep = stripped.replaceFirst(DEEP_QUOTE, "")
-            if (FENCE.find(deep) != null) return deep
+            if (fenceOpening(deep) != null) return deep
         }
         return stripped
     }

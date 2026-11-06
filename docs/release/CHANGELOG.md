@@ -36,6 +36,44 @@ ships in `assets/legal/`).
 - Measured: JVM 176/176, ktlint 0 errors, connected suite 48/48 on emulator
   (XML ts=2026-11-02T06:58:50, per Task 2 report; not re-run after Tasks 3-5).
 
+## Unreleased — credential safety, turn recovery, adapter reasons
+
+- **A transient Keystore failure no longer destroys every saved key.** `save()` treated ANY exception
+  while obtaining the key — a Keystore IPC error, a daemon restart, the first access after boot — as
+  proof that the shared entry was unusable, and deleted it. Since there is no plaintext fallback, every
+  other profile's ciphertext became permanently undecryptable to save one new provider. Obtaining the
+  key is now its own failure domain (drop the cached handle, keep the entry), and only
+  `InvalidKeyException` — a key that genuinely cannot encrypt — replaces it.
+- **A failed turn leaves the conversation and the composer in the right state.** A `wrote` flag now
+  separates "nothing changed" from "the edit/truncate/admit already landed": an edit or retry stopped in
+  the gap after `truncate` writes the STOPPED/ERROR row instead of deleting the previous answer and
+  leaving no row, no status line and no Retry, while a turn refused before writing still records
+  nothing. An edit whose turn is refused re-opens the editor with the text the user typed, instead of
+  closing the composer over an unchanged message.
+- **A Stop inside a new chat's first insert keeps the prompt.** The terminal write falls back to the id
+  minted for the turn and creates the conversation row if the cancelled insert never committed
+  (`INSERT OR IGNORE`), so the question is recorded rather than vanishing with a phantom History entry.
+- **Editing a chat's first message renames it in History.** `retitleIfUnnamed` only matched the literal
+  `'New chat'`, which a new chat never has — it is created already titled with its prompt, so the guard
+  could not fire. An edit of the first message now renames unconditionally.
+- **Each adapter reports the reason the provider actually gave.** Anthropic, OpenAI-native and the
+  compatible adapter read the non-2xx body (`authentication_error`, `invalid_api_key`,
+  `insufficient_quota`, …) instead of blaming the user's configuration for a rejected key.
+- **Anthropic's model metadata is fetched once per endpoint and model**, not on every turn: it sat on
+  the critical path of every send, so a watch paid a radio wakeup per turn. Only a positive answer is
+  cached, so a transport failure is retried next turn.
+- **A prose line with backticks is not a fence.** ` ```npm i``` runs it.` opened a fence that never
+  closed, suppressing display-math extraction for the rest of the chunk.
+- **A mid-line display is top-level**: it no longer inherits the previous display's list level and
+  dedent. **Spacing commands** (`\hspace`, `\vspace`, `\hskip`, `\vskip`, `\kern`, `\rule`) are admitted
+  by the math guard instead of silently degrading a real formula to monospace source.
+- **The Stop button grows with the font scale** (minimums instead of a fixed 72×48 box that clipped at
+  2.0×).
+- Measured on this tree: JVM 264/264 in 42 suites, ktlint 0, Android Lint 1 (GradleDependency), release
+  APK 3,606,893 B. The parser and adapter fixes are pinned by tests built from the measured input and
+  mutation-checked; the Keystore split, the turn-recovery paths and the Compose changes are
+  Android-only and have no JVM test here — the instrumentation suite still needs a device.
+
 ## Unreleased — stream liveness, honest status lines, table scan identity
 
 - **A reasoning model is no longer killed as a dead socket.** The idle deadline advances only on a frame

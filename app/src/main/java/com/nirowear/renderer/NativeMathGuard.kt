@@ -49,18 +49,17 @@ internal object NativeMathGuard {
                     "let",
                     "csname",
                     // boxes and transforms that can force arbitrary size or layout
+                    //
+                    // Spacing commands (\hspace, \vspace, \hskip, \vskip, \kern, \rule) are NOT here:
+                    // they are ordinary layout in real formulas, they define and include nothing, and
+                    // refusing them silently degraded an honest formula to monospace source. The
+                    // renderer clamps the output bitmap, so their worst case is a bounded blank area.
                     "reflectbox",
                     "resizebox",
                     "rotatebox",
                     "scalebox",
                     "raisebox",
                     "colorbox",
-                    "hspace",
-                    "vspace",
-                    "hskip",
-                    "vskip",
-                    "kern",
-                    "rule",
                     "magnification",
                 ).joinToString("|") + ")(?![a-zA-Z])",
         )

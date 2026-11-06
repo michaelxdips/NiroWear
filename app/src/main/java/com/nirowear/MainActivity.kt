@@ -32,6 +32,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
@@ -171,6 +172,11 @@ private fun ChatReader(
     // cannot touch the draft, and a restored draft is always a draft. `editText` is not saveable, like
     // `editedId`, so the two always agree.
     var editText by remember { mutableStateOf("") }
+    // The body an edit turn was started with, kept until the write is confirmed. `edit()` returns true
+    // when the JOB LAUNCHES, not when the turn succeeds, so an edit refused before it wrote (no
+    // profile, a credential that will not decrypt, a target that left the chat) closed the editor and
+    // left the typed text nowhere — the row still holds its old content. See the effect below.
+    var lastEditAttempt by remember { mutableStateOf<Pair<Long, String>?>(null) }
     var notice by rememberSaveable { mutableStateOf("") }
     var renderLab by rememberSaveable { mutableStateOf(initialSection != null) }
     var sectionMenu by rememberSaveable { mutableStateOf(false) }
@@ -181,6 +187,24 @@ private fun ChatReader(
         !chatState.generating && !following && !renderLab && !sectionMenu &&
             (chatState.rawMarkdown != null || storedMessages.isNotEmpty())
     val listState = rememberLazyListState()
+    // Confirm or recover the edit: once the turn stops, compare the row on disk with what was typed.
+    // Equal means the edit landed. Different with an error on screen means it never wrote, so give the
+    // user their text back instead of only telling them it failed.
+    LaunchedEffect(chatState.error, chatState.generating, storedMessages, lastEditAttempt) {
+        val attempt = lastEditAttempt ?: return@LaunchedEffect
+        if (chatState.generating) return@LaunchedEffect
+        val stored = storedMessages.firstOrNull { it.id == attempt.first }?.rawContent
+        if (stored == attempt.second) {
+            lastEditAttempt = null
+            return@LaunchedEffect
+        }
+        if (chatState.error != null && stored != null) {
+            editText = attempt.second
+            editedId = attempt.first
+            editing = true
+            lastEditAttempt = null
+        }
+    }
     val menuState = rememberLazyListState()
     val labState = rememberLazyListState()
     // ponytail: saved-instance anchors, not durable force-stop bookmarks; add local persistence only if cold-launch restore is required.
@@ -541,7 +565,12 @@ private fun ChatReader(
                                 // The text now lives in the conversation. Clearing the slot that was
                                 // actually used leaves the OTHER one untouched, so an edit never eats
                                 // the user's unsent prompt and a send never eats the other way round.
-                                if (editTarget != null) editText = "" else draft = ""
+                                if (editTarget != null) {
+                                    lastEditAttempt = editTarget to editorText
+                                    editText = ""
+                                } else {
+                                    draft = ""
+                                }
                                 notice = ""
                                 editedId = null
                             }
@@ -1028,9 +1057,15 @@ private fun ChatReader(
                             // was reported as a storage failure.
                             if (!chatState.unsaved) {
                                 if (!following) Spacer(Modifier.width(48.dp))
-                                Button(onClick = {
-                                    chat.stop()
-                                }, modifier = Modifier.width(72.dp).height(48.dp)) { Text("Stop", fontSize = 12.sp) }
+                                // Minimums, not fixed sizes: at a 2.0x font scale "Stop" in a 72.dp box wraps
+                                // and clips inside a 48.dp height. The touch target stays 48 dp (the
+                                // platform minimum) while the label may grow.
+                                Button(
+                                    onClick = {
+                                        chat.stop()
+                                    },
+                                    modifier = Modifier.widthIn(min = 72.dp).heightIn(min = 48.dp),
+                                ) { Text("Stop", fontSize = 12.sp, maxLines = 1) }
                             }
                             if (!following) ReaderAction(retry = false, onClick = { following = true })
                         } else {

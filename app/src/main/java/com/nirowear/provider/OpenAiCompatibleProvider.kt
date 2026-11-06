@@ -119,7 +119,16 @@ class OpenAiCompatibleProvider(
                 .post(payload.toString().toRequestBody(jsonMedia))
                 .build()
         // A fresh decoder per collection: it is stateful (hasText across frames).
-        return flow { emitAll(http.stream(wire, CompatibleStreamDecoder()::accept)) }
+        return flow {
+            emitAll(
+                http.stream(wire, CompatibleStreamDecoder()::accept, decodeError = {
+                    _,
+                    body,
+                    ->
+                    openAiHttpError(body)
+                }),
+            )
+        }
     }
 }
 

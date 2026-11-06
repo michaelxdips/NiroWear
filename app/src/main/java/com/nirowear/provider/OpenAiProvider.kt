@@ -139,7 +139,16 @@ class OpenAiProvider(
                 .post(payload.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
                 .build()
         // Each collection gets its own stateful decoder, including validation/retry collectors.
-        return flow { emitAll(http.stream(wire, OpenAiStreamDecoder()::accept)) }
+        return flow {
+            emitAll(
+                http.stream(wire, OpenAiStreamDecoder()::accept, decodeError = {
+                    _,
+                    body,
+                    ->
+                    openAiHttpError(body)
+                }),
+            )
+        }
     }
 
     private fun authenticated(
@@ -350,3 +359,16 @@ private fun openAiError(element: JsonElement?): ProviderError =
         "server_error", "server_is_overloaded" -> ProviderError.SERVER
         else -> ProviderError.HTTP
     }
+
+/**
+ * The reason OpenAI (or an OpenAI-shaped gateway) gives in a non-2xx body.
+ *
+ * The status alone cannot separate a bad key from an exhausted quota from a model that was retired —
+ * all three arrive as 4xx with `{"error":{"code":…}}`. Only a code this build recognises is returned;
+ * null lets the status mapping stand. The compatible adapter shares this because the wire shape is the
+ * same one it already parses for `[DONE]` and `error` frames.
+ */
+internal fun openAiHttpError(body: String): ProviderError? {
+    val error = runCatching { Json.parseToJsonElement(body).jsonObject["error"] }.getOrNull() ?: return null
+    return openAiError(error).takeIf { it != ProviderError.HTTP }
+}
