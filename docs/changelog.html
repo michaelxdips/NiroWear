@@ -127,15 +127,68 @@ p:last-child{margin-bottom:0}
       Every published build, in order, with the numbers that identify it. Each entry records what was
       actually executed for that release — not what was intended.
     </p>
-    <p class="meta">Generated from git history and the NiroWear release API · 2026-11-03</p>
+    <p class="meta">Generated from git history and the NiroWear release API · 2026-11-06</p>
   </div>
+
+  <!-- 0.1.1 -->
+  <article class="release">
+    <div class="rside">
+      <span class="rver">0.1.1</span>
+      <span class="rdate">2026-11-06</span>
+      <span class="rbadge latest">Latest</span>
+    </div>
+    <div class="rbody">
+      <h2>Fixes only — and the first automated signed release</h2>
+      <p>
+        No new product surface. The release is built and signed by
+        <code>.github/workflows/release.yml</code> from the tag, under a dedicated release key, so the
+        artifact and its certificate no longer depend on the machine that cut it.
+      </p>
+      <ul>
+        <li><strong>A Keystore hiccup no longer destroys every saved key.</strong> A transient failure
+          while <em>obtaining</em> the key used to delete the shared entry, permanently orphaning every
+          other provider's ciphertext. Obtaining the key is now its own failure domain; only a key that
+          genuinely cannot encrypt is replaced.</li>
+        <li><strong>A failed turn recovers instead of vanishing.</strong> A Stop or error after an edit or
+          retry had already written records a STOPPED/ERROR row (it used to delete the previous answer
+          with no row, no status line and no Retry); a Stop inside a new chat's first insert keeps the
+          typed prompt; a refused edit re-opens the editor with your text.</li>
+        <li><strong>Provider truth.</strong> A long reasoning phase is no longer killed as "Provider timed
+          out"; a cut answer from <code>pause_turn</code> or <code>tool_use</code> is disclosed; "Partial
+          answer kept." appears only when text survived; a captive-portal page is reported as unreachable;
+          non-2xx bodies are read for Anthropic, OpenAI and compatible gateways; Anthropic model metadata
+          is cached per endpoint and model instead of fetched on every send.</li>
+        <li><strong>Renderer.</strong> A table inside a list reports the cells it had to clamp, a
+          <code>$$</code> in a table row no longer shreds the table, an HTML block no longer steals the
+          next table's notice, a prose line with backticks is not a fence, and spacing commands such as
+          <code>\hspace</code> typeset instead of degrading to source.</li>
+        <li><strong>Signing identity changed.</strong> 0.1.0 used the Android debug lineage; 0.1.1 uses
+          <code>CN=NiroWear Release</code>. A 0.1.0 install must be uninstalled before updating — that
+          removes local conversations and saved keys.</li>
+      </ul>
+      <dl class="ident">
+        <div><dt>versionCode</dt><dd>11</dd></div>
+        <div><dt>size</dt><dd>3,621,253 B</dd></div>
+        <div><dt>sha256</dt><dd>0ba7ddefd7ca51528c0d3083b23bd7ee9221715a017cd7058fa8875efb30b207</dd></div>
+        <div><dt>certificate</dt><dd>0dc50fc0…543e</dd></div>
+      </dl>
+      <table class="gate">
+        <thead><tr><th>Check</th><th>Result</th></tr></thead>
+        <tbody>
+          <tr><td>JVM unit tests</td><td>264 / 264, 0 failures, 42 suites</td></tr>
+          <tr><td>lint</td><td>0 errors, 1 warning (GradleDependency)</td></tr>
+          <tr><td>Connected suite (emulator)</td><td>not run — last recorded 2026-11-02, no device available since</td></tr>
+          <tr><td>assembleRelease, signed in CI</td><td>pass, certificate asserted before publish</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </article>
 
   <!-- 0.1.0 -->
   <article class="release">
     <div class="rside">
       <span class="rver">0.1.0</span>
       <span class="rdate">2026-11-03</span>
-      <span class="rbadge latest">Latest</span>
     </div>
     <div class="rbody">
       <h2>Stable cut</h2>

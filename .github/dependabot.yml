@@ -1,34 +1,35 @@
 version: 2
 
+# Dependency updates are deliberately slow and batched.
+#
+# Nine open dependabot PRs (2026-10-26 → 2026-11-02) were closed rather than merged: this app's
+# reader depends on the Markdown/LaTeX parser's exact behaviour, and its Compose/Kotlin combination is
+# pinned to a verified watch build. A green CI here compiles and lints the PUBLISHED tree only —
+# `app/src/test` is gitignored by policy, so a bump that changes parser output shows up on a watch, not
+# in CI. Bumps land after a device verification pass, not on a schedule.
 updates:
   - package-ecosystem: gradle
     directory: "/"
     schedule:
-      interval: weekly
-      day: monday
-    open-pull-requests-limit: 5
-    labels:
-      - dependencies
-    commit-message:
-      prefix: "build"
+      interval: monthly
+    open-pull-requests-limit: 2
     groups:
-      androidx:
-        patterns:
-          - "androidx.*"
-      kotlin:
-        patterns:
-          - "org.jetbrains.kotlin*"
-          - "com.google.devtools.ksp"
-      test:
-        patterns:
-          - "*junit*"
-          - "*mockwebserver*"
+      gradle-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    ignore:
+      # Majors on a parser, a UI toolkit or the Kotlin plugin change behaviour, not just numbers.
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+      # The reader's rendering contract is pinned to commonmark 0.24.0 + jlatexmath-android 0.2.0.
+      - dependency-name: "org.commonmark:*"
+      - dependency-name: "ru.noties:jlatexmath-android"
 
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
       interval: monthly
-    labels:
-      - dependencies
-    commit-message:
-      prefix: "ci"
+    open-pull-requests-limit: 2
+    groups:
+      actions:
+        patterns: ["*"]
