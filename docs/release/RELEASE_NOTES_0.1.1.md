@@ -10,8 +10,10 @@ Release date: 2026-11-06. Fix release on top of the 0.1.0 stable cut — no new 
   (`CN=NiroWear Release`), valid to 2056.
 - Built and signed by `.github/workflows/release.yml` from the `v0.1.1` tag, so the uploaded APK and its
   certificate are reproducible from the tag instead of depending on a local machine.
-- Measured: 3,619,181 B, APK SHA-256
-  `27F1160AAFAEF51AB6222A3D2154024EC85360E061C24F4CB94A84537FCF35E9`.
+- Measured on the published asset: 3,621,253 B, APK SHA-256
+  `0BA7DDEFD7CA51528C0D3083B23BD7EE9221715A017CD7058FA8875EFB30B207`. A local cut of the same tree
+  is **not** bit-identical (it measured 3,619,181 B), so the hash that matters is the one in this
+  release's body, printed by the workflow that built it.
 
 ## Read this before updating
 
