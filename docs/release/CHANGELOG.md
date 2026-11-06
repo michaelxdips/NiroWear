@@ -36,6 +36,41 @@ ships in `assets/legal/`).
 - Measured: JVM 176/176, ktlint 0 errors, connected suite 48/48 on emulator
   (XML ts=2026-11-02T06:58:50, per Task 2 report; not re-run after Tasks 3-5).
 
+## Unreleased — LAN pairing served over TLS
+
+- **Pairing works in a browser again.** The page needed a secure context for `crypto.subtle` and was
+  served over plain HTTP from a LAN IP, where it was measured absent (`isSecureContext === false`,
+  `typeof crypto.subtle === "undefined"`), so the ECDH handshake could never run. The listener now
+  mints a self-signed certificate per session and serves https; the phone shows its usual
+  "not private" warning and the user accepts it. The certificate is written as DER in
+  `settings/SelfSignedCert.kt` (~70 lines, no dependency, no BouncyCastle) and proven by parsing,
+  verifying its own signature and completing a real TLS handshake in `SelfSignedCertTest`.
+- Honest scope: the certificate is not trusted by anyone and the handshake stays unauthenticated —
+  the capability token in the URL is still the authorisation. The phone-side click-through has not
+  been exercised on a physical watch (no device available); the TLS handshake and the https page are
+  measured on the JVM.
+
+## Unreleased — output-cap and policy cuts are disclosed
+
+- **A cut answer no longer looks finished.** The compatible adapter reported `finish_reason:
+  "length"` as a clean completion (the only adapter that never disclosed a cut), Gemini reported a
+  policy finish after visible text, and any unknown `finishReason`, as finished too; Anthropic failed
+  a whole delivered answer when `stop_reason` was absent and saved a blank SUCCESS row when nothing
+  arrived. Each now reports `Truncated` (SUCCESS + visible note) or fails.
+- **The idle deadline is live again.** A blank SSE line with no data field behind it reset the 120 s
+  bound, so `: ping` keepalives kept a stalled answer alive forever.
+- **Renderer content loss, measured on the parser.** A top-level fence whose body mixed one plain
+  line with marked ones had its list markers stripped (`- build` → `build`); a fence indented inside
+  a nested list was invisible, so its `$$…$$` body was torn out as display math; tables built inside
+  list items were dropped from the overflow scan, so a clamped table reported no hidden cells and the
+  next table claimed its count. All four are pinned in `RendererFenceAndOverflowTest`.
+- Reader: a drag no longer detaches follow on a conversation that fits the screen; History's rows,
+  New chat and search hits are disabled while an answer is unsaved instead of closing History on a
+  refused tap; a refused edit target reports the real reason; a Stop on retry/edit before its
+  truncate ran no longer appends an empty STOPPED row over the finished answer.
+- Measured: JVM 224/224, 38 suites, ktlint 0, Android Lint 1 (GradleDependency), release APK
+  3,590,493 B.
+
 ## Unreleased — streaming re-parse coalesced (B3-03)
 
 - **Streaming no longer re-parses the whole answer once per token.** The parse effect restarts on

@@ -65,7 +65,8 @@ import java.util.UUID
 
 /** Shown once, as the pairing note. It used to be a second copy right beside it. */
 private const val PAIRING_WARNING =
-    "Same Wi-Fi only. Encrypted with ECDH P-256 + AES-GCM, but the handshake is unauthenticated — " +
+    "Same Wi-Fi only. Your phone warns that the watch's certificate is not trusted — accept it to " +
+        "load the page. Encrypted with ECDH P-256 + AES-GCM, but the handshake is unauthenticated — " +
         "confirm the URL on the watch matches. Prefer manual entry on untrusted networks."
 
 /** The four add-provider presets. Only the literals differ, so the button logic is written once. */

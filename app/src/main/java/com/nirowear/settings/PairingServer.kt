@@ -9,7 +9,6 @@ import kotlinx.serialization.json.jsonPrimitive
 import java.io.Closeable
 import java.io.InputStream
 import java.net.InetAddress
-import java.net.ServerSocket
 import java.net.Socket
 import java.security.KeyFactory
 import java.security.KeyPairGenerator
@@ -28,13 +27,18 @@ import javax.crypto.spec.SecretKeySpec
 /**
  * Credential arrival over the LAN, phone browser -> watch. No companion app, no backend, no cloud.
  *
- * The watch serves one small page; the browser encrypts the form with an ephemeral ECDH P-256 secret
- * and AES-GCM. The watch never sends a key out, only accepts one in, and the whole listener lives only
- * while the setup screen is resumed. Cleartext HTTP is acceptable here because the payload is
- * end-to-end encrypted and `usesCleartextTraffic="false"` governs outbound requests only, not an
- * inbound `ServerSocket`.
+ * The watch serves one small page over TLS; the browser encrypts the form with an ephemeral ECDH
+ * P-256 secret and AES-GCM. The watch never sends a key out, only accepts one in, and the whole
+ * listener lives only while the setup screen is resumed.
  *
- * Deliberately no dependency: `ServerSocket` + a ~40 line request reader. No NanoHTTPD, no Ktor.
+ * TLS is not belt-and-braces here, it is load-bearing: browsers expose WebCrypto only in a secure
+ * context, and plain HTTP from a LAN IP is not one (measured: `isSecureContext === false`,
+ * `crypto.subtle === undefined`), so the handshake below could never run. The certificate is
+ * self-signed and minted per session — see [SelfSignedCert]; the phone shows the usual warning, and
+ * the capability token in the URL, not the certificate, is what authorises a payload.
+ *
+ * Deliberately no dependency: `ServerSocket` + a ~40 line request reader. No NanoHTTPD, no Ktor, and
+ * no BouncyCastle for the certificate.
  */
 internal data class PairingPayload(
     val type: ProviderType,
@@ -60,7 +64,21 @@ internal class PairingServer(
 
     // Bound to the address we advertise, not the wildcard: the listener must not be reachable on a
     // tethered or secondary interface the user never saw.
-    private val socket = ServerSocket(0, 1, InetAddress.getByName(host))
+    private val hostAddress: InetAddress = InetAddress.getByName(host)
+
+    // A key pair of its own for TLS. Reusing the ECDH session key would mix a signature key with a
+    // key-agreement key, and this one never touches the payload path.
+    private val tlsKey =
+        KeyPairGenerator
+            .getInstance("EC")
+            .apply { initialize(ECGenParameterSpec("secp256r1")) }
+            .generateKeyPair()
+
+    private val socket =
+        SelfSignedCert
+            .serverContext(tlsKey, SelfSignedCert.mint(tlsKey, host, hostAddress))
+            .serverSocketFactory
+            .createServerSocket(0, 1, hostAddress)
 
     @Volatile private var consumed = false
 
@@ -75,8 +93,11 @@ internal class PairingServer(
      * Capability URL. The token is a path segment, not something the server hands out: whoever can
      * read the watch screen learns it, and nobody else does. It doubles as the AES-GCM associated
      * data, so a payload encrypted for one session cannot be replayed into another.
+     *
+     * https, not http: WebCrypto does not exist on a plain-HTTP LAN origin, so the page that encrypts
+     * the key could never run there.
      */
-    val url: String get() = "http://$host:$port/${b64(token)}/"
+    val url: String get() = "https://$host:$port/${b64(token)}/"
 
     fun start() {
         if (worker != null) return
@@ -413,7 +434,7 @@ background:#a8c7fa;color:#062e6f;font-weight:600}
 </style></head><body>
 <h1>NiroWear</h1>
 <p>Send this provider to your watch. It is encrypted before it leaves this page.</p>
-<p>Same Wi-Fi only. Encrypted with ECDH P-256 + AES-GCM, but the handshake is unauthenticated — confirm the URL on the watch matches. Prefer manual entry on untrusted networks.</p>
+<p>Same Wi-Fi only. The watch serves its own certificate, so your browser warns that it is not trusted — accept it to load this page. Nothing is sent until you press Send. Encrypted with ECDH P-256 + AES-GCM, but the handshake is unauthenticated — confirm the URL on the watch matches. Prefer manual entry on untrusted networks.</p>
 <label>Provider</label>
 <select id="type">
 <option value="OPENAI">OpenAI</option>
@@ -468,15 +489,15 @@ document.getElementById('go').onclick=async function(){
  }catch(e){out.textContent='Could not send. Restart pairing on the watch.';}
 };
 init().catch(function(e){
-  // WebCrypto (crypto.subtle) only exists in a secure context: https, file, localhost, 127.0.0.1.
-  // This page is served over plain HTTP from a LAN address, so window.isSecureContext is false and
-  // crypto.subtle is undefined — verified in a real browser (origin http://192.168.8.2, isSecureContext
-  // false, typeof crypto.subtle undefined). The old copy said "Handshake failed. Restart pairing",
-  // which sent the user round a loop that could never succeed.
+  // WebCrypto (crypto.subtle) only exists in a secure context. This page is served over https with a
+  // certificate the watch minted for this session, so it IS a secure context once the browser
+  // accepted the warning; a browser that refused the certificate never runs this script at all.
+  // Reaching this branch therefore means the handshake itself failed, and saying "plain HTTP" here
+  // would send the user after a cause that no longer exists.
   var o=document.getElementById('out');
   if(!window.isSecureContext || typeof crypto==='undefined' || !crypto.subtle){
-    o.textContent='This browser will not run crypto on a plain-HTTP LAN address, so the key cannot '+
-      'be encrypted here. Enter the key on the watch instead (Cancel pairing below).';
+    o.textContent='This browser will not run crypto on this page, so the key cannot be '+
+      'encrypted here. Enter the key on the watch instead (Cancel pairing below).';
   } else {
     o.textContent='Handshake failed. Restart pairing on the watch.';
   }

@@ -34,23 +34,26 @@ It exists because every other way of reading an AI answer on a watch is a compro
 
 **Bring your own key, stored properly.** Keys are encrypted with AES-256-GCM under a non-exportable Android Keystore key (randomized IV, version byte + 12 B IV + ciphertext, AAD-bound to the credential reference). Only versioned ciphertext and nonce touch disk; a profile stores a credential *reference*, never the key. A decrypt failure demands re-entry — there is no plaintext fallback, and a saved key is never repopulated into an editing field. Entry is masked (`PasswordVisualTransformation` + `KeyboardType.Password`) and the provider screens set `FLAG_SECURE`. See [Security & privacy](#security--privacy).
 
-**LAN pairing for long keys — designed, shipped, and currently unusable.** The watch can serve a
+**LAN pairing for long keys — served over TLS so a browser will run its crypto.** The watch serves a
 one-time page on your local network so a key can be pasted into a real form instead of tapped on a
 1.4-inch keyboard: ephemeral ECDH P-256 + AES-GCM before it leaves the browser, gated by a 128-bit
 single-use capability token shown only on the watch screen, valid for 120 s (+5 s delivery grace), and
-closed the moment you leave the screen. The transport is plain HTTP and the handshake is
-unauthenticated, so it is not "end-to-end encrypted" in the strict sense. **In practice no browser can
-run its crypto at all** — see the note below — so manual entry is the working path.
+closed the moment you leave the screen. The handshake is unauthenticated, so it is not "end-to-end
+encrypted" in the strict sense — the capability token, not a certificate, is what authorises a
+payload.
 
-> **Pairing does not currently work in a browser, and the page now says so.** Browsers only expose
-> the Web Crypto API (`crypto.subtle`) on a secure origin — `https`, `file`, `localhost`,
-> `127.0.0.1`. The pairing page is served over plain HTTP from a LAN address, which is not one, so
-> the API is absent and the page cannot encrypt anything. Measured directly: from a page served the
-> way the watch serves it, `window.isSecureContext` was `false` and `typeof crypto.subtle` was
-> `undefined`. Rather than loop on "Handshake failed", the page now tells you this and points at
-> manual entry. Fixing it properly needs a pure-JavaScript crypto implementation served on that
-> origin — a design decision, not a patch. **Until then, add providers by typing the key on the
-> watch.**
+> **Why TLS, and what the certificate warning means.** Browsers expose the Web Crypto API
+> (`crypto.subtle`) only on a secure origin, and a plain-HTTP LAN page is not one: measured on the
+> page served that way, `window.isSecureContext` was `false` and `typeof crypto.subtle` was
+> `undefined`, so the handshake could never run. The listener therefore minted its own certificate
+> per session and serves https. Android's public API cannot issue a certificate and a crypto library
+> would be a new dependency, so the certificate is written as DER by hand in
+> `settings/SelfSignedCert.kt` (~70 lines) and proven by parsing it back, verifying its own signature
+> and completing a real TLS handshake in `SelfSignedCertTest`. **Your phone will warn that the
+> certificate is not trusted — that is expected, accept it to load the page.** The phone-side
+> click-through has not been exercised on a physical watch in this repository (no device is
+> available); the TLS handshake and the page-over-https path are measured on the JVM. Manual entry
+> remains the fallback and the safer choice on untrusted networks.
 
 **Streaming with honest interruption.** Tokens render as they arrive through a 16 ms coalescing throttle (at most one re-parse per frame, never a debounce that starves the view blank). Scroll up and the view stops following you, with a small `Latest` control to jump back. `Stop` cancels the underlying OkHttp call and keeps whatever partial answer had already arrived — it is never replayed automatically. If the provider had already signalled completion, the answer is kept as complete rather than relabelled as stopped: a finished answer is never downgraded. Partial content survives rotation, process death (interrupted streams resume as STOPPED on next launch), and errors.
 
@@ -142,17 +145,15 @@ Open **Menu → Providers / model** and pick a preset:
 | Gemini | `https://generativelanguage.googleapis.com/v1beta` | GenerateContent (SSE) |
 | OpenAI-compatible | *(you supply)* | Chat Completions |
 
-Name and base URL come prefilled. Then get the key onto the watch: **open the provider, type the key, tap Validate, tap Save.** That is the path that works.
+Name and base URL come prefilled. Then get the key onto the watch: **open the provider, type the key, tap Validate, tap Save.** That path always works, and it is the fallback when the phone route below is inconvenient.
 
-> **Pairing from a phone does not work, and the screen says so.** Tapping **Set up from phone**
-> starts a one-time listener and shows a URL, but a browser will not run Web Crypto on a
-> plain-HTTP LAN origin: `crypto.subtle` is only available in a secure context (`https`, `file`,
-> `localhost`, `127.0.0.1`), so the page cannot encrypt anything and tells you to enter the key on
-> the watch instead. Measured directly from a page served the way the watch serves it:
-> `window.isSecureContext` was `false` and `typeof crypto.subtle` was `undefined`. The listener is
-> still there (it is valid for two minutes, one use, and closes when you leave the screen) but it
-> cannot complete. Fixing it needs a pure-JavaScript crypto implementation served on that origin —
-> a design decision, not a patch.
+> **Pairing from a phone works over TLS, and the screen warns about the certificate.** Tapping
+> **Set up from phone** starts a one-time listener and shows an `https://` URL. A browser will only
+> run Web Crypto in a secure context, and plain HTTP from a LAN IP is not one (measured:
+> `window.isSecureContext` was `false`, `typeof crypto.subtle` was `undefined`), so the listener mints
+> a self-signed certificate for the session and serves TLS. The browser therefore shows its
+> "not private" warning: **accept it** and the page loads and encrypts normally. The listener is valid
+> for two minutes, single use, and closes when you leave the screen.
 
 **Validate · uses API** makes one real (billable) call against the selected model to prove the key and model work together. **Discover models** lists what the provider advertises; discovery failure never blocks manual entry, because compatible endpoints legitimately vary. The app never silently substitutes a model: authentication and listing are separate, and a deprecated or mistyped model surfaces as an error you can read.
 
@@ -160,7 +161,7 @@ Name and base URL come prefilled. Then get the key onto the watch: **open the pr
 
 An API key is 40–200 opaque characters. Typing that on a 1.4-inch keyboard is not a friction problem, it is a correctness problem — the failure mode is a silent typo. So the transport looked like the thing to fix, not the keyboard: put the key on a device with a real keyboard and have the watch only receive it.
 
-That design is implemented and does not work, for the reason above: a browser refuses to expose `crypto.subtle` to a plain-HTTP LAN page, so there is nothing to encrypt with. The honest current answer is that the key is typed on the watch once, and `Validate` proves it immediately rather than at first send. Key normalisation at the boundary strips stray whitespace, and a key whose shape contradicts the selected preset shows a warning — nothing is switched automatically.
+That design is implemented, and it needed a transport fix to work: a browser refuses to expose `crypto.subtle` to a plain-HTTP LAN page, so the page now has nothing to encrypt with unless the listener serves TLS. It does — with a certificate minted per session on the watch and accepted by clicking through the browser warning. Typing the key on the watch once remains a first-class path, and `Validate` proves it immediately rather than at first send. Key normalisation at the boundary strips stray whitespace, and a key whose shape contradicts the selected preset shows a warning — nothing is switched automatically.
 
 ## Architecture
 
@@ -191,7 +192,7 @@ Every number below was read from a result file produced on this tree, not quoted
 
 | Check | Result (measured) | Where |
 |---|---|---|
-| JVM unit tests | 221 / 221, 0 failures, 0 errors, 0 skipped (37 suites) | `app/build/test-results/testDebugUnitTest/*.xml` |
+| JVM unit tests | 224 / 224, 0 failures, 0 errors, 0 skipped (38 suites) | `app/build/test-results/testDebugUnitTest/*.xml` |
 | Connected suite (emulator `NiroWear_Rebook_20261020`, destructive — not a CI gate) | 48 / 48 last recorded 2026-11-02; **not re-run** for this revision | `app/build/outputs/androidTest-results/connected/debug/*.xml` |
 | Lint | 0 errors, 1 warning: `GradleDependency` (test runner 1.5.0→1.5.2) | `app/build/reports/lint-results-debug.xml` |
 | Release APK | Source builds an **unsigned** `app-release-unsigned.apk`, 3589237 B, SHA-256 `66ABE409…BC6E`. The published `app-release.apk` (3609553 B, `319AE1CF…34D71`) is signed by the release pipeline, not by a local build. Both are `com.nirowear` v10 / `0.1.0`, minSdk 30, targetSdk 37 | `app/build/outputs/apk/release/`, `output-metadata.json` |
@@ -207,7 +208,9 @@ CI is green on `main` (JVM + lint + ktlint + both assembles); the connected suit
 - Stored keys are never logged (`Authorization` / `x-api-key` / `x-goog-api-key` redacted), never in URLs/filenames/notifications/errors, never repopulated into editing fields.
 - Masked entry by default; provider screens set `FLAG_SECURE` so they cannot be screenshotted by other apps.
 - Release networking requires **HTTPS** with platform trust. Redirects and automatic retries are disabled. Credential-bearing URL query strings are rejected.
-- Pairing transport is plain HTTP on the LAN by design (a watch cannot present a phone-trusted certificate); the *payload* is ECDH+AES-GCM encrypted and single-use. See the threat-model note under [Features](#features).
+- Pairing transport is TLS with a per-session self-signed certificate (the phone shows its usual
+  warning and you accept it); the *payload* is additionally ECDH+AES-GCM encrypted and single-use.
+  See the threat-model note under [Features](#features).
 - `android:allowBackup="false"` + `data_extraction_rules` exclude everything — credentials are device-bound, so clearing data or uninstalling removes them permanently.
 - **No analytics, no crash reporting, no NiroWear backend.**
 - Chat text and the key go directly to the endpoint you chose; that provider's retention policy then applies, not ours.
@@ -234,14 +237,16 @@ Stated plainly, because a README that hides these is useless:
 - **Six further instrumentation tests are excluded from the default run.** They carry
   `@HostDrivenGate` and need a host script to seed state. Run them with
   `adb shell am instrument -w -r -e annotation com.nirowear.HostDrivenGate com.nirowear.test/androidx.test.runner.AndroidJUnitRunner`.
-- **Known renderer limits, all reproduced on the real parser.** Display math inside a blockquote or
-  list is destroyed rather than shown as source (`> \[x^2\]` loses its delimiters). A fence opened
-  inside a quote can be closed by a `> ``` ` line. An over-wide table row loses cells with no
-  marker. `$$…$$` mid-line leaves a stray `$`. A link with a rejected scheme is still painted as
-  tappable even though tapping does nothing. Tables are capped at 40 rendered rows with an explicit
-  "… N more rows" line. These are documented rather than fixed; each needs a design decision.
-- **Pairing does not work in a browser on a plain-HTTP LAN origin.** Browsers only expose Web Crypto
-  on a secure origin, so the watch's page explains this and points at manual entry.
+- **Known renderer limits.** A fence opened inside a quote or list still closes on a `> ``` ` line
+  inside its own sample. A link with a rejected scheme is still painted as tappable even though
+  tapping does nothing. A table row wider than its header has its extra cells dropped by the
+  Markdown library; the parser counts them and the reader says "… N more cells", but a table nested
+  deeper than one list level can still misreport that count. Tables are capped at 40 rendered rows
+  with an explicit "… N more rows" line.
+- **Pairing needs the certificate warning accepted.** The watch mints a certificate per session, so
+  the phone browser shows "not private" until you proceed; the page says so before you try. The
+  phone-side click-through itself has not been exercised on a physical watch here (no device is
+  available) — the TLS handshake and the https page are measured on the JVM.
 - **A physical watch has not run this build.** Every timing and input claim here was measured on an
   emulator.
 

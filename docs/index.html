@@ -2975,7 +2975,7 @@ adb install -r app-release.apk</pre>
             </tr>
             <tr>
               <td>Renderer emits semantic blocks, never one text node</td>
-              <td><span class="pill pill-source">Source</span> <span class="pill pill-device">JVM</span> 221 tests / 37 suites, 0 failures, 0 errors, 0 skipped.</td>
+              <td><span class="pill pill-source">Source</span> <span class="pill pill-device">JVM</span> 224 tests / 38 suites, 0 failures, 0 errors, 0 skipped.</td>
               <td>ContentBlock.kt; app/build/test-results/testDebugUnitTest/</td>
             </tr>
             <tr>
@@ -2985,8 +2985,8 @@ adb install -r app-release.apk</pre>
             </tr>
             <tr>
               <td>Credential pairing encrypts the payload</td>
-              <td><span class="pill pill-emu">Emulator</span> ECDH P-256 + AES-GCM over loopback only. The transport is plain HTTP and the handshake is unauthenticated. Browsers refuse Web Crypto on a plain-HTTP LAN origin, so in practice the page tells you to enter the key on the watch. A real phone on a real LAN has not been tested.</td>
-              <td>PairingServerTest; 0.1.0 release notes</td>
+              <td><span class="pill pill-emu">Emulator</span> ECDH P-256 + AES-GCM over loopback only. The listener serves TLS with a self-signed certificate minted per session (written as DER in <code>SelfSignedCert.kt</code>), because browsers refuse Web Crypto on a plain-HTTP LAN origin; the handshake itself is unauthenticated. The phone must accept the certificate warning. A real phone on a real LAN has not been tested.</td>
+              <td>PairingServerTest; SelfSignedCertTest</td>
             </tr>
             <tr>
               <td>Static analysis is clean</td>
