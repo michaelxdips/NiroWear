@@ -192,7 +192,7 @@ Every number below was read from a result file produced on this tree, not quoted
 
 | Check | Result (measured) | Where |
 |---|---|---|
-| JVM unit tests | 242 / 242, 0 failures, 0 errors, 0 skipped (41 suites) | `app/build/test-results/testDebugUnitTest/*.xml` |
+| JVM unit tests | 243 / 243, 0 failures, 0 errors, 0 skipped (41 suites) | `app/build/test-results/testDebugUnitTest/*.xml` |
 | Connected suite (emulator `NiroWear_Rebook_20261020`, destructive — not a CI gate) | 48 / 48 last recorded 2026-11-02; **not re-run** for this revision | `app/build/outputs/androidTest-results/connected/debug/*.xml` |
 | Lint | 0 errors, 1 warning: `GradleDependency` (test runner 1.5.0→1.5.2) | `app/build/reports/lint-results-debug.xml` |
 | Release APK | Source builds an **unsigned** `app-release-unsigned.apk`, 3589237 B, SHA-256 `66ABE409…BC6E`. The published `app-release.apk` (3609553 B, `319AE1CF…34D71`) is signed by the release pipeline, not by a local build. Both are `com.nirowear` v10 / `0.1.0`, minSdk 30, targetSdk 37 | `app/build/outputs/apk/release/`, `output-metadata.json` |
@@ -244,10 +244,11 @@ Stated plainly, because a README that hides these is useless:
 - **Six further instrumentation tests are excluded from the default run.** They carry
   `@HostDrivenGate` and need a host script to seed state. Run them with
   `adb shell am instrument -w -r -e annotation com.nirowear.HostDrivenGate com.nirowear.test/androidx.test.runner.AndroidJUnitRunner`.
-- **Known math limits.** Formulas are typeset off the main thread and never shrunk, but there is no
-  cache: scrolling a formula out and back re-typesets it and shows its raw LaTeX for one frame. A
-  formula that lays out wider than 8192 px falls back to source text instead of panning, and
-  `- $$\frac ab$$` loses its bullet because the display is extracted before the list is parsed.
+- **Known math limits.** Rendering is cached (8 entries, in memory) so a formula no longer flashes
+  its raw LaTeX when it scrolls back into view, and a formula wider than the bitmap bound is typeset
+  once at a smaller size — never below half — before falling back to source text. A display inside a
+  list item keeps the item's indentation; the bullet itself is not reproduced, because the formula is
+  extracted before the list is parsed.
 - **Known renderer limits.** A fence opened inside a quote or list still closes on a `> ``` ` line
   inside its own sample. A link with a rejected scheme is still painted as tappable even though
   tapping does nothing. A table row wider than its header has its extra cells dropped by the

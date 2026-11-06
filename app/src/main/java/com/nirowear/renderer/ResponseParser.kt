@@ -461,6 +461,8 @@ object ResponseParser {
         var listContentIndent = 0
         // Columns to strip from lines that follow a display math opened inside that list item.
         var mathDedent = 0
+        // List level the open display sits in; 0 at top level. Only used for left padding.
+        var mathDepth = 0
 
         /**
          * Lines of the currently open fence, fed raw so CommonMark sees the exact bytes.
@@ -552,7 +554,7 @@ object ResponseParser {
                         // source was "", which renders as nothing at all — an invisible stop in the
                         // document that a scroll motion has to discover.
                         val closed = open.toString().trim()
-                        if (closed.isNotEmpty()) blocks += ContentBlock.Math(closed, true)
+                        if (closed.isNotEmpty()) blocks += ContentBlock.Math(closed, true, mathDepth)
                         math = null
                         mathContainer = ""
                         rest = mathPrefix + body.substring(index + closing.length)
@@ -712,6 +714,9 @@ object ResponseParser {
                     // Remember that this math split the document inside a list, so what follows can be
                     // measured without the item's indent.
                     mathDedent = listContentIndent
+                    // A list marker's content indent is 2 columns at the first level, 4 at the second
+                    // (a wide ordered marker like "10. " is 4 too, so this is a best-effort level).
+                    mathDepth = if (listContentIndent > 0) ((listContentIndent / 2) - 1).coerceIn(0, 4) else 0
                     rest = trimmed.removePrefix(opening.first)
                 }
             }
@@ -720,7 +725,7 @@ object ResponseParser {
             // Same rule as the closed case: a display that never received a character (a stream
             // stopped right after `$$`) must not leave an invisible block behind.
             val partial = math.toString().trimEnd()
-            if (partial.isNotBlank()) blocks += ContentBlock.Math(partial, false)
+            if (partial.isNotBlank()) blocks += ContentBlock.Math(partial, false, mathDepth)
         } else {
             flush()
         }

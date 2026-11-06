@@ -4,7 +4,9 @@ import android.graphics.drawable.Drawable
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
@@ -17,6 +19,7 @@ import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.wear.compose.material3.Text
 import com.nirowear.R
@@ -36,7 +39,14 @@ fun rememberMath(
     complete: Boolean = true,
 ): Drawable? {
     val px = with(LocalDensity.current) { 18.sp.toPx() }
-    return produceState<Drawable?>(null, source, complete, px) {
+    // Seed from the cache: `render` always starts at null, so a formula that was already typeset
+    // showed its raw LaTeX for one frame every time it scrolled back into view.
+    return produceState<Drawable?>(
+        initialValue = mathRenderer.cached(source, px),
+        source,
+        complete,
+        px,
+    ) {
         value = if (complete) mathRenderer.render(source, px) else null
     }.value
 }
@@ -45,13 +55,19 @@ fun rememberMath(
 fun MathContent(
     source: String,
     complete: Boolean,
+    depth: Int = 0,
 ) {
     val drawable = rememberMath(source, complete)
-    Box(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
-        if (drawable == null) {
-            Text(source, fontFamily = FontFamily.Monospace, fontSize = 16.sp)
-        } else {
-            MathCanvas(drawable, source)
+    // A display inside a list item keeps the item's indentation. The bullet itself is gone — the
+    // formula is extracted before the list is parsed — but a flush-left formula under an indented
+    // paragraph reads as a different document.
+    Column(Modifier.padding(start = (depth.coerceIn(0, 4) * 16).dp)) {
+        Box(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+            if (drawable == null) {
+                Text(source, fontFamily = FontFamily.Monospace, fontSize = 16.sp)
+            } else {
+                MathCanvas(drawable, source)
+            }
         }
     }
 }

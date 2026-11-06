@@ -36,6 +36,30 @@ ships in `assets/legal/`).
 - Measured: JVM 176/176, ktlint 0 errors, connected suite 48/48 on emulator
   (XML ts=2026-11-02T06:58:50, per Task 2 report; not re-run after Tasks 3-5).
 
+## Unreleased — math rendering: cache, modest scaling, list indent
+
+- **A formula no longer flashes its raw LaTeX on every re-appearance.** Typesetting now has an
+  in-memory cache (8 entries, keyed by source and size) and the composable seeds its initial state
+  from it, so scrolling a formula out and back shows the typeset result immediately instead of
+  re-typesetting and showing `\frac{a}{b}` for a frame.
+- **A formula too wide for the bitmap bound is panned, not refused.** The math contract's order is
+  pan, then MODEST scaling, and only then give up; the renderer refused outright, so a wide alignment
+  became monospace source text. It now typesets once more at a reduced size (never below half of the
+  requested size) and only falls back to source if that still exceeds the bound.
+- **A display inside a list item keeps the item's indentation.** The formula is extracted before the
+  list is parsed, so the bullet is gone; without a level it sat flush against the screen edge inside
+  an indented item. `ContentBlock.Math` carries the level (0 at top level), pinned by test.
+- **`recoverInterrupted` no longer leaves orphan continuation records.** It marked killed rows STOPPED
+  without deleting their `openai_phases` rows, breaking the "non-SUCCESS carries no phases" invariant
+  that the terminal save maintains. Both statements now run in one transaction.
+- Test hygiene: the oversized-pairing-body test asserted a clean 400 for a server that rejects on the
+  declared length before reading the body — the close can win the race and the client reports an
+  aborted upload. Both outcomes now pass, and the assertion that matters (no payload arrived) is
+  unchanged.
+- Measured: JVM 243/243, 41 suites, ktlint 0, Android Lint 1 (GradleDependency), release APK
+  3,606,893 B. The cache and the scaling retry are Android-only (they build a bitmap) and have no
+  JVM test; the list indent is pinned and mutation-verified.
+
 ## Unreleased — math and list repair, honest HTTP blame
 
 - **Display math inside a nested list was never typeset.** A depth-four bullet sits at six columns; the

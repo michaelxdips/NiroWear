@@ -202,8 +202,24 @@ interface ChatDao {
         title: String,
     )
 
+    /**
+     * Marks rows a killed process left mid-stream, and drops their continuation records.
+     *
+     * The status write alone broke the "non-SUCCESS rows carry no phases" invariant that `finish`
+     * maintains, leaving orphan rows behind that only the SUCCESS join kept invisible. One transaction,
+     * so a crash between the two cannot leave the pair inconsistent again.
+     */
+    @Transaction
+    suspend fun recoverInterrupted() {
+        markStreamingStopped()
+        deletePhasesOfNonSuccessful()
+    }
+
     @Query("UPDATE messages SET status = 'STOPPED' WHERE status = 'STREAMING'")
-    suspend fun recoverInterrupted()
+    suspend fun markStreamingStopped()
+
+    @Query("DELETE FROM openai_phases WHERE messageId IN (SELECT id FROM messages WHERE status != 'SUCCESS')")
+    suspend fun deletePhasesOfNonSuccessful()
 
     /**
      * A turn that failed before any assistant row existed.

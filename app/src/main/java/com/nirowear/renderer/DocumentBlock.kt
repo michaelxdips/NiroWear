@@ -209,7 +209,7 @@ fun DocumentBlock(block: ContentBlock) {
         }
 
         is ContentBlock.Math -> {
-            MathContent(block.source, block.complete)
+            MathContent(block.source, block.complete, block.depth)
         }
 
         is ContentBlock.Table -> {

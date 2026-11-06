@@ -37,6 +37,12 @@ sealed interface ContentBlock {
     data class Math(
         val source: String,
         val complete: Boolean,
+        /**
+         * List-item level this display sits inside, 0 when it is top level. Only used for left
+         * padding: the formula is extracted before the list is parsed, so the bullet is gone and
+         * without this the display would sit flush against the screen edge inside an indented item.
+         */
+        val depth: Int = 0,
     ) : ContentBlock
 
     data class Table(
