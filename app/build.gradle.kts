@@ -109,7 +109,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")
     implementation("org.commonmark:commonmark:0.24.0")
     implementation("org.commonmark:commonmark-ext-gfm-tables:0.24.0")
-    implementation("org.commonmark:commonmark-ext-autolink:0.24.0")
+    implementation("org.commonmark:commonmark-ext-autolink:0.32.0")
     testImplementation("junit:junit:4.13.2")
     // GPL v2-or-later WITH an independent-module linking exception: the exception permits linking
     // with MIT code and distributing the executable under terms of our choice. Notices + source
