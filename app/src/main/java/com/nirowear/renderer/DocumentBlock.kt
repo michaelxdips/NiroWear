@@ -400,22 +400,15 @@ private fun LinkActions(links: List<String>) {
                 .semantics(mergeDescendants = false) { contentDescription = groupLabel },
     ) {
         shown.forEach { link ->
-            val label = resources.getString(R.string.renderer_open_link, link)
             Button(
                 modifier =
                     Modifier
                         .fillMaxWidth()
                         .widthIn(min = 48.dp)
-                        .heightIn(min = 48.dp)
-                        .semantics {
-                            contentDescription = label
-                            onClick(label) {
-                                openHttpLink(context, link)?.let {
-                                    Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
-                                }
-                                true
-                            }
-                        },
+                        .heightIn(min = 48.dp),
+                // No `contentDescription` and no second `onClick(label)` action: the button's own text
+                // is the URL, so the old semantics announced it twice and registered a duplicate
+                // action ("Open link <url>") next to the button's real one.
                 onClick = {
                     openHttpLink(context, link)?.let {
                         Toast.makeText(context, it, Toast.LENGTH_SHORT).show()

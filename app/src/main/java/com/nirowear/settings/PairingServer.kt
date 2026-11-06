@@ -86,6 +86,7 @@ internal class PairingServer(
 
     @Volatile private var active: Socket? = null
     private var worker: Thread? = null
+    private var request: Thread? = null
 
     val port: Int get() = socket.localPort
 
@@ -116,7 +117,7 @@ internal class PairingServer(
                             }
                         active = client
                         try {
-                            client.use { handle(it) }
+                            serve(client)
                         } catch (_: java.io.IOException) {
                             // A single bad client must not kill the listener. Before this catch,
                             // an idle connection (port scan, browser preconnect, `nc -z`) hit the
@@ -146,9 +147,35 @@ internal class PairingServer(
         // Closing the listener alone leaves the worker blocked in read() on an accepted client, so
         // the socket would outlive the screen. Closing the active client unblocks it.
         runCatching { active?.close() }
-        // Join the worker so close() proves the listener is dead: without this, a held client can
-        // keep the thread blocked in readHead through its wall-clock deadline after the screen left.
-        runCatching { worker?.join(5000) }
+        // Join the worker so close() proves the listener is dead. Skip it when the worker is the
+        // caller: its own `finally` calls close(), and a self-join burned five seconds of a daemon
+        // thread every time the session ended by itself.
+        if (worker != Thread.currentThread()) runCatching { worker?.join(5000) }
+    }
+
+    /**
+     * Runs one request on its own short-lived thread and joins it with a hard bound.
+     *
+     * Over TLS the first `read()` is where JSSE performs the whole handshake, and the per-read
+     * deadline inside [readHead] cannot run until it returns: a client that dribbles a partial
+     * ClientHello with gaps shorter than `soTimeout` keeps that read alive, holding the single
+     * worker, so the phone's real request is never accepted (and the user sees a page that never
+     * loads, with nothing on the watch explaining it). `soTimeout` bounds one read, not a handshake;
+     * this join is the only bound that survives it, and it caps a trickled request body the same way.
+     */
+    private fun serve(client: Socket) {
+        val handler =
+            Thread({ client.use { runCatching { handle(it) } } }, "nirowear-pairing-request").apply {
+                isDaemon = true
+                start()
+            }
+        request = handler
+        runCatching { handler.join(REQUEST_MILLIS + HANDSHAKE_GRACE_MILLIS) }
+        if (handler.isAlive) {
+            runCatching { client.close() }
+            runCatching { handler.join(1_000) }
+        }
+        request = null
     }
 
     private fun handle(client: Socket) {
@@ -384,6 +411,9 @@ internal class PairingServer(
         const val MAX_HEAD = 8192
         const val GRACE_MILLIS = 5_000L
         const val REQUEST_MILLIS = 5_000L
+
+        /** Grace on top of [REQUEST_MILLIS] for the TLS handshake, which happens inside one read. */
+        const val HANDSHAKE_GRACE_MILLIS = 2_000L
         const val HTML = "text/html; charset=utf-8"
         const val JSON = "application/json"
         const val TEXT = "text/plain; charset=utf-8"

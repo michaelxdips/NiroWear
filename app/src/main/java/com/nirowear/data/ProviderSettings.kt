@@ -194,11 +194,18 @@ class ProviderSettings(
                     // cannot decode — otherwise removing one provider silently erases the others'
                     // unreadable entries and takes their keys with them.
                     val kept = decode(prefs[profilesKey] ?: "[]").filterNot { it.id == id }
-                    prefs[profilesKey] = encodePreserving(kept, prefs[profilesKey] ?: "[]")
+                    val raw = prefs[profilesKey] ?: "[]"
+                    prefs[profilesKey] = encodePreserving(kept, raw)
                     // Deleting the ACTIVE provider used to just drop the selection, leaving the app
                     // with no provider and nothing on screen saying so until the next send failed.
                     // Fall back to the first survivor so chatting keeps working.
-                    val selection = nextSelection(kept, prefs[selectedKey], id)
+                    //
+                    // `storedIds` matters: a selection can name a profile this build cannot DECODE
+                    // (a newer provider type, a missing field). Comparing against the decoded list
+                    // alone treated that as "gone" and overwrote the stored choice with
+                    // `remaining.first()`, so the user's real selection was destroyed by deleting an
+                    // unrelated provider — the opposite of what readableSelection promises.
+                    val selection = nextSelection(kept, prefs[selectedKey], id, storedIds(raw))
                     if (selection != null) prefs[selectedKey] = selection else prefs.remove(selectedKey)
                 }
                 // Same rule as save() and recover(): cleanup deletes any ciphertext whose ref is absent, so
@@ -327,10 +334,26 @@ internal fun nextSelection(
     remaining: List<ProviderProfile>,
     current: String?,
     deletedId: String,
+    storedIds: Set<String> = emptySet(),
 ): String? {
-    if (current != deletedId && remaining.any { it.id == current }) return current
+    if (current != deletedId && (remaining.any { it.id == current } || current in storedIds)) return current
     return remaining.firstOrNull()?.id
 }
+
+/**
+ * Every `id` in the stored document, including entries this build cannot decode. Used so a
+ * selection that names an unreadable profile is not mistaken for a deleted one.
+ */
+internal fun storedIds(raw: String): Set<String> =
+    runCatching { Json.parseToJsonElement(raw).jsonArray }
+        .getOrDefault(JsonArray(emptyList()))
+        .mapNotNull { element ->
+            runCatching {
+                element.jsonObject
+                    .getValue("id")
+                    .jsonPrimitive.content
+            }.getOrNull()
+        }.toSet()
 
 /**
  * The selection a build can actually USE, given what it could read.

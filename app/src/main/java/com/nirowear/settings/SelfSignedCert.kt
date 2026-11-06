@@ -8,7 +8,6 @@ import java.security.SecureRandom
 import java.security.Signature
 import java.security.cert.CertificateFactory
 import java.security.cert.X509Certificate
-import java.time.Duration
 import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
@@ -39,8 +38,19 @@ internal object SelfSignedCert {
     private const val OID_KEY_USAGE = "2.5.29.15"
     private const val OID_SUBJECT_ALT_NAME = "2.5.29.17"
 
-    /** A week either way: a phone with a stale clock is not worth debugging. */
-    private val VALIDITY: Duration = Duration.ofDays(7)
+    /**
+     * Fixed validity window, deliberately NOT derived from the device clock.
+     *
+     * A Wear OS watch can boot with no real-time clock: `System.currentTimeMillis()` then reads the
+     * epoch, `now - 7 days` lands in 1969, and UTCTime has no way to express that — the two-digit
+     * year is read back as 2069, so the certificate arrives with notBefore AFTER notAfter and the
+     * phone refuses the page with ERR_CERT_DATE_INVALID. The wall clock is not the thing being
+     * asserted here anyway: the certificate is self-signed and unknown to every client, so its dates
+     * carry no trust. A fixed 2020..2049 window is inside UTCTime's range and covers any plausible
+     * phone clock, broken watch clock or not.
+     */
+    private val NOT_BEFORE: Instant = Instant.parse("2020-01-01T00:00:00Z")
+    private val NOT_AFTER: Instant = Instant.parse("2049-12-31T23:59:59Z")
 
     private val TIME = DateTimeFormatter.ofPattern("yyMMddHHmmss'Z'").withZone(ZoneOffset.UTC)
 
@@ -48,19 +58,17 @@ internal object SelfSignedCert {
         keyPair: KeyPair,
         host: String,
         address: InetAddress,
-        now: Instant = Instant.now(),
-    ): X509Certificate = parse(encode(keyPair, host, address, now))
+    ): X509Certificate = parse(encode(keyPair, host, address))
 
     /** The DER itself. Separate from [parse] so a test can name the failing bytes, not just the throw. */
     internal fun encode(
         keyPair: KeyPair,
         host: String,
         address: InetAddress,
-        now: Instant = Instant.now(),
     ): ByteArray {
         val algorithm = der(0x30, oid(OID_ECDSA_SHA256))
         val name = der(0x30, der(0x31, der(0x30, oid(OID_CN) + der(0x0C, host.toByteArray(Charsets.UTF_8)))))
-        val validity = der(0x30, utcTime(now.minus(VALIDITY)) + utcTime(now.plus(VALIDITY)))
+        val validity = der(0x30, utcTime(NOT_BEFORE) + utcTime(NOT_AFTER))
         val extensions =
             der(
                 0xA3,

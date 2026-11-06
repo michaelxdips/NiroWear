@@ -192,7 +192,7 @@ Every number below was read from a result file produced on this tree, not quoted
 
 | Check | Result (measured) | Where |
 |---|---|---|
-| JVM unit tests | 224 / 224, 0 failures, 0 errors, 0 skipped (38 suites) | `app/build/test-results/testDebugUnitTest/*.xml` |
+| JVM unit tests | 227 / 227, 0 failures, 0 errors, 0 skipped (38 suites) | `app/build/test-results/testDebugUnitTest/*.xml` |
 | Connected suite (emulator `NiroWear_Rebook_20261020`, destructive — not a CI gate) | 48 / 48 last recorded 2026-11-02; **not re-run** for this revision | `app/build/outputs/androidTest-results/connected/debug/*.xml` |
 | Lint | 0 errors, 1 warning: `GradleDependency` (test runner 1.5.0→1.5.2) | `app/build/reports/lint-results-debug.xml` |
 | Release APK | Source builds an **unsigned** `app-release-unsigned.apk`, 3589237 B, SHA-256 `66ABE409…BC6E`. The published `app-release.apk` (3609553 B, `319AE1CF…34D71`) is signed by the release pipeline, not by a local build. Both are `com.nirowear` v10 / `0.1.0`, minSdk 30, targetSdk 37 | `app/build/outputs/apk/release/`, `output-metadata.json` |
@@ -226,7 +226,14 @@ Stated plainly, because a README that hides these is useless:
 - **Voice transcription quality is unaccepted.** The intent launch/return path is tested; recognition accuracy is the platform's.
 - **Link taps** open via the system handler; destination completion on a real paired device is unverified.
 - **Live smoke tests** are documented against controlled endpoints and one third-party Responses endpoint — not against every official provider with production credentials.
-- **TalkBack audio** acceptance is incomplete.
+- **TalkBack audio** acceptance is incomplete. There is still one dead stop in the reader (a linked
+  paragraph's "Links" group node carries no action) and the composer's field relies on the visible
+  "Prompt" heading rather than a label of its own.
+- **Stop within the first few milliseconds of a new chat can cost the typed prompt.** The conversation
+  row is inserted before the screen's state carries its id, and a cancel that lands inside that insert
+  finds no conversation to record the stopped turn against. Warm-DB timings make the window small; it
+  is stated rather than fixed because the repair (an insert-if-absent before the terminal write) needs
+  a device run to verify and there is none here.
 - **Stable releases live at `michaelxdips/NiroWear` from `v0.1.0` on.** `releases/latest`
   redirects to the newest stable build. The signing identity is still the Android debug key,
   which is disclosed in the release notes — shipping with a production keystore is an owner

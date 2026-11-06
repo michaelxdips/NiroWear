@@ -36,6 +36,36 @@ ships in `assets/legal/`).
 - Measured: JVM 176/176, ktlint 0 errors, connected suite 48/48 on emulator
   (XML ts=2026-11-02T06:58:50, per Task 2 report; not re-run after Tasks 3-5).
 
+## Unreleased — pairing hardening, memo retention, a11y/i18n passes
+
+- **A slow TLS client can no longer take the pairing session.** Over TLS the first `read()` is where
+  JSSE runs the handshake, so the request wall clock could not run inside it and `soTimeout` bounds
+  one read rather than a handshake: a peer dribbling a partial ClientHello held the single worker and
+  the phone's real request was never accepted (page never loads, nothing said on the watch). Each
+  request now runs on its own thread joined with a hard bound; pinned by
+  `aDribblingClientCannotHoldTheSession`, verified red without the bound.
+- **Certificate validity is fixed, not clock-derived.** A watch can boot with no real-time clock;
+  `now - 7 days` landed in 1969, which UTCTime reads back as 2069 — an inverted window and
+  `ERR_CERT_DATE_INVALID` on the phone. The window is now 2020..2049, inside UTCTime's range, and the
+  certificate asserts nothing by date (it is self-signed and unknown to every client).
+- **`close()` no longer self-joins** when the worker ends the session itself (five wasted seconds of a
+  daemon thread), and the dead no-op tamper in `PairingServerTest` is gone.
+- **The parse memo actually retains conversations.** The reader effect stored `rows` — the open
+  conversation's messages — so the retention bound could never keep another one and History A -> B -> A
+  re-parsed all of A. It merges now (`mergeParsed`), pinned by test and mutation-verified.
+- **Deleting a provider no longer destroys a selection this build cannot decode.** The comparison used
+  the decoded list only, so an id present solely in the stored document was treated as gone and
+  overwritten with the first survivor.
+- **Accessibility/localization:** the live status row ("Streaming…" / "Stopped · partial answer kept")
+  now comes from resources instead of hardcoded English, and carries a polite live region so a screen
+  reader learns when streaming starts or stops; link buttons no longer announce their URL twice or
+  register a duplicate action; the "Ask anything" empty state waits for the conversation's parse so
+  opening a long chat no longer flashes it.
+- Honest scope: Compose behaviour in this list (live region, empty-state gating, link semantics) has no
+  unit test in this repo and was not exercised on a device — only compiled and lint-checked.
+- Measured: JVM 227/227, 38 suites, ktlint 0, Android Lint 1 (GradleDependency), release APK
+  3,590,509 B.
+
 ## Unreleased — LAN pairing served over TLS
 
 - **Pairing works in a browser again.** The page needed a secure context for `crypto.subtle` and was
@@ -68,8 +98,8 @@ ships in `assets/legal/`).
   New chat and search hits are disabled while an answer is unsaved instead of closing History on a
   refused tap; a refused edit target reports the real reason; a Stop on retry/edit before its
   truncate ran no longer appends an empty STOPPED row over the finished answer.
-- Measured: JVM 224/224, 38 suites, ktlint 0, Android Lint 1 (GradleDependency), release APK
-  3,590,493 B.
+- Measured: JVM 227/227, 38 suites, ktlint 0, Android Lint 1 (GradleDependency), release APK
+  3,590,509 B.
 
 ## Unreleased — streaming re-parse coalesced (B3-03)
 

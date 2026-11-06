@@ -5,14 +5,14 @@
     <string name="renderer_math_description">Matematika: %1$s</string>
     <string name="renderer_quote">Kutipan</string>
     <string name="renderer_links">Tautan</string>
-    <string name="renderer_open_link">Buka tautan %1$s</string>
+    <string name="reader_streaming">Mengalir…</string>
     <string name="reader_stopped_partial">Dihentikan · jawaban sebagian disimpan</string>
     <string name="reader_stopped_before_start">Dihentikan sebelum jawaban dimulai</string>
     <plurals name="renderer_hidden_rows">
         <item quantity="other">… %1$d baris lagi. Tabel dipotong agar pembaca tetap responsif.</item>
     </plurals>
     <plurals name="renderer_hidden_cells">
-        <item quantity="other">… %1$d sel lagi. Tabel dipotong agar pembaca tetap responsif.</item>
+        <item quantity="other">… %1$d sel dibuang: baris tersebut punya sel lebih banyak daripada judul tabel.</item>
     </plurals>
     <plurals name="renderer_hidden_links">
         <item quantity="other">… %1$d tautan lagi. Ketuk di teks di atas.</item>

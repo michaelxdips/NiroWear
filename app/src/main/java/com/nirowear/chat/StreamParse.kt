@@ -70,3 +70,22 @@ internal fun nextRecency(
     if (id == null) return recent
     return (recent - id + id).takeLast(MAX_RETAINED_CONVERSATIONS)
 }
+
+/**
+ * The memo update the reader effect performs: MERGE the fresh parse into what is already memoised,
+ * then bound the result by recency.
+ *
+ * The effect used to store `rows` alone — the open conversation's messages — so the eviction filter
+ * could never keep another conversation and the recency list was inert, which meant History
+ * A -> B -> A re-parsed all of A on `Dispatchers.Default` while the user waited. Extracted here so
+ * the merge itself is pinned by a test instead of only the pieces around it.
+ */
+internal fun mergeParsed(
+    previous: Map<StoredMessage, List<Pair<Long, ContentBlock>>>,
+    parsed: Map<StoredMessage, List<Pair<Long, ContentBlock>>>,
+    recent: List<String>,
+    open: String?,
+): Pair<Map<StoredMessage, List<Pair<Long, ContentBlock>>>, List<String>> {
+    val next = nextRecency(recent, open)
+    return evictStaleConversations(previous + parsed, next) to next
+}

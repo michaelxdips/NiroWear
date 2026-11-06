@@ -63,6 +63,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
@@ -83,8 +84,8 @@ import com.nirowear.chat.ReaderAction
 import com.nirowear.chat.ReaderAnchor
 import com.nirowear.chat.coalesceDelayMs
 import com.nirowear.chat.evictStaleConversations
+import com.nirowear.chat.mergeParsed
 import com.nirowear.chat.needsParse
-import com.nirowear.chat.nextRecency
 import com.nirowear.data.Conversation
 import com.nirowear.data.ProviderSettingsState
 import com.nirowear.data.SearchHit
@@ -239,6 +240,11 @@ private fun ChatReader(
     val stoppedPartial =
         androidx.compose.ui.res
             .stringResource(R.string.reader_stopped_partial)
+    // The live status row hardcoded these two strings (English only) while the identical persisted
+    // status line already came from resources, so an Indonesian reader saw English mid-stream.
+    val streamingLabel =
+        androidx.compose.ui.res
+            .stringResource(R.string.reader_streaming)
     // Presentation includes status/error/provenance, not just Markdown. All fields invalidate it.
     LaunchedEffect(storedMessages, chatState.conversationId) {
         val id = chatState.conversationId
@@ -315,8 +321,11 @@ private fun ChatReader(
         currentCoroutineContext().ensureActive()
         if (currentSource != (id to messages)) return@LaunchedEffect
         lastParseAt = System.currentTimeMillis()
-        recentConversations = nextRecency(recentConversations, id)
-        parsedRows = evictStaleConversations(rows, recentConversations + listOfNotNull(id))
+        // Merge, then bound: storing `rows` alone (the open conversation's messages) made the bound
+        // and the recency list inert, so History A -> B -> A re-parsed all of A on a watch.
+        val merged = mergeParsed(parsedRows, rows, recentConversations, id)
+        recentConversations = merged.second
+        parsedRows = merged.first
         // Same bound as the parse memo above: one entry per conversation ever opened
         // grows without limit otherwise.
         (anchors.keys - (recentConversations + listOfNotNull(id)).toSet()).forEach { anchors.remove(it) }
@@ -621,7 +630,13 @@ private fun ChatReader(
                 !renderLab && chatState.error != null && storedMessages.none { it.error == chatState.error }
             val unsavedRowShown = !renderLab && chatState.unsaved
             val providerErrorShown = providerState.error != null
-            val emptyPromptShown = !renderLab && storedMessages.isEmpty() && chatState.rawMarkdown == null
+            // "Ask anything" needs the conversation's parse to have run first: `storedMessages` is
+            // cleared on every observe(id), so opening a 40-message conversation flashed the empty
+            // prompt and then repopulated it. No conversation, or a parse that found nothing, is the
+            // only honest moment to invite the user to start.
+            val emptyPromptShown =
+                !renderLab && storedMessages.isEmpty() && chatState.rawMarkdown == null &&
+                    (chatState.conversationId == null || parsedConversation == chatState.conversationId)
             val retryRowShown =
                 !renderLab && !chatState.generating && storedMessages.lastOrNull()?.role == "ASSISTANT"
             val streamingRowShown = !renderLab && (chatState.generating || transientStopped)
@@ -947,8 +962,15 @@ private fun ChatReader(
                     if (streamingRowShown) {
                         item {
                             Text(
-                                if (chatState.generating) "Streaming…" else "Stopped · partial answer kept",
+                                if (chatState.generating) streamingLabel else stoppedPartial,
                                 fontSize = 12.sp,
+                                // Polite, not assertive: this node carries STATE, not answer text. A
+                                // screen reader was told nothing when streaming started or stopped, and
+                                // no live region existed anywhere in the app.
+                                modifier =
+                                    Modifier.semantics {
+                                        liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite
+                                    },
                             )
                         }
                     }
