@@ -205,8 +205,8 @@ Every number below was read from a result file produced on this tree, not quoted
 | Check | Result (measured) | Where |
 |---|---|---|
 | JVM unit tests | 264 / 264, 0 failures, 0 errors, 0 skipped (42 suites) | `app/build/test-results/testDebugUnitTest/*.xml` |
-| Connected suite (emulator `NiroWear_Rebook_20261020`, destructive — not a CI gate) | 48 / 48 last recorded **2026-11-02**; **not re-run since** — three audit rounds changed chat lifecycle, Keystore and renderer code after that run, and no device or AVD is available here | `app/build/outputs/androidTest-results/connected/debug/*.xml` |
-| Host-gated instrumentation (6 tests, `@HostDrivenGate`) | written, **never executed** | `app/src/androidTest` (gitignored by policy) |
+| Connected suite (Wear OS 37 AVD, destructive — not a CI gate) | **66 tests, 18 failing, 0 errors**, measured 2026-11-06 on `emulator-5554` (`NiroWear_Audit`, x86_64, 466×466). The previously published "48 / 48" was a count from an older emulator run and no longer matches the suite (66 methods). **18 are still red** — see the list below; nothing here is claimed green | `app/build/outputs/androidTest-results/connected/debug/*.xml` |
+| Host-gated instrumentation (7 `@HostDrivenGate` methods) | written, **never executed** (they need a host script to seed state) | `app/src/androidTest` (gitignored by policy) |
 | Lint | 0 errors, 1 warning: `GradleDependency` (test runner 1.5.0→1.5.2) | `app/build/reports/lint-results-debug.xml` |
 | Release APK | Published `v0.1.1` asset: 3,621,253 B, SHA-256 `0BA7DDEF…B207`, `com.nirowear` v11 / `0.1.1`, minSdk 30, targetSdk 37 — built and signed by `.github/workflows/release.yml`. A local cut is **not** bit-identical (a local build of the same tree measured 3,619,181 B); the hash of the asset that ships is the one in that release's body. Signing is driven by the environment (`NIROWEAR_KEYSTORE`/`_PASSWORD`, `NIROWEAR_KEY_ALIAS`, `NIROWEAR_KEY_PASSWORD`); with no keystore present the build emits an unsigned `app-release-unsigned.apk` | `app/build/outputs/apk/release/`, `output-metadata.json` |
 | Signing identity | `CN=NiroWear Release`, SHA-256 `0D:C5:0F:C0:19:…:86:54:3E` (valid to 2056); 0.1.0 was `CN=Android Debug` `7D:4E:6E:99:…:AB:E3`, so 0.1.0 installs need an uninstall before updating | `apksigner verify --print-certs`, release notes |
@@ -214,6 +214,22 @@ Every number below was read from a result file produced on this tree, not quoted
 | Live site | zero console errors (Edge + mobile shape), all links 200, numbers match release XML | [michaelxdips.github.io/NiroWear](https://michaelxdips.github.io/NiroWear/) |
 
 CI is green on `main` (JVM + lint + ktlint + both assembles); the connected suite is a local pre-release gate because it needs an emulator. Read the full per-claim table — including what is explicitly **unverified** (real-watch battery/thermals, TalkBack audio, production-credential sweeps) — on the [site's evidence section](https://michaelxdips.github.io/NiroWear/#status) and in [docs/release/RELEASE_NOTES_0.1.1.md](docs/release/RELEASE_NOTES_0.1.1.md).
+
+**Instrumentation status, measured 2026-11-06** (Wear OS 37 AVD, 66 methods, 18 failing). What an
+emulator cannot prove is marked as such; the rest is open work, not a green claim:
+
+| Class | Failing | Why (measured, not guessed) |
+|---|---|---|
+| `ProviderSetupUiTest` | 4 | Save is gated on a successful **Validate** (`enabled = !busy && (!needsValidation || validated)`) and the test never validates. Either the test grows per-provider Validate mocks or the gate becomes optional — a product decision. |
+| `ReaderNavigationTest` | 4 | Advanced past the lookup bug (text compares now strip the renderer's FSI/PDI marks); remaining failures are scroll-geometry assertions and an IME prompt that never reaches the field. |
+| `CompatibleChatTest`, `HistoryReadFailureTest` | 2 | 10 s coroutine budgets against a software-GPU emulator; a cold start can exceed them. |
+| `NativeProviderSwitchTest` | 1 | Asserts a stored status is null where the run produces "Stream interrupted or unsupported." — unexplained, needs a decoder trace. |
+| `StoppedStatusUiTest` | 1 | Reaches the status text but the viewport/reachability geometry assertion fails at font scale 1.0. |
+| `RendererRowLocalizationTest` | 1 | The "… N more table rows" notice is not found for a header-less table fixture. |
+| `ProviderValidationRaceTest`, `SettingsRecoveryTest` | 2 | Require a virgin app; a previous test's profile survives (`found: [2222…]`). Per-test `pm clear` is the fix (the AndroidX orchestrator did not help). |
+| `RotaryInputTest` | 1 | Emulator has no rotary/bezel input source — environment, not a defect. |
+| `PairingUiTest` | 1 | Needs a real LAN/phone browser; the emulator cannot exercise the certificate click-through. |
+| `ByokPersistenceTest` | 1 | Process-restart probe; emulator keystore/restart semantics differ from a watch. |
 
 ## Security & privacy
 
@@ -247,10 +263,11 @@ Stated plainly, because a README that hides these is useless:
   `CN=NiroWear Release` (SHA-256 `0D:C5:0F:C0:19:…:86:54:3E`, valid to 2056), built and signed by
   `.github/workflows/release.yml` from the tag. `v0.1.0` used the Android debug lineage, so an in-place
   update from 0.1.0 needs an uninstall.
-- **The connected suite (48 tests) is a local gate, not a CI gate.** It needs an emulator, so CI runs
-  the JVM tests, lint, ktlint and both assembles only. Run `connectedDebugAndroidTest` before a
-  release; nothing will remind you.
-- **Six further instrumentation tests are excluded from the default run.** They carry
+- **The connected suite (66 methods, 18 failing) is a local gate, not a CI gate.** It needs an
+  emulator, so CI runs the JVM tests, lint, ktlint and both assembles only. Run
+  `connectedDebugAndroidTest` before a release; nothing will remind you. The 2026-11-06 run on a Wear
+  OS 37 AVD is the first time it ever executed; the per-class failure list is in Evidence.
+- **Seven further instrumentation methods are excluded from the default run.** They carry
   `@HostDrivenGate` and need a host script to seed state. Run them with
   `adb shell am instrument -w -r -e annotation com.nirowear.HostDrivenGate com.nirowear.test/androidx.test.runner.AndroidJUnitRunner`.
 - **Known math limits.** Rendering is cached (8 entries, in memory) so a formula no longer flashes
