@@ -130,10 +130,21 @@ class SafeProviderException(
 fun httpError(code: Int): ProviderError =
     when (code) {
         401 -> ProviderError.INVALID_CREDENTIAL
+
         403 -> ProviderError.PERMISSION_DENIED
+
         404 -> ProviderError.MODEL_UNAVAILABLE
+
         429 -> ProviderError.RATE_LIMITED
+
+        // Redirects are disabled, so a 3xx cannot be followed. In practice it is a captive portal,
+        // hotel Wi-Fi or a gateway rewriting http->https — the provider is fine and the NETWORK is
+        // the problem. Falling through to `else` said "Provider rejected request. Check
+        // configuration.", which blames the one thing that was right.
+        in 300..399 -> ProviderError.NETWORK_UNAVAILABLE
+
         in 500..599 -> ProviderError.SERVER
+
         else -> ProviderError.HTTP
     }
 

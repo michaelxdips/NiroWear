@@ -50,6 +50,12 @@ object NativeMathRenderer : MathRenderer {
                 } catch (_: StackOverflowError) {
                     // A pathological formula must degrade to source text, not take the app down.
                     null
+                } catch (_: OutOfMemoryError) {
+                    // Bounds are checked AFTER layout, so the allocation happens first: a formula that
+                    // lays out inside 8192x2048 can still ask for a bitmap the watch cannot give. An
+                    // Error escaping `produceState` kills the process, which is a far worse outcome
+                    // than showing the source text.
+                    null
                 }
             }
         }

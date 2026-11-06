@@ -35,18 +35,14 @@ internal fun providerHttpClient(): OkHttpClient =
 /** HTTP/SSE framing only. Adapters own JSON, native lifecycle and completion. No logging/replay. */
 internal class ProviderHttp(
     private val client: OkHttpClient,
+    /**
+     * How long the stream may make NO PROGRESS before it is treated as dead. Injectable so the bound
+     * can be tested in milliseconds instead of two minutes.
+     */
+    private val streamIdleTimeoutMs: Long = 120_000L,
 ) {
     // Native completion repeats accepted text; JSON escaping can use six wire bytes per unit.
     private val maxFrameBytes = 6L * MAX_RESPONSE_CHARS + 256 * 1024
-
-    /**
-     * How long the stream may be silent before it is treated as dead.
-     *
-     * `readTimeout` cannot do this job: it is per read and resets on every byte, so a server that
-     * sends one keepalive every 89 seconds holds the socket — and on a watch, the radio — forever.
-     * This bounds silence, not total duration, so a long answer that keeps arriving is never cut.
-     */
-    private val streamIdleTimeoutMs = 120_000L
 
     /**
      * Plain JSON GET.
@@ -111,6 +107,14 @@ internal class ProviderHttp(
     fun stream(
         request: Request,
         decode: (String) -> List<StreamEvent>,
+        /**
+         * Optional mapping for a non-2xx response, given the status and a bounded body. Some providers
+         * report an authentication failure as HTTP 400 with the reason in the body (Gemini's
+         * `API_KEY_INVALID`), and the status alone cannot tell that apart from a malformed request —
+         * the old code threw on the status before the body was ever read, so a wrong key read as
+         * "Provider rejected request. Check configuration."
+         */
+        decodeError: ((Int, String) -> ProviderError?)? = null,
     ): Flow<StreamEvent> =
         callbackFlow {
             val call = client.newCall(request)
@@ -139,7 +143,13 @@ internal class ProviderHttp(
                                 try {
                                     response.use {
                                         if (!it.isSuccessful) {
-                                            send(StreamEvent.Failure(httpError(it.code)))
+                                            val mapped =
+                                                decodeError?.let { hook ->
+                                                    runCatching {
+                                                        hook(it.code, it.peekBody(8 * 1024).string())
+                                                    }.getOrNull()
+                                                }
+                                            send(StreamEvent.Failure(mapped ?: httpError(it.code)))
                                             return@launch
                                         }
                                         if (!it
@@ -154,11 +164,19 @@ internal class ProviderHttp(
                                         val source = it.body.source()
                                         val frame = StringBuilder()
                                         var visibleChars = 0
+                                        // Progress clock. readTimeout is per read and resets on every
+                                        // byte, so a server that drips a keepalive every 89 s holds the
+                                        // socket — and the watch radio — forever. It is reset only when a
+                                        // frame DECODES to at least one event: `: ping` comments and
+                                        // `{"type":"ping"}` data frames both carry no content, and
+                                        // resetting on the raw bytes made this bound dead.
+                                        var lastFrameAt = System.currentTimeMillis()
 
                                         suspend fun dispatch(): Boolean {
                                             if (frame.isEmpty()) return false
                                             val events = decode(frame.toString().removeSuffix("\n"))
                                             frame.clear()
+                                            if (events.isNotEmpty()) lastFrameAt = System.currentTimeMillis()
                                             for (event in events) {
                                                 if (event is StreamEvent.TextDelta) {
                                                     if (event.text.length > MAX_RESPONSE_CHARS - visibleChars) {
@@ -182,12 +200,7 @@ internal class ProviderHttp(
                                                     event == StreamEvent.Truncated
                                             }
                                         }
-                                        // Idle deadline. readTimeout is per read and resets on every
-                                        // byte, so a server that drips a keepalive every 89s holds
-                                        // the socket — and the watch radio — forever. This bounds
-                                        // silence, not total duration: a legitimately long answer
-                                        // keeps arriving and is never cut off.
-                                        var lastFrameAt = System.currentTimeMillis()
+                                        // Idle deadline; see the progress clock above.
                                         while (isActive && !source.exhausted()) {
                                             val line =
                                                 try {
@@ -202,18 +215,12 @@ internal class ProviderHttp(
                                                     )
                                                 }
                                             if (line.isEmpty()) {
-                                                // A blank line with no data field behind it is the terminator
-                                                // of an empty frame — i.e. a keepalive separator, not
-                                                // progress. Resetting the deadline on it made the bound
-                                                // below dead: `: ping\n\n` every 89 s kept a stalled
-                                                // answer alive forever, which is the exact case it exists
-                                                // to stop.
-                                                val hadFrame = frame.isNotEmpty()
+                                                // The blank line terminator itself is not progress;
+                                                // dispatch() decides, because only it knows whether the
+                                                // frame carried anything.
                                                 if (dispatch()) return@launch
-                                                if (hadFrame) lastFrameAt = System.currentTimeMillis()
                                             } else if (line.startsWith("data:")) {
                                                 frame.append(line.removePrefix("data:").removePrefix(" ")).append('\n')
-                                                lastFrameAt = System.currentTimeMillis()
                                                 if (frame.length >
                                                     maxFrameBytes
                                                 ) {
@@ -224,11 +231,11 @@ internal class ProviderHttp(
                                             //
                                             // - `readTimeout` (90 s) already catches a dead socket, because it
                                             //   fires when one read returns nothing.
-                                            // - `lastFrameAt` tracks the last line that carried CONTENT (a data
-                                            //   field, or the blank line that dispatches a frame). A server that
-                                            //   drips `: ping` comments every 89 s keeps the socket and the watch
-                                            //   radio alive while the answer makes no progress; that is the case
-                                            //   this deadline exists to stop.
+                                            // - `lastFrameAt` moves only when a frame decodes to an EVENT. A
+                                            //   server that drips `: ping` comments, or data frames whose
+                                            //   payload the adapter ignores, keeps the socket and the watch
+                                            //   radio alive while the answer makes no progress; that is the
+                                            //   case this deadline exists to stop.
                                             if (System.currentTimeMillis() - lastFrameAt > streamIdleTimeoutMs) {
                                                 throw SafeProviderException(ProviderError.TIMEOUT)
                                             }

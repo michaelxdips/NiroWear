@@ -14,6 +14,10 @@ internal object NativeMathGuard {
     // Longest names first: the regex engine takes the first alternative that matches at a position,
     // so `newenvironment` would otherwise match inside `renewenvironment` and leave the `re`
     // unmatched, letting the whole command through.
+    //
+    // The trailing `(?![a-zA-Z])` is a NAME boundary, not decoration: without it `\def` matched
+    // `\definecolor`, `\let` matched any word starting with "let", and a legitimate macro was refused
+    // for sharing a prefix with a hostile one.
     private val FORBIDDEN =
         Regex(
             "\\\\(?:" +
@@ -58,7 +62,7 @@ internal object NativeMathGuard {
                     "kern",
                     "rule",
                     "magnification",
-                ).joinToString("|") + ")",
+                ).joinToString("|") + ")(?![a-zA-Z])",
         )
 
     private const val MAX_SOURCE = 4096

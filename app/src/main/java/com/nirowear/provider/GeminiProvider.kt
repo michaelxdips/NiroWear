@@ -151,7 +151,19 @@ class GeminiProvider(
                 .header("Accept", "text/event-stream")
                 .post(payload.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
                 .build()
-        return flow { emitAll(http.stream(wire, GeminiStreamDecoder()::accept)) }
+        return flow {
+            emitAll(
+                http.stream(
+                    wire,
+                    GeminiStreamDecoder()::accept,
+                    // Gemini reports a rejected key as HTTP 400 with the reason in the BODY, so the
+                    // status alone cannot tell it apart from a malformed request. Before this hook the
+                    // status threw before the body was read, and saving a wrong key said "Provider
+                    // rejected request. Check configuration." — the exact wrong thing to blame.
+                    decodeError = { code, body -> geminiHttpError(code, body) },
+                ),
+            )
+        }
     }
 
     private fun authenticated(
@@ -161,6 +173,37 @@ class GeminiProvider(
         .Builder()
         .url(url)
         .header("x-goog-api-key", secret.forRequest())
+}
+
+/**
+ * Maps a NON-2xx Gemini response body to an error, or null when the status says everything.
+ *
+ * The stream decoder only ever sees 2xx bodies, so its mapping could never fire for the most common
+ * failure of all: a mistyped key, which Gemini answers with HTTP 400 and `API_KEY_INVALID` in the
+ * body. Deliberately narrow — only reasons that are unambiguous about the CREDENTIAL — so a 400 about
+ * a malformed request still reads as a request problem instead of accusing the key.
+ */
+internal fun geminiHttpError(
+    code: Int,
+    body: String,
+): ProviderError? {
+    val error =
+        runCatching { Json.parseToJsonElement(body).jsonObject["error"]?.jsonObject }.getOrNull()
+            ?: return null
+    val status = error["status"]?.jsonPrimitive?.contentOrNull.orEmpty()
+    val reasons =
+        error["details"]?.jsonArray.orEmpty().mapNotNull {
+            it.jsonObject["reason"]?.jsonPrimitive?.contentOrNull
+        }
+    return when {
+        status == "UNAUTHENTICATED" || reasons.any { it.startsWith("API_KEY") } -> ProviderError.INVALID_CREDENTIAL
+        status == "PERMISSION_DENIED" -> ProviderError.PERMISSION_DENIED
+        status == "RESOURCE_EXHAUSTED" -> ProviderError.RATE_LIMITED
+        status == "NOT_FOUND" -> ProviderError.MODEL_UNAVAILABLE
+        code == 401 -> ProviderError.INVALID_CREDENTIAL
+        code == 403 -> ProviderError.PERMISSION_DENIED
+        else -> null
+    }
 }
 
 internal class GeminiStreamDecoder {

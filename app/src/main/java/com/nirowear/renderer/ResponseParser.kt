@@ -289,11 +289,20 @@ object ResponseParser {
     /**
      * Columns of content indent a list marker introduces on this line, or null when the line is not a
      * list item. Used only to measure indentation relative to the enclosing item.
+     *
+     * [maxLeading] is 3 at top level, where a marker indented four or more columns is an INDENTED CODE
+     * BLOCK, but unbounded once we are already inside a list item: a depth-four bullet sits at six
+     * columns and three-plus-one spaces is exactly where the cap used to give up, so it returned null,
+     * `listContentIndent` stayed at the depth-two value, and the same line's `$$…$$` measured as
+     * four-column-indented code — display math inside a deep list was never extracted at all.
      */
-    private fun listMarkerContentIndent(line: String): Int? {
+    private fun listMarkerContentIndent(
+        line: String,
+        maxLeading: Int = 3,
+    ): Int? {
         var i = 0
         var spaces = 0
-        while (i < line.length && line[i] == ' ' && spaces < 3) {
+        while (i < line.length && line[i] == ' ' && spaces < maxLeading) {
             i++
             spaces++
         }
@@ -348,7 +357,7 @@ object ResponseParser {
             val raw = lines[index]
             val line = uncontainer(raw)
             val contentLeading = line.length - line.trimStart(' ').length
-            val markerIndent = listMarkerContentIndent(raw)
+            val markerIndent = listMarkerContentIndent(raw, if (listIndent > 0) Int.MAX_VALUE else 3)
             if (markerIndent != null) {
                 listIndent = markerIndent
             } else if (line.isNotBlank() && contentLeading < listIndent) {
@@ -450,6 +459,8 @@ object ResponseParser {
         var mathContainer = ""
         // Content indent of the list item we are inside, 0 when not in a list.
         var listContentIndent = 0
+        // Columns to strip from lines that follow a display math opened inside that list item.
+        var mathDedent = 0
 
         /**
          * Lines of the currently open fence, fed raw so CommonMark sees the exact bytes.
@@ -498,6 +509,17 @@ object ResponseParser {
             appendBlocks(parser.parse(rendered), blocks, scanTableOverflow(rendered))
             markdown.clear()
         }
+
+        /**
+         * Removes the enclosing list item's content indent from a line that follows display math.
+         * Only that indent: anything deeper stays, so a code block nested in the item still reads as
+         * code (four relative columns), and a shallower line is untouched.
+         */
+        fun dedentAfterMath(line: String): String {
+            if (mathDedent <= 0) return line
+            val leading = line.length - line.trimStart(' ').length
+            return if (leading >= mathDedent) line.substring(mathDedent) else line
+        }
         for (line in source.replace("\r\n", "\n").split('\n')) {
             // Bound nesting before the Markdown library recurses on it.
             val bounded = capContainers(line)
@@ -526,7 +548,11 @@ object ResponseParser {
                         rest = null
                     } else {
                         open.append(body, 0, index).append('\n')
-                        blocks += ContentBlock.Math(open.toString().trim(), true)
+                        // An EMPTY formula is not content: `$$\n$$` and `\[\]` produced a Math block whose
+                        // source was "", which renders as nothing at all — an invisible stop in the
+                        // document that a scroll motion has to discover.
+                        val closed = open.toString().trim()
+                        if (closed.isNotEmpty()) blocks += ContentBlock.Math(closed, true)
                         math = null
                         mathContainer = ""
                         rest = mathPrefix + body.substring(index + closing.length)
@@ -547,12 +573,20 @@ object ResponseParser {
                 // as an empty code block, a formula and a stray "```". Any fence inside a nested list
                 // hit this.
                 val contentLeading = container.length - container.trimStart(' ').length
-                val markerIndent = listMarkerContentIndent(rest)
+                val markerIndent =
+                    listMarkerContentIndent(
+                        rest,
+                        // Inside a list a marker may sit at any depth; only a top-level marker is
+                        // limited to three columns (four is an indented code block there).
+                        maxLeading = if (listContentIndent > 0) Int.MAX_VALUE else 3,
+                    )
                 if (markerIndent != null) {
                     listContentIndent = markerIndent
+                    mathDedent = 0
                 } else if (container.isNotBlank() && contentLeading < listContentIndent) {
                     // A less-indented content line ends the list.
                     listContentIndent = 0
+                    mathDedent = 0
                 }
                 val view =
                     if (listContentIndent > 0 && contentLeading >= listContentIndent) {
@@ -660,8 +694,13 @@ object ResponseParser {
                         fenceLines.add(rest)
                         if (fence == null) replayFence()
                     } else {
-                        // Outside a fence the raw line is fed so quotes and lists survive.
-                        markdown.appendLine(rest)
+                        // Outside a fence the raw line is fed so quotes and lists survive. After a
+                        // display math inside a list item the list's container context is gone
+                        // (flush() ends the chunk), so a four-column-indented continuation line is
+                        // parsed in a fresh document, where four columns mean an INDENTED CODE BLOCK:
+                        // "- a / - b / $$x$$ / tail" rendered `tail` as monospace code. Strip the
+                        // item's content indent for as long as that list context is current.
+                        markdown.appendLine(dedentAfterMath(rest))
                     }
                     rest = null
                 } else {
@@ -670,12 +709,18 @@ object ResponseParser {
                     math = StringBuilder()
                     mathPrefix = rest.substring(0, rest.length - container.length)
                     mathContainer = mathPrefix
+                    // Remember that this math split the document inside a list, so what follows can be
+                    // measured without the item's indent.
+                    mathDedent = listContentIndent
                     rest = trimmed.removePrefix(opening.first)
                 }
             }
         }
         if (math != null) {
-            blocks += ContentBlock.Math(math.toString().trimEnd(), false)
+            // Same rule as the closed case: a display that never received a character (a stream
+            // stopped right after `$$`) must not leave an invisible block behind.
+            val partial = math.toString().trimEnd()
+            if (partial.isNotBlank()) blocks += ContentBlock.Math(partial, false)
         } else {
             flush()
         }

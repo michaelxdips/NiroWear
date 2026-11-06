@@ -36,6 +36,41 @@ ships in `assets/legal/`).
 - Measured: JVM 176/176, ktlint 0 errors, connected suite 48/48 on emulator
   (XML ts=2026-11-02T06:58:50, per Task 2 report; not re-run after Tasks 3-5).
 
+## Unreleased — math and list repair, honest HTTP blame
+
+- **Display math inside a nested list was never typeset.** A depth-four bullet sits at six columns; the
+  marker scan stopped at three, so `listContentIndent` stayed at the depth-two value, `$$x^2$$`
+  measured as four-column-indented code, and the reader showed the literal `$x^2$` runs. Markers are
+  now measurable at any depth once inside a list, and only the first (top-level) one keeps the
+  three-column limit.
+- **Prose after display math inside a list rendered as monospace code.** The math flush ends the
+  document chunk, so the following indented line was parsed in a fresh document where four columns mean
+  an indented code block. The item's own indent is stripped for as long as that list context is
+  current; a block four columns deeper still reads as code.
+- **An empty display block was invisible.** `$$\n$$`, `\[\]` and a stream stopped right after `$$`
+  produced a `Math` block with no source: nothing on screen, no hint, one dead scroll. Empty formulas
+  are no longer emitted.
+- **The math guard no longer refuses a macro for its prefix.** `\def` also matched `\definecolor`, so a
+  legitimate formula silently degraded to source text; the refusal list now requires a command-name
+  boundary. Its ceilings (4096 characters, 128 groups, unbalanced braces) and every refused command
+  are pinned by `NativeMathGuardTest`.
+- **A 3xx no longer blames your configuration.** Redirects are disabled, so a 3xx is a captive portal
+  or a gateway — reported as "Cannot reach provider. Check connection." instead of "Provider rejected
+  request."
+- **A wrong Gemini key now reads as the key.** Gemini answers HTTP 400 with `API_KEY_INVALID` in the
+  body; the status used to throw before the body was read. Non-2xx bodies can now be mapped
+  (`ProviderHttp.stream(decodeError = ...)`), and the mapping stays narrow: a 400 about a bad field
+  still reads as a request problem.
+- **The idle deadline counts events, not bytes.** `{"type":"ping"}` data frames reset the 120 s bound
+  the way `: ping` comments once did, so a keepalive-only stream held the socket and the radio for
+  ever. The clock now moves only when a frame decodes to at least one event.
+- Stated, not fixed: there is no math cache, so a formula re-typesets and shows its raw LaTeX for one
+  frame after each scroll-out/scroll-in; a formula that lays out wider than 8192px falls back to source
+  text instead of panning; `- $$\frac ab$$` loses its bullet because the formula is extracted before
+  the list is parsed.
+- Measured: JVM 242/242, 41 suites, ktlint 0, Android Lint 1 (GradleDependency), release APK
+  3,606,893 B. Every fix above has a test that was verified red by mutating the production line.
+
 ## Unreleased — pairing hardening, memo retention, a11y/i18n passes
 
 - **A slow TLS client can no longer take the pairing session.** Over TLS the first `read()` is where
