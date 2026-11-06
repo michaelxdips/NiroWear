@@ -17,6 +17,7 @@ import com.nirowear.provider.ProviderError
 import com.nirowear.provider.ProviderType
 import com.nirowear.provider.SafeProviderException
 import com.nirowear.provider.StreamEvent
+import com.nirowear.provider.TRUNCATION_NOTE
 import com.nirowear.security.CredentialUnavailable
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -29,10 +30,10 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.retryWhen
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -48,10 +49,27 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 
-private const val CHECKPOINT_INTERVAL_MS = 120L
+// Durability vs cost. Each checkpoint is an UPDATE carrying the WHOLE answer so far, and Room
+// invalidates the conversation's message query with it, so the reader re-reads and re-lists every
+// message. At 120 ms that was ~8 full writes and 8 full reads per second while streaming — O(n²)
+// bytes for one answer. 400 ms keeps process-death loss under half a second of text, which is the
+// only thing this interval buys, while cutting that traffic by two thirds.
+private const val CHECKPOINT_INTERVAL_MS = 400L
+
+/** Attempts before history gives up and shows the error: 1 s, 2 s, 4 s, then stop. */
+private const val MAX_HISTORY_RETRIES = 3L
+
+/**
+ * A turn refused before anything was sent or written, carrying the message to show. It exists
+ * because a bare `error(...)`/`check(...)` throws IllegalStateException, which the generic catch
+ * turned into "Cannot send. Check provider setup or local storage." — so a stale edit target told
+ * the user their provider was misconfigured and their edited text was gone with no explanation.
+ */
+private class TurnRefused(
+    override val message: String,
+) : Exception(message)
 
 data class ChatState(
-    val prompt: String = "",
     val rawMarkdown: String? = null,
     val generating: Boolean = false,
     val interrupted: Boolean = false,
@@ -81,16 +99,41 @@ class ChatViewModel(
     private val app = application as NiroApplication
     private val dao = app.database.chats()
     val settings = app.settings.state
+
+    /**
+     * History list, resilient to a transient Room failure.
+     *
+     * `catch { emit(emptyList()) }` reported the error and then COMPLETED the flow: one SQLITE_BUSY
+     * or disk hiccup left History permanently empty for the life of this ViewModel (which survives
+     * rotation, so until process death), and the message was then overwritten by the next
+     * conversation open. `retryWhen` keeps the upstream alive and backs off instead.
+     */
     val conversations =
-        dao.conversations().catch { error ->
-            if (error is CancellationException) throw error
-            mutableState.value = mutableState.value.copy(error = "History cannot be read. No messages deleted.")
-            emit(emptyList())
-        }
+        dao
+            .conversations()
+            .retryWhen { error, attempt ->
+                if (error is CancellationException) throw error
+                if (attempt >= MAX_HISTORY_RETRIES) {
+                    // Bounded on purpose: retrying every few seconds forever is a radio-and-CPU leak
+                    // on a watch when the database is genuinely broken. The error stays on screen,
+                    // and reopening the app starts a fresh subscription.
+                    mutableState.value =
+                        mutableState.value.copy(error = "History cannot be read. No messages deleted.")
+                    false
+                } else {
+                    mutableState.value = mutableState.value.copy(error = "History cannot be read. Retrying.")
+                    delay((1000L shl attempt.coerceAtMost(2L).toInt()).coerceAtMost(4000L))
+                    true
+                }
+            }
     val messages = MutableStateFlow<List<StoredMessage>>(emptyList())
     private val liveAnswer = MutableStateFlow<StoredMessage?>(null)
     private var history: Job? = null
     private val ready = CompletableDeferred<Unit>()
+
+    /** True once init has failed. A completed-exceptionally deferred looks "completed" to isCompleted. */
+    private var initFailed = false
+
     private val mutableState = MutableStateFlow(ChatState())
     val state = mutableState.asStateFlow()
     private var generation: Job? = null
@@ -118,6 +161,7 @@ class ChatViewModel(
                 }
                 ready.complete(Unit)
             } catch (_: Exception) {
+                initFailed = true
                 mutableState.value = mutableState.value.copy(error = "History unavailable. No messages changed.")
                 ready.completeExceptionally(IllegalStateException("History unavailable"))
             }
@@ -125,7 +169,10 @@ class ChatViewModel(
     }
 
     fun open(id: String) {
-        if (mutableState.value.generating || mutableState.value.unsaved || !ready.isCompleted) return
+        // `initFailed` matters here too: a deferred completed exceptionally still reports
+        // isCompleted, so this used to pass and then wipe the only diagnostic ("History unavailable")
+        // with a fresh empty ChatState while starting an observer that can never deliver.
+        if (initFailed || mutableState.value.generating || mutableState.value.unsaved || !ready.isCompleted) return
         liveAnswer.value = null
         mutableState.value = ChatState(conversationId = id)
         observe(id)
@@ -144,6 +191,21 @@ class ChatViewModel(
                             rows.map { if (it.id == live.id) live else it } +
                                 if (rows.none { it.id == live.id }) listOf(live) else emptyList()
                         }
+                    }.retryWhen { error, attempt ->
+                        // Same reason as `conversations`: one transient read error must not end the
+                        // observation of the open conversation forever — but bounded, so a broken
+                        // database does not retry forever in the background.
+                        if (error is CancellationException) throw error
+                        if (attempt >= MAX_HISTORY_RETRIES) {
+                            mutableState.value =
+                                mutableState.value.copy(error = "History cannot be read. No messages deleted.")
+                            false
+                        } else {
+                            mutableState.value =
+                                mutableState.value.copy(error = "History cannot be read. Retrying.")
+                            delay((1000L shl attempt.coerceAtMost(2L).toInt()).coerceAtMost(4000L))
+                            true
+                        }
                     }.collect { messages.value = it }
                 } catch (cancelled: CancellationException) {
                     throw cancelled
@@ -155,28 +217,50 @@ class ChatViewModel(
     }
 
     fun newChat() {
-        if (mutableState.value.generating || mutableState.value.unsaved || !ready.isCompleted) return
+        if (initFailed || mutableState.value.generating || mutableState.value.unsaved || !ready.isCompleted) return
         liveAnswer.value = null
         history?.cancel()
         messages.value = emptyList()
         mutableState.value = ChatState()
     }
 
-    fun send(prompt: String?) = generate(prompt)
+    /** True when the turn actually started, so the caller knows whether the text was accepted. */
+    fun send(prompt: String?): Boolean = generate(prompt)
 
     private fun generate(
         prompt: String?,
         editId: Long? = null,
         editedText: String? = null,
         retry: Boolean = false,
-    ) {
+    ): Boolean {
         if (prompt?.isBlank() == true || mutableState.value.unsaved || mutableState.value.generating ||
             generation?.isActive == true
         ) {
-            return
+            return false
+        }
+        // `open`/`newChat` refuse to run before init settles; a send must too. Without this a failed
+        // init still created a conversation, observed it, then threw at `ready.await()`, so the user
+        // saw a provider-setup error over a "History unavailable. No messages changed." state — and
+        // a conversation row had in fact been written.
+        if (initFailed || !ready.isCompleted) {
+            mutableState.value = mutableState.value.copy(error = "History unavailable. No messages changed.")
+            return false
         }
         liveAnswer.value = null
         mutableState.value = mutableState.value.copy(generating = true, error = null, rawMarkdown = null)
+        // The conversation is created as the FIRST thing the job does, before the settings and
+        // credential reads. It used to be created after them, so a failure earlier than that (no
+        // profile, missing key, unreadable settings) left `conversationId` null and the typed prompt
+        // only in the composer — which the reader unmounts while generating. That send silently cost
+        // the user their question.
+        val newConversationId =
+            if (mutableState.value.conversationId == null) {
+                java.util.UUID
+                    .randomUUID()
+                    .toString()
+            } else {
+                null
+            }
         generation =
             viewModelScope.launch {
                 var assistantId: Long? = null
@@ -185,33 +269,82 @@ class ChatViewModel(
                 var failure: String? = null
                 var localPhases: StoredOpenAiPhases? = null
                 var checkpoints: Job? = null
+                // Which profile this turn was aimed at, so a failure row still has provenance.
+                var usedProfile: com.nirowear.provider.ProviderProfile? = null
+                // Set when the turn was rejected BEFORE anything was sent or written, so the failure
+                // must not be recorded as an answer row in a conversation the user never touched.
+                var nothingSent = false
+                // True once this turn has CHANGED the conversation: the edited text written, the retry's
+                // tail truncated, or the answer row admitted. Nothing before that may be recorded as a
+                // failed turn; after it the opposite holds — a Stop in that gap used to delete the
+                // previous answer and leave the reader with neither a row, a status line nor a Retry.
+                var wrote = false
                 try {
+                    if (newConversationId != null) {
+                        dao.insertConversation(
+                            Conversation(
+                                newConversationId,
+                                prompt.orEmpty().take(60).ifBlank { "New chat" },
+                                System.currentTimeMillis(),
+                            ),
+                        )
+                        mutableState.value = mutableState.value.copy(conversationId = newConversationId)
+                        observe(newConversationId)
+                    }
                     ready.await()
                     val config = settings.first()
                     check(config.error == null) { "Provider settings unavailable" }
                     val profile = config.selected ?: throw SafeProviderException(ProviderError.PROVIDER_REQUIRED)
+                    usedProfile = profile
                     val provider =
                         app.provider(profile.type) ?: throw SafeProviderException(ProviderError.PROVIDER_UNSUPPORTED)
                     val secret = withContext(Dispatchers.IO) { app.secrets.read(profile.credentialRef) }
+                    // Created above for a new chat; edit/retry only run on an existing one. The local id
+                    // is the fallback: a cancel between `insertConversation` and the state write used to
+                    // throw here, which cost the typed prompt because the terminal block had no id to
+                    // record the stopped turn against.
                     val conversationId =
-                        mutableState.value.conversationId ?: java.util.UUID.randomUUID().toString().also { id ->
-                            dao.insertConversation(
-                                Conversation(
-                                    id,
-                                    prompt.orEmpty().take(60).ifBlank { "New chat" },
-                                    System.currentTimeMillis(),
-                                ),
-                            )
-                            mutableState.value = mutableState.value.copy(conversationId = id)
-                            observe(id)
+                        mutableState.value.conversationId ?: newConversationId ?: error("No conversation")
+                    if (editId != null) {
+                        // Verify the target belongs to THIS conversation BEFORE mutating anything. An
+                        // edit target can outlive its conversation (a restored screen state, or a
+                        // conversation switch that did not clear it), and the failing `require` inside
+                        // dao.edit threw after the caller had already cleared the composer.
+                        val rows = dao.snapshot(conversationId)
+                        val owned = rows.any { it.id == editId && it.role == "USER" }
+                        if (!owned) {
+                            // Nothing was sent and nothing was written, so this must NOT be recorded as a
+                            // failed turn: recording it put a phantom "Cannot send…" answer row into a
+                            // conversation the user never touched. The reason still reaches the UI
+                            // through chatState.error.
+                            nothingSent = true
+                            throw TurnRefused("That message is no longer in this chat. Send it again.")
                         }
-                    if (editId != null) dao.edit(conversationId, editId, requireNotNull(editedText))
+                        val renamesChat = rows.firstOrNull { it.role == "USER" }?.id == editId
+                        dao.edit(conversationId, editId, requireNotNull(editedText))
+                        wrote = true
+                        // History names a chat from its FIRST prompt, so editing that prompt must follow
+                        // it. `retitleIfUnnamed` cannot: a new chat is created already titled with its
+                        // prompt, so its `title = 'New chat'` guard never matches.
+                        if (renamesChat) {
+                            runCatching { dao.retitle(conversationId, requireNotNull(editedText).trim().take(60)) }
+                        }
+                    }
                     if (retry) {
                         val user =
                             dao.snapshot(conversationId).lastOrNull { it.role == "USER" } ?: error("No user message")
                         dao.truncate(conversationId, user.id)
+                        wrote = true
                     }
-                    assistantId = dao.admit(conversationId, prompt?.trim(), profile)
+                    val newAssistantId = dao.admit(conversationId, prompt?.trim(), profile)
+                    assistantId = newAssistantId
+                    // Name the chat from its FIRST prompt. The previous version used `prompt` (the
+                    // current message) whether or not a title existed, so every send RENAMED an
+                    // existing conversation to its latest message and History stopped being
+                    // recognisable. The `title = 'New chat'` guard makes it a no-op once named.
+                    prompt?.trim()?.takeIf { it.isNotEmpty() }?.let { text ->
+                        runCatching { dao.retitleIfUnnamed(conversationId, text.take(60)) }
+                    }
                     val admitted = dao.snapshot(conversationId)
                     liveAnswer.value = admitted.first { it.id == assistantId }
                     val rows = admitted.filter { it.id != assistantId && it.rawContent.isNotEmpty() }
@@ -282,7 +415,7 @@ class ChatViewModel(
                                 }
 
                                 is StreamEvent.Failure -> {
-                                    failure = event.error.userMessage
+                                    failure = event.error.userMessage(hasText = text.isNotEmpty())
                                     terminal = "ERROR"
                                 }
 
@@ -308,16 +441,40 @@ class ChatViewModel(
                                 StreamEvent.Completed -> {
                                     if (failure == null) terminal = "SUCCESS"
                                 }
+
+                                // Proof of life, not content: the idle deadline in ProviderHttp
+                                // advances on it, and there is nothing to show.
+                                StreamEvent.Working -> {
+                                    Unit
+                                }
+
+                                StreamEvent.Truncated -> {
+                                    // The answer is valid but was CUT at the provider's output cap. It
+                                    // stays SUCCESS so phases and the transcript are unchanged, and the
+                                    // note rides along as the status line: the reader renders `error`
+                                    // under the answer, so the one shortening this app cannot prevent is
+                                    // no longer silent.
+                                    if (failure == null) {
+                                        terminal = "SUCCESS"
+                                        failure = TRUNCATION_NOTE
+                                    }
+                                }
                             }
                         }
-                    if (terminal != "SUCCESS" && failure == null) failure = ProviderError.PROTOCOL.userMessage
+                    // Exactly the same promise applies to a stream that ended without its terminal
+                    // event: "partial answer kept" is only true if text actually arrived.
+                    if (terminal != "SUCCESS" && failure == null) {
+                        failure = ProviderError.PROTOCOL.userMessage(hasText = text.isNotEmpty())
+                    }
                 } catch (cancelled: CancellationException) {
                     terminal = "STOPPED"
                     throw cancelled
+                } catch (refused: TurnRefused) {
+                    failure = refused.message
                 } catch (_: CredentialUnavailable) {
                     failure = ProviderError.CREDENTIAL_REENTRY.userMessage
                 } catch (error: SafeProviderException) {
-                    failure = error.error.userMessage
+                    failure = error.error.userMessage(hasText = text.isNotEmpty())
                 } catch (_: Exception) {
                     failure = "Cannot send. Check provider setup or local storage."
                 } finally {
@@ -371,6 +528,56 @@ class ChatViewModel(
                                 "Answer not saved. Keep app open; Copy unsaved answer or Retry saving. New chat/send blocked until saved."
                             mutableState.value = mutableState.value.copy(rawMarkdown = savedText, unsaved = true)
                         }
+                        // A provider failure with no partial text left the USER row already written
+                        // with nothing after it, so the next send read as a continuation of a
+                        // question whose answer never happened. Record the failure on the
+                        // conversation so history agrees with what the reader shows. Sends only:
+                        // edit and retry already truncate their own turn and show it transiently.
+                        //
+                        // `admit()` never ran, so NOTHING exists for this turn yet. Record it — for a Stop as well as a
+                        // failure. Without this: a new chat was left as an empty conversation with the
+                        // typed question gone while the reader still said "Stopped · partial answer
+                        // kept"; an edit had already replaced the message and truncated everything after
+                        // it, so the turn vanished and the next send appended USER,USER.
+                        //
+                        // `!nothingSent`: a turn rejected before anything was sent or written leaves no
+                        // trace in the conversation either — recording it wrote a phantom "Cannot send…"
+                        // answer into a conversation the user never touched.
+                        //
+                        // `wrote` instead of "sends only": an edit or a retry that failed BEFORE writing
+                        // changed nothing, so recording a row appended an empty "Stopped before…" answer
+                        // under the finished answer that is still there. Once it HAS written (the edit
+                        // replaced the text, the retry truncated the tail) the conversation no longer
+                        // matches what the reader shows: a Stop there used to delete the previous answer
+                        // and leave nothing — no row, no status line, no Retry.
+                        //
+                        // The id falls back to the one minted for this turn: a cancel between
+                        // `insertConversation` and the state write left the prompt with nowhere to go.
+                        val recordingId = mutableState.value.conversationId ?: newConversationId
+                        if (assistantId == null && !nothingSent && recordingId != null &&
+                            ((editId == null && !retry) || wrote)
+                        ) {
+                            runCatching {
+                                dao.ensureConversation(
+                                    Conversation(
+                                        recordingId,
+                                        prompt.orEmpty().take(60).ifBlank { "New chat" },
+                                        System.currentTimeMillis(),
+                                    ),
+                                )
+                                dao.recordFailure(
+                                    recordingId,
+                                    // The plural prompt row belongs to a SEND. An edit already replaced
+                                    // its own user row, and a retry's user row is still there.
+                                    if (editId == null && !retry) prompt?.trim() else null,
+                                    usedProfile,
+                                    failure,
+                                    // A user cancel is STOPPED, not ERROR: the reader renders the
+                                    // same line it already shows for a stopped answer.
+                                    status = if (failure == null) "STOPPED" else "ERROR",
+                                )
+                            }
+                        }
                         liveAnswer.value =
                             liveAnswer.value?.copy(rawContent = text.toString(), status = terminal, error = failure)
                         mutableState.value =
@@ -382,14 +589,17 @@ class ChatViewModel(
                     }
                 }
             }
+        // The turn was accepted: the job owns the text from here.
+        return true
     }
 
+    /** True when the edit was accepted and the turn started. */
     fun edit(
         id: Long,
         text: String,
-    ) {
-        if (text.isBlank() || mutableState.value.conversationId == null) return
-        generate(null, id, text)
+    ): Boolean {
+        if (text.isBlank() || mutableState.value.conversationId == null) return false
+        return generate(null, id, text)
     }
 
     fun retry() {
@@ -407,6 +617,11 @@ class ChatViewModel(
                     save()
                     pendingSave = null
                     mutableState.value = mutableState.value.copy(rawMarkdown = null, unsaved = false, error = null)
+                } catch (cancelled: CancellationException) {
+                    // Stop during a save retry must not be reported as a storage failure: the write is
+                    // a @Transaction that still commits, and swallowing cancellation left pendingSave
+                    // set with a "Still cannot save" message over text that was in fact saved.
+                    throw cancelled
                 } catch (_: Exception) {
                     mutableState.value =
                         mutableState.value.copy(error = "Still cannot save. Keep app open and copy unsaved answer.")
@@ -427,7 +642,7 @@ class ChatViewModel(
         }
         history?.cancel()
         messages.value = emptyList()
-        mutableState.value = ChatState(prompt = prompt.trim(), rawMarkdown = "", generating = true)
+        mutableState.value = ChatState(rawMarkdown = "", generating = true)
         generation =
             viewModelScope.launch {
                 try {

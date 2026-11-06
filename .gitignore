@@ -25,14 +25,12 @@
 !.github/workflows/*.yml
 !.github/workflows/*.yaml
 # A release workflow is often spelled .yaml; the blanket * would drop it silently.
-!gradle/libs.versions.toml
 # Repo infrastructure. The allowlist's blanket `*` silently swallowed these, which made
 # "add Dependabot / SECURITY.md / CODEOWNERS" impossible without knowing to edit this file.
 # Verified with: git check-ignore -v --no-index .github/dependabot.yml
 !.github/dependabot.yml
 !.github/ISSUE_TEMPLATE/**
 !.github/PULL_REQUEST_TEMPLATE.md
-!.github/CODEOWNERS
 !SECURITY.md
 !CODEOWNERS
 
@@ -50,7 +48,6 @@
 !AGENTS.md
 !THIRD_PARTY_NOTICES.md
 !CONTRIBUTING.md
-!CHANGELOG.md
 !docs/spec/**
 !docs/adr/**
 !docs/release/PRIVACY.md

@@ -54,7 +54,8 @@ class ProviderSettings(
         store.data
             .map { prefs ->
                 try {
-                    ProviderSettingsState(decode(prefs[profilesKey] ?: "[]"), prefs[selectedKey])
+                    val profiles = decode(prefs[profilesKey] ?: "[]")
+                    ProviderSettingsState(profiles, readableSelection(profiles, prefs[selectedKey]))
                 } catch (
                     _: Exception,
                 ) {
@@ -75,7 +76,11 @@ class ProviderSettings(
         mutex.withLock {
             withContext(Dispatchers.IO) {
                 val current = state.first()
-                if (current.error == null) secrets.cleanup(current.profiles.map { it.credentialRef }.toSet())
+                // Same rule as save(): refs of entries this build cannot parse are still referenced,
+                // so recover() must not delete their ciphertext either.
+                if (current.error == null) {
+                    secrets.cleanup(referencedCredentialRefs(store.data.first()[profilesKey] ?: "[]"))
+                }
             }
         }
 
@@ -131,8 +136,20 @@ class ProviderSettings(
                         val profiles =
                             decode(prefs[profilesKey] ?: "[]").filterNot { it.id == profile.id } +
                                 profile.copy(credentialRef = ref)
-                        prefs[profilesKey] = encode(profiles)
-                        prefs[selectedKey] = profile.id
+                        // Preserve entries this build cannot decode instead of erasing them: an erased
+                        // entry loses its credential reference, and cleanup would then delete its key.
+                        prefs[profilesKey] = encodePreserving(profiles, prefs[profilesKey] ?: "[]")
+                        // Selecting is a separate, explicit action (select()). Replacing a key on an
+                        // existing profile must not retarget the next send: editing provider B while
+                        // A is active used to silently make B the active provider and model, which is
+                        // exactly the "never silently change a model" rule.
+                        //
+                        // "Brand-new profile" is NOT the same as "nothing is selected". A new profile
+                        // mints a fresh id, so `previous == null` was true every time one was ADDED, and
+                        // adding B while A worked silently moved the next send to B with only "Saved
+                        // securely." as feedback. The selection is defaulted only when no selection
+                        // exists at all; otherwise the user picks with select().
+                        if (previous == null && !prefs.contains(selectedKey)) prefs[selectedKey] = profile.id
                     }
                     ; promoted = true
                 }
@@ -141,9 +158,12 @@ class ProviderSettings(
                     try {
                         if (promoted && newSecret != null) CredentialPromotionProbe.reached("REFERENCE_PROMOTED")
                         if (!promoted && newSecret != null) secrets.delete(ref)
-                        secrets.cleanup(
-                            decode(store.data.first()[profilesKey] ?: "[]").map { it.credentialRef }.toSet(),
-                        )
+                        // Referenced refs, INCLUDING entries this build cannot parse: cleanup deletes
+                        // anything absent from this set, so a dropped entry must still count.
+                        secrets
+                            .cleanup(
+                                referencedCredentialRefs(store.data.first()[profilesKey] ?: "[]"),
+                            )
                         if (newSecret != null && promoted) CredentialPromotionProbe.reached("OLD_PAYLOAD_CLEANED")
                     } catch (error: Exception) {
                         if (!promoted) throw error
@@ -170,45 +190,182 @@ class ProviderSettings(
                 check(current.error == null) { "Provider settings unavailable" }
                 val previous = current.profiles.find { it.id == id } ?: return@withContext
                 store.edit { prefs ->
-                    prefs[profilesKey] = encode(decode(prefs[profilesKey] ?: "[]").filterNot { it.id == id })
-                    if (prefs[selectedKey] == id) prefs.remove(selectedKey)
+                    // Encode from the document as it is NOW, and carry forward entries this build
+                    // cannot decode — otherwise removing one provider silently erases the others'
+                    // unreadable entries and takes their keys with them.
+                    val kept = decode(prefs[profilesKey] ?: "[]").filterNot { it.id == id }
+                    val raw = prefs[profilesKey] ?: "[]"
+                    prefs[profilesKey] = encodePreserving(kept, raw)
+                    // Deleting the ACTIVE provider used to just drop the selection, leaving the app
+                    // with no provider and nothing on screen saying so until the next send failed.
+                    // Fall back to the first survivor so chatting keeps working.
+                    //
+                    // `storedIds` matters: a selection can name a profile this build cannot DECODE
+                    // (a newer provider type, a missing field). Comparing against the decoded list
+                    // alone treated that as "gone" and overwrote the stored choice with
+                    // `remaining.first()`, so the user's real selection was destroyed by deleting an
+                    // unrelated provider — the opposite of what readableSelection promises.
+                    val selection = nextSelection(kept, prefs[selectedKey], id, storedIds(raw))
+                    if (selection != null) prefs[selectedKey] = selection else prefs.remove(selectedKey)
                 }
-                secrets.cleanup(decode(store.data.first()[profilesKey] ?: "[]").map { it.credentialRef }.toSet())
+                // Same rule as save() and recover(): cleanup deletes any ciphertext whose ref is absent, so
+                // the set must include entries this build cannot parse. Using the decoded refs here
+                // meant deleting one provider could also destroy the stored key of an entry that was
+                // merely unreadable.
+                secrets.cleanup(referencedCredentialRefs(store.data.first()[profilesKey] ?: "[]"))
             }
         }
 
-    private fun encode(profiles: List<ProviderProfile>) =
-        JsonArray(
-            profiles.map { p ->
-                buildJsonObject {
-                    put("id", p.id)
-                    put("type", p.type.name)
-                    put("name", p.displayName)
-                    put("base", p.baseUrl)
-                    put("model", p.selectedModelId)
-                    put("credentialRef", p.credentialRef)
-                }
-            },
-        ).toString()
+    internal fun encodeOne(p: ProviderProfile) =
+        buildJsonObject {
+            put("id", p.id)
+            put("type", p.type.name)
+            put("name", p.displayName)
+            put("base", p.baseUrl)
+            put("model", p.selectedModelId)
+            put("credentialRef", p.credentialRef)
+        }
 
+    private fun encode(profiles: List<ProviderProfile>) = JsonArray(profiles.map { encodeOne(it) }).toString()
+
+    /**
+     * Serialise [profiles], carrying forward any RAW element this build cannot decode.
+     *
+     * The reason this exists: `encode(decode(x))` silently deletes every entry decode rejected. That is
+     * how the cleanup fix was defeated — the unparsable entry was erased from the document FIRST, so by
+     * the time `referencedCredentialRefs` looked, its ref was gone and `SecretStore.cleanup` deleted
+     * its ciphertext (no plaintext fallback, so permanently). Keeping the raw element keeps both the
+     * profile for a future build and the credential reference alive.
+     *
+     * An element is preserved only if it is genuinely undecodable; anything decodable is replaced by
+     * the canonical encoding above.
+     */
+    internal fun encodePreserving(
+        profiles: List<ProviderProfile>,
+        previous: String,
+    ): String {
+        val known = profiles.map { it.credentialRef }.toSet()
+        val preserved =
+            runCatching { Json.parseToJsonElement(previous).jsonArray }
+                .getOrDefault(JsonArray(emptyList()))
+                .filter { element ->
+                    val ref =
+                        runCatching {
+                            element.jsonObject
+                                .getValue("credentialRef")
+                                .jsonPrimitive.content
+                        }.getOrNull()
+                    ref != null && ref !in known && Regex("[a-f0-9-]{36}").matches(ref) &&
+                        runCatching { decodeOne(element) }.isFailure
+                }
+        return JsonArray(profiles.map { encodeOne(it) } + preserved).toString()
+    }
+
+    /**
+     * Per-element decoding.
+     *
+     * Previously any single bad element (an unknown `type` after an enum change, one missing field,
+     * one malformed ref) threw for the whole array. The state then reported "settings unreadable"
+     * with an EMPTY profile list, and every writer re-decodes that same poisoned value before it can
+     * write, so nothing could repair it: the app was permanently unconfigurable while the ciphertext
+     * for every profile still sat on disk with no reference to it. Dropping only the broken entries
+     * keeps the rest usable and keeps their credential references alive.
+     *
+     * A parse failure of the whole document is still fatal — that is real corruption of the envelope,
+     * not of one entry.
+     */
     private fun decode(source: String): List<ProviderProfile> =
-        Json.parseToJsonElement(source).jsonArray.map {
-            val p = it.jsonObject
-
-            fun field(name: String): String {
-                val value = p.getValue(name).jsonPrimitive
-                require(value.isString) { "Invalid profile field" }
-                return value.content
-            }
-            val ref = field("credentialRef")
-            require(Regex("[a-f0-9-]{36}").matches(ref)) { "Invalid credential reference" }
-            ProviderProfile(
-                field("id"),
-                ProviderType.valueOf(field("type")),
-                field("name"),
-                field("base"),
-                field("model"),
-                ref,
-            )
+        Json.parseToJsonElement(source).jsonArray.mapNotNull { element ->
+            runCatching { decodeOne(element) }.getOrNull()
         }
+
+    private fun decodeOne(element: kotlinx.serialization.json.JsonElement): ProviderProfile {
+        val p = element.jsonObject
+
+        fun field(name: String): String {
+            val value = p.getValue(name).jsonPrimitive
+            require(value.isString) { "Invalid profile field" }
+            return value.content
+        }
+        val ref = field("credentialRef")
+        require(Regex("[a-f0-9-]{36}").matches(ref)) { "Invalid credential reference" }
+        return ProviderProfile(
+            field("id"),
+            ProviderType.valueOf(field("type")),
+            field("name"),
+            field("base"),
+            field("model"),
+            ref,
+        )
+    }
 }
+
+/**
+ * Every credential reference the stored document still mentions, including entries decode() dropped.
+ *
+ * This is what `SecretStore.cleanup` must be given. Cleanup DELETES ciphertext whose ref is absent, so
+ * handing it only the successfully decoded refs turned one malformed entry into permanent key loss on
+ * the next save of any provider — and there is no plaintext fallback. A ref that is mentioned in the
+ * document is still referenced, whether or not this build can parse its profile.
+ */
+internal fun referencedCredentialRefs(source: String): Set<String> {
+    val elements = Json.parseToJsonElement(source).jsonArray
+    val refs = mutableSetOf<String>()
+    for (element in elements) {
+        // Best-effort on the ref alone: it is the only field cleanup cares about, and it stays valid
+        // even when the rest of the entry cannot be decoded.
+        runCatching {
+            element.jsonObject
+                .getValue("credentialRef")
+                .jsonPrimitive.content
+        }.getOrNull()?.takeIf { Regex("[a-f0-9-]{36}").matches(it) }?.let { refs += it }
+    }
+    return refs
+}
+
+/**
+ * Selection after deleting [deletedId] from [remaining].
+ *
+ * Keeps the current selection when it survived; otherwise falls back to the first survivor. Returning
+ * null only when nothing is left is correct there — the provider screen then shows an empty list and
+ * the chat reports "Add or select provider from menu." instead of pointing at a deleted profile.
+ */
+internal fun nextSelection(
+    remaining: List<ProviderProfile>,
+    current: String?,
+    deletedId: String,
+    storedIds: Set<String> = emptySet(),
+): String? {
+    if (current != deletedId && (remaining.any { it.id == current } || current in storedIds)) return current
+    return remaining.firstOrNull()?.id
+}
+
+/**
+ * Every `id` in the stored document, including entries this build cannot decode. Used so a
+ * selection that names an unreadable profile is not mistaken for a deleted one.
+ */
+internal fun storedIds(raw: String): Set<String> =
+    runCatching { Json.parseToJsonElement(raw).jsonArray }
+        .getOrDefault(JsonArray(emptyList()))
+        .mapNotNull { element ->
+            runCatching {
+                element.jsonObject
+                    .getValue("id")
+                    .jsonPrimitive.content
+            }.getOrNull()
+        }.toSet()
+
+/**
+ * The selection a build can actually USE, given what it could read.
+ *
+ * decode() drops entries it cannot parse (an unknown `type` after a downgrade, one missing field), but
+ * the stored `selected_profile` key was passed through untouched. The result was
+ * `{profiles: 3, selectedId: "X", selected: null, error: null}`: the reader said "Add provider" while
+ * three were listed, every send failed with "Add or select provider from menu.", and nothing ever
+ * repaired it. Falling back to the first readable profile keeps the app usable; the STORED key is left
+ * alone, so a build that can read the entry gets the user's real choice back.
+ */
+internal fun readableSelection(
+    profiles: List<ProviderProfile>,
+    selectedId: String?,
+): String? = selectedId?.takeIf { id -> profiles.any { it.id == id } } ?: profiles.firstOrNull()?.id

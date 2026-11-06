@@ -9,7 +9,6 @@ import kotlinx.serialization.json.jsonPrimitive
 import java.io.Closeable
 import java.io.InputStream
 import java.net.InetAddress
-import java.net.ServerSocket
 import java.net.Socket
 import java.security.KeyFactory
 import java.security.KeyPairGenerator
@@ -28,13 +27,18 @@ import javax.crypto.spec.SecretKeySpec
 /**
  * Credential arrival over the LAN, phone browser -> watch. No companion app, no backend, no cloud.
  *
- * The watch serves one small page; the browser encrypts the form with an ephemeral ECDH P-256 secret
- * and AES-GCM. The watch never sends a key out, only accepts one in, and the whole listener lives only
- * while the setup screen is resumed. Cleartext HTTP is acceptable here because the payload is
- * end-to-end encrypted and `usesCleartextTraffic="false"` governs outbound requests only, not an
- * inbound `ServerSocket`.
+ * The watch serves one small page over TLS; the browser encrypts the form with an ephemeral ECDH
+ * P-256 secret and AES-GCM. The watch never sends a key out, only accepts one in, and the whole
+ * listener lives only while the setup screen is resumed.
  *
- * Deliberately no dependency: `ServerSocket` + a ~40 line request reader. No NanoHTTPD, no Ktor.
+ * TLS is not belt-and-braces here, it is load-bearing: browsers expose WebCrypto only in a secure
+ * context, and plain HTTP from a LAN IP is not one (measured: `isSecureContext === false`,
+ * `crypto.subtle === undefined`), so the handshake below could never run. The certificate is
+ * self-signed and minted per session — see [SelfSignedCert]; the phone shows the usual warning, and
+ * the capability token in the URL, not the certificate, is what authorises a payload.
+ *
+ * Deliberately no dependency: `ServerSocket` + a ~40 line request reader. No NanoHTTPD, no Ktor, and
+ * no BouncyCastle for the certificate.
  */
 internal data class PairingPayload(
     val type: ProviderType,
@@ -60,7 +64,21 @@ internal class PairingServer(
 
     // Bound to the address we advertise, not the wildcard: the listener must not be reachable on a
     // tethered or secondary interface the user never saw.
-    private val socket = ServerSocket(0, 1, InetAddress.getByName(host))
+    private val hostAddress: InetAddress = InetAddress.getByName(host)
+
+    // A key pair of its own for TLS. Reusing the ECDH session key would mix a signature key with a
+    // key-agreement key, and this one never touches the payload path.
+    private val tlsKey =
+        KeyPairGenerator
+            .getInstance("EC")
+            .apply { initialize(ECGenParameterSpec("secp256r1")) }
+            .generateKeyPair()
+
+    private val socket =
+        SelfSignedCert
+            .serverContext(tlsKey, SelfSignedCert.mint(tlsKey, host, hostAddress))
+            .serverSocketFactory
+            .createServerSocket(0, 1, hostAddress)
 
     @Volatile private var consumed = false
 
@@ -68,6 +86,7 @@ internal class PairingServer(
 
     @Volatile private var active: Socket? = null
     private var worker: Thread? = null
+    private var request: Thread? = null
 
     val port: Int get() = socket.localPort
 
@@ -75,8 +94,11 @@ internal class PairingServer(
      * Capability URL. The token is a path segment, not something the server hands out: whoever can
      * read the watch screen learns it, and nobody else does. It doubles as the AES-GCM associated
      * data, so a payload encrypted for one session cannot be replayed into another.
+     *
+     * https, not http: WebCrypto does not exist on a plain-HTTP LAN origin, so the page that encrypts
+     * the key could never run there.
      */
-    val url: String get() = "http://$host:$port/${b64(token)}/"
+    val url: String get() = "https://$host:$port/${b64(token)}/"
 
     fun start() {
         if (worker != null) return
@@ -95,7 +117,7 @@ internal class PairingServer(
                             }
                         active = client
                         try {
-                            client.use { handle(it) }
+                            serve(client)
                         } catch (_: java.io.IOException) {
                             // A single bad client must not kill the listener. Before this catch,
                             // an idle connection (port scan, browser preconnect, `nc -z`) hit the
@@ -125,9 +147,35 @@ internal class PairingServer(
         // Closing the listener alone leaves the worker blocked in read() on an accepted client, so
         // the socket would outlive the screen. Closing the active client unblocks it.
         runCatching { active?.close() }
-        // Join the worker so close() proves the listener is dead: without this, a held client can
-        // keep the thread blocked in readHead through its wall-clock deadline after the screen left.
-        runCatching { worker?.join(5000) }
+        // Join the worker so close() proves the listener is dead. Skip it when the worker is the
+        // caller: its own `finally` calls close(), and a self-join burned five seconds of a daemon
+        // thread every time the session ended by itself.
+        if (worker != Thread.currentThread()) runCatching { worker?.join(5000) }
+    }
+
+    /**
+     * Runs one request on its own short-lived thread and joins it with a hard bound.
+     *
+     * Over TLS the first `read()` is where JSSE performs the whole handshake, and the per-read
+     * deadline inside [readHead] cannot run until it returns: a client that dribbles a partial
+     * ClientHello with gaps shorter than `soTimeout` keeps that read alive, holding the single
+     * worker, so the phone's real request is never accepted (and the user sees a page that never
+     * loads, with nothing on the watch explaining it). `soTimeout` bounds one read, not a handshake;
+     * this join is the only bound that survives it, and it caps a trickled request body the same way.
+     */
+    private fun serve(client: Socket) {
+        val handler =
+            Thread({ client.use { runCatching { handle(it) } } }, "nirowear-pairing-request").apply {
+                isDaemon = true
+                start()
+            }
+        request = handler
+        runCatching { handler.join(REQUEST_MILLIS + HANDSHAKE_GRACE_MILLIS) }
+        if (handler.isAlive) {
+            runCatching { client.close() }
+            runCatching { handler.join(1_000) }
+        }
+        request = null
     }
 
     private fun handle(client: Socket) {
@@ -158,9 +206,20 @@ internal class PairingServer(
             }
         // The whole session lives under an unguessable prefix. A caller without the capability gets
         // 404 on every route, which is also the honest answer: there is nothing here for them.
+        //
+        // The prefix is compared in CONSTANT TIME. It used to be `path.startsWith(prefix)`, which
+        // returns at the first mismatching byte, so a peer on the same LAN could recover the 128-bit
+        // token by timing the 404s a byte at a time — the later MessageDigest.isEqual in pair() only
+        // protected the POST body after this shortcut had already leaked the prefix.
+        val segment = path.trimStart('/').substringBefore('/')
+        val presentedPrefix = runCatching { unb64(segment) }.getOrNull()
+        val authorised =
+            presentedPrefix != null &&
+                MessageDigest.isEqual(token, presentedPrefix) &&
+                path.length > segment.length + 1
         val prefix = "/${b64(token)}"
         when {
-            !path.startsWith(prefix) -> respond(client, 404, TEXT, "not found")
+            !authorised -> respond(client, 404, TEXT, "not found")
             method == "GET" && path == "$prefix/" -> respond(client, 200, HTML, PAIRING_PAGE)
             method == "GET" && path == "$prefix/handshake" -> respond(client, 200, JSON, handshake())
             method == "POST" && path == "$prefix/pair" -> pair(client, body)
@@ -180,7 +239,11 @@ internal class PairingServer(
         body: ByteArray,
     ) {
         // Expiry is checked before the token so a late request cannot burn the session's only use.
-        if (clock() > deadline) return respond(client, 410, JSON, """{"ok":false}""")
+        // `>=`, not `>`: `deadline` is the instant the session stops being valid, so a request
+        // arriving exactly at it is late. With the strict form a zero-TTL session (and any request
+        // landing in the same clock tick as a real deadline) was still accepted — the test that
+        // drives a ttl of 0 got a 200 instead of a 410 whenever the clock had not ticked yet.
+        if (clock() >= deadline) return respond(client, 410, JSON, """{"ok":false}""")
         if (consumed) return respond(client, 401, JSON, """{"ok":false}""")
         val root =
             runCatching { Json.parseToJsonElement(String(body, Charsets.UTF_8)).jsonObject }.getOrNull()
@@ -348,6 +411,9 @@ internal class PairingServer(
         const val MAX_HEAD = 8192
         const val GRACE_MILLIS = 5_000L
         const val REQUEST_MILLIS = 5_000L
+
+        /** Grace on top of [REQUEST_MILLIS] for the TLS handshake, which happens inside one read. */
+        const val HANDSHAKE_GRACE_MILLIS = 2_000L
         const val HTML = "text/html; charset=utf-8"
         const val JSON = "application/json"
         const val TEXT = "text/plain; charset=utf-8"
@@ -398,7 +464,7 @@ background:#a8c7fa;color:#062e6f;font-weight:600}
 </style></head><body>
 <h1>NiroWear</h1>
 <p>Send this provider to your watch. It is encrypted before it leaves this page.</p>
-<p>Same Wi-Fi only. Encrypted with ECDH P-256 + AES-GCM, but the handshake is unauthenticated — confirm the URL on the watch matches. Prefer manual entry on untrusted networks.</p>
+<p>Same Wi-Fi only. The watch serves its own certificate, so your browser warns that it is not trusted — accept it to load this page. Nothing is sent until you press Send. Encrypted with ECDH P-256 + AES-GCM, but the handshake is unauthenticated — confirm the URL on the watch matches. Prefer manual entry on untrusted networks.</p>
 <label>Provider</label>
 <select id="type">
 <option value="OPENAI">OpenAI</option>
@@ -453,15 +519,15 @@ document.getElementById('go').onclick=async function(){
  }catch(e){out.textContent='Could not send. Restart pairing on the watch.';}
 };
 init().catch(function(e){
-  // WebCrypto (crypto.subtle) only exists in a secure context: https, file, localhost, 127.0.0.1.
-  // This page is served over plain HTTP from a LAN address, so window.isSecureContext is false and
-  // crypto.subtle is undefined — verified in a real browser (origin http://192.168.8.2, isSecureContext
-  // false, typeof crypto.subtle undefined). The old copy said "Handshake failed. Restart pairing",
-  // which sent the user round a loop that could never succeed.
+  // WebCrypto (crypto.subtle) only exists in a secure context. This page is served over https with a
+  // certificate the watch minted for this session, so it IS a secure context once the browser
+  // accepted the warning; a browser that refused the certificate never runs this script at all.
+  // Reaching this branch therefore means the handshake itself failed, and saying "plain HTTP" here
+  // would send the user after a cause that no longer exists.
   var o=document.getElementById('out');
   if(!window.isSecureContext || typeof crypto==='undefined' || !crypto.subtle){
-    o.textContent='This browser will not run crypto on a plain-HTTP LAN address, so the key cannot '+
-      'be encrypted here. Enter the key on the watch instead (Cancel pairing below).';
+    o.textContent='This browser will not run crypto on this page, so the key cannot be '+
+      'encrypted here. Enter the key on the watch instead (Cancel pairing below).';
   } else {
     o.textContent='Handshake failed. Restart pairing on the watch.';
   }

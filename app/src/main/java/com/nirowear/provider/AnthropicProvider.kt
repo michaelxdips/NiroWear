@@ -25,26 +25,77 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 
+/** Pinned per the reference implementation; the API version header is exact, never "latest". */
+private const val ANTHROPIC_VERSION = "2026-10-21"
+
+/**
+ * Deadline for the per-turn model metadata GET, which sits before the messages POST.
+ *
+ * Short enough that a hanging metadata endpoint cannot delay the first token for long, long enough that
+ * a COLD connection succeeds: Call.timeout() covers DNS + TCP + TLS + write + read, and on a watch with
+ * the radio asleep (or proxied over Bluetooth) that handshake alone can take several seconds. A 4 s
+ * deadline aborted those, silently falling back to 8192 — the very outcome the metadata fetch exists to
+ * avoid. Still far below the 90 s stream read timeout.
+ *
+ * ponytail: when the fetch fails we still send 8192, which a model with a smaller output cap answers
+ * with a 400. Fix by retrying once with a conservative cap when the POST 400s on an assumed value —
+ * not by guessing a limit from the model name.
+ */
+private const val METADATA_TIMEOUT_MS = 15_000L
+
+/**
+ * Documented StopReason values. All of them end the message; only the presence of `message_stop`
+ * proves the stream completed, so none of these may be treated as a failure.
+ */
+private val KNOWN_STOP_REASONS =
+    setOf(
+        "end_turn",
+        "max_tokens",
+        "stop_sequence",
+        "tool_use",
+        "pause_turn",
+        "refusal",
+        "model_context_window_exceeded",
+    )
+
+/**
+ * Stop reasons that END the answer EARLY, whatever caused them.
+ *
+ * `max_tokens` and `model_context_window_exceeded` are length caps. `pause_turn` means the server
+ * paused a long turn and expects the client to resend to continue — this client never resends, so the
+ * answer is genuinely unfinished. `tool_use` means the model stopped to call a tool that this product
+ * neither renders nor executes. All four were counted as Completed, so a cut answer was stored
+ * SUCCESS with no status line: the exact undisclosed-cut class [StreamEvent.Truncated] exists to
+ * remove, and Gemini's CONTINUATION was already reported this way.
+ */
+private val CUT_STOP_REASONS =
+    setOf(
+        "max_tokens",
+        "model_context_window_exceeded",
+        "pause_turn",
+        "tool_use",
+    )
+
 class AnthropicProvider(
     client: OkHttpClient = providerHttpClient(),
     private val allowLocalHttp: Boolean = false,
 ) : LlmProvider {
     private val http = ProviderHttp(client)
 
+    /**
+     * Model metadata answers, per endpoint and model, for the process lifetime.
+     *
+     * Both a cache hit and a miss ended in the same `max_tokens` before this: the GET ran on EVERY
+     * turn, so a watch paid a radio wakeup per send and a hanging metadata host delayed the first token
+     * by the whole deadline. Only a positive answer is stored, so a transport failure is retried on the
+     * next turn instead of pinning the fallback.
+     */
+    private val maxTokensByModel = java.util.concurrent.ConcurrentHashMap<String, Int>()
+
     override suspend fun validate(
         profile: ProviderProfile,
         secret: SecretValue,
-    ): ProviderError? {
-        var error: ProviderError? = ProviderError.PROTOCOL
-        streamChat(ChatRequest(listOf(ChatMessage(ChatRole.USER, "Reply OK."))), profile, secret).collect {
-            when (it) {
-                StreamEvent.Completed -> error = null
-                is StreamEvent.Failure -> error = it.error
-                else -> Unit
-            }
-        }
-        return error
-    }
+    ): ProviderError? = validateWithProbe(profile, secret)
 
     override suspend fun listModels(
         profile: ProviderProfile,
@@ -89,23 +140,15 @@ class AnthropicProvider(
                 )
             } while (cursor != null)
             if (ids.isEmpty()) {
-                ModelDiscoveryResult.Unavailable(
-                    ProviderError.PROTOCOL,
-                )
+                ModelDiscoveryResult.Unavailable(ProviderError.PROTOCOL)
             } else {
                 ModelDiscoveryResult.Models(ids.sorted())
             }
-        } catch (
-            cancelled: CancellationException,
-        ) {
+        } catch (cancelled: CancellationException) {
             throw cancelled
-        } catch (
-            error: SafeProviderException,
-        ) {
+        } catch (error: SafeProviderException) {
             ModelDiscoveryResult.Unavailable(error.error)
-        } catch (
-            _: Exception,
-        ) {
+        } catch (_: Exception) {
             ModelDiscoveryResult.Unavailable(ProviderError.PROTOCOL)
         }
 
@@ -121,26 +164,45 @@ class AnthropicProvider(
                 // limit from a model name. Discovery and generation are separate, so a metadata failure
                 // falls back to the documented default instead of blocking the turn. A bad credential or
                 // unreachable host still fails on the messages call itself.
+                //
+                // Cached per endpoint+model for the process: this GET sits on the critical path of EVERY
+                // turn, so an uncached watch paid a radio wakeup per send before the first token.
+                val metadataKey = profile.baseUrl + "|" + profile.selectedModelId
                 val reportedMaxTokens =
-                    try {
-                        val modelUrl =
-                            Endpoints
-                                .compatible(profile.baseUrl, "models", allowLocalHttp)
-                                .newBuilder()
-                                .addPathSegment(profile.selectedModelId)
-                                .build()
-                        Json
-                            .parseToJsonElement(http.fetch(authenticated(modelUrl, secret).build()))
-                            .jsonObject["max_tokens"]
-                            ?.jsonPrimitive
-                            ?.intOrNull
-                    } catch (cancelled: CancellationException) {
-                        throw cancelled
-                    } catch (_: Exception) {
-                        null
-                    }
-                // ponytail: null or unusable metadata uses 8192; replace with provider limit metadata when available.
-                val maxTokens = reportedMaxTokens?.takeIf { it > 0 } ?: 8192
+                    maxTokensByModel[metadataKey]
+                        ?: (
+                            try {
+                                val modelUrl =
+                                    Endpoints
+                                        .compatible(profile.baseUrl, "models", allowLocalHttp)
+                                        .newBuilder()
+                                        .addPathSegment(profile.selectedModelId)
+                                        .build()
+                                Json
+                                    .parseToJsonElement(
+                                        http.fetch(authenticated(modelUrl, secret).build(), METADATA_TIMEOUT_MS),
+                                    ).jsonObject["max_tokens"]
+                                    ?.jsonPrimitive
+                                    ?.intOrNull
+                            } catch (cancelled: CancellationException) {
+                                throw cancelled
+                            } catch (_: Exception) {
+                                null
+                            }
+                        ).let { reported ->
+                            // Only a POSITIVE answer is cached: a transport failure must not pin the
+                            // fallback for the whole session.
+                            reported?.takeIf { it > 0 }?.also { maxTokensByModel[metadataKey] = it }
+                        }
+                // Fallback output budget when model metadata is unavailable.
+                //
+                // 4096, not 8192: metadata is the only honest source, and a value ABOVE a model's own
+                // cap is rejected with a 400, which fails the whole turn. 4096 is within the documented
+                // maximum for every Messages model, so the worst case with unknown metadata is a
+                // disclosed Truncated answer instead of no answer at all.
+                // ponytail: raise only from provider limit metadata; a one-shot retry with a smaller cap
+                // on a 400 would let this be optimistic again.
+                val maxTokens = reportedMaxTokens?.takeIf { it > 0 } ?: 4_096
                 val payload =
                     buildJsonObject {
                         put("model", profile.selectedModelId)
@@ -168,18 +230,18 @@ class AnthropicProvider(
                         .header("Accept", "text/event-stream")
                         .post(payload.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
                         .build()
-                emitAll(http.stream(wire, AnthropicStreamDecoder()::accept))
-            } catch (
-                cancelled: CancellationException,
-            ) {
+                emitAll(
+                    http.stream(
+                        wire,
+                        AnthropicStreamDecoder()::accept,
+                        decodeError = { _, body -> anthropicHttpError(body) },
+                    ),
+                )
+            } catch (cancelled: CancellationException) {
                 throw cancelled
-            } catch (
-                error: SafeProviderException,
-            ) {
+            } catch (error: SafeProviderException) {
                 emit(StreamEvent.Failure(error.error))
-            } catch (
-                _: Exception,
-            ) {
+            } catch (_: Exception) {
                 emit(StreamEvent.Failure(ProviderError.PROTOCOL))
             }
         }
@@ -190,8 +252,13 @@ class AnthropicProvider(
     ) = Request
         .Builder()
         .url(url)
-        .header("Authorization", "Bearer ${secret.forRequest()}")
-        .header("anthropic-version", "2023-06-01")
+        // Both headers authenticate an API key. The API overview documents
+        // "Authorization: Bearer <key>" as primary ("required unless x-api-key is set") and
+        // "x-api-key" as a legacy fallback that is still supported; the get-started cURL example for
+        // the API-key tab uses x-api-key, which is why this adapter sends it, while the official SDKs
+        // send Bearer. Neither is wrong — do not "correct" one to the other without reading both.
+        .header("x-api-key", secret.forRequest())
+        .header("anthropic-version", ANTHROPIC_VERSION)
 }
 
 internal class AnthropicStreamDecoder {
@@ -235,7 +302,9 @@ internal class AnthropicStreamDecoder {
                     // is still the only thing that proves success.
                     if (content.getValue("type").jsonPrimitive.content != "text") {
                         skipped.add(index)
-                        emptyList()
+                        // A thinking block that streams for minutes is the provider WORKING, not a
+                        // dead socket: it must keep the idle deadline alive without being rendered.
+                        listOf(StreamEvent.Working)
                     } else {
                         block = index
                         val text = requireNotNull(content["text"].stringOrNull())
@@ -253,7 +322,7 @@ internal class AnthropicStreamDecoder {
                     // Deltas for a skipped (non-text) block are expected; ignore them rather than
                     // failing the stream.
                     if (index in skipped) {
-                        emptyList()
+                        listOf(StreamEvent.Working)
                     } else {
                         require(started && block != null && index == block)
                         val delta = root.getValue("delta").jsonObject
@@ -285,39 +354,47 @@ internal class AnthropicStreamDecoder {
                         ?.jsonPrimitive
                         ?.contentOrNull
                         ?.let { reason = it }
-                    if (reason != null &&
-                        reason !in setOf("end_turn", "stop_sequence", "refusal")
-                    ) {
-                        listOf(StreamEvent.Failure(ProviderError.PROTOCOL))
-                    } else {
-                        emptyList()
-                    }
+                    // Every StopReason value is a documented terminal state, not a framing fault:
+                    // end_turn, max_tokens, stop_sequence, tool_use, pause_turn, refusal,
+                    // model_context_window_exceeded. Rejecting max_tokens (the common case once the
+                    // answer reaches the model's cap) relabelled a complete answer as
+                    // "Stream interrupted". Only a reason this build has never heard of is suspicious,
+                    // and message_stop still has the final word.
+                    emptyList()
                 }
 
                 "message_stop" -> {
-                    require(
-                        started && block == null && hasText && reason in setOf("end_turn", "stop_sequence", "refusal"),
-                    )
-                    listOf(StreamEvent.Completed)
+                    // `hasText` is deliberately NOT required: a refusal, or a reply made only of
+                    // thinking blocks, legitimately ends with no text. message_stop plus a stop_reason
+                    // is the protocol's own completion proof.
+                    //
+                    // A MISSING stop_reason is not a framing fault either (the SDK types it
+                    // `StopReason | null`): requiring it turned a fully delivered answer into
+                    // "Stream interrupted" with the whole text underneath. But text IS required when
+                    // the reason is absent — a stream that ends here having said nothing proves
+                    // nothing, and saving it as SUCCESS left a permanently blank answer.
+                    require(started && block == null && (reason == null || reason in KNOWN_STOP_REASONS))
+                    if (reason == null && !hasText) {
+                        listOf(StreamEvent.Failure(ProviderError.PROTOCOL))
+                    } else if (reason in CUT_STOP_REASONS) {
+                        listOf(StreamEvent.Truncated)
+                    } else {
+                        listOf(StreamEvent.Completed)
+                    }
                 }
 
                 "error" -> {
                     listOf(
                         StreamEvent.Failure(
-                            when (
-                                root
-                                    .getValue("error")
-                                    .jsonObject
-                                    .getValue("type")
-                                    .jsonPrimitive.content
-                            ) {
-                                "authentication_error" -> ProviderError.INVALID_CREDENTIAL
-                                "permission_error" -> ProviderError.PERMISSION_DENIED
-                                "not_found_error" -> ProviderError.MODEL_UNAVAILABLE
-                                "rate_limit_error" -> ProviderError.RATE_LIMITED
-                                "api_error", "overloaded_error" -> ProviderError.SERVER
-                                else -> ProviderError.HTTP
-                            },
+                            anthropicError(
+                                runCatching {
+                                    root
+                                        .getValue("error")
+                                        .jsonObject
+                                        .getValue("type")
+                                        .jsonPrimitive.content
+                                }.getOrNull(),
+                            ),
                         ),
                     )
                 }
@@ -330,4 +407,45 @@ internal class AnthropicStreamDecoder {
         } catch (_: Exception) {
             listOf(StreamEvent.Failure(ProviderError.PROTOCOL))
         }
+}
+
+/** One mapping for the error type, whether it arrives in the stream or in a non-2xx body. */
+private fun anthropicError(type: String?): ProviderError =
+    when (type) {
+        "authentication_error" -> ProviderError.INVALID_CREDENTIAL
+        "permission_error" -> ProviderError.PERMISSION_DENIED
+        "not_found_error" -> ProviderError.MODEL_UNAVAILABLE
+        "rate_limit_error" -> ProviderError.RATE_LIMITED
+        "api_error", "overloaded_error" -> ProviderError.SERVER
+        else -> ProviderError.HTTP
+    }
+
+/**
+ * The reason Anthropic gives in a non-2xx body, which the status alone cannot express.
+ *
+ * A 400 is `invalid_request_error` for a malformed request, a `max_tokens` above the model's cap (the
+ * case the 4096 fallback invites) or an exhausted credit balance — three different user actions behind
+ * one status. Only a type this build recognises is returned; null lets the status mapping stand.
+ */
+internal fun anthropicHttpError(body: String): ProviderError? {
+    val type =
+        runCatching {
+            Json
+                .parseToJsonElement(body)
+                .jsonObject["error"]
+                ?.jsonObject
+                ?.get("type")
+                .stringOrNull()
+        }.getOrNull()
+    return when (type) {
+        "authentication_error",
+        "permission_error",
+        "not_found_error",
+        "rate_limit_error",
+        "api_error",
+        "overloaded_error",
+        -> anthropicError(type)
+
+        else -> null
+    }
 }

@@ -28,9 +28,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
@@ -57,10 +59,12 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
@@ -77,13 +81,17 @@ import androidx.wear.compose.material3.Button
 import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.Text
 import com.nirowear.chat.ChatViewModel
-import com.nirowear.chat.MAX_RETAINED_CONVERSATIONS
 import com.nirowear.chat.ReaderAction
 import com.nirowear.chat.ReaderAnchor
 import com.nirowear.chat.coalesceDelayMs
 import com.nirowear.chat.evictStaleConversations
+import com.nirowear.chat.mergeParsed
 import com.nirowear.chat.needsParse
+import com.nirowear.data.Conversation
 import com.nirowear.data.ProviderSettingsState
+import com.nirowear.data.SearchHit
+import com.nirowear.data.likeTerms
+import com.nirowear.data.searchMessages
 import com.nirowear.renderer.ContentBlock
 import com.nirowear.renderer.DocumentBlock
 import com.nirowear.renderer.InlineContent
@@ -149,9 +157,26 @@ private fun ChatReader(
     val conversations by chat.conversations.collectAsStateWithLifecycle(initialValue = emptyList())
     var providerScreen by rememberSaveable { mutableStateOf(false) }
     var historyScreen by rememberSaveable { mutableStateOf(false) }
-    var editedId by rememberSaveable { mutableStateOf<Long?>(null) }
-    var editing by rememberSaveable { mutableStateOf(false) }
+    // NOT saveable, deliberately. After process death the ViewModel re-opens the NEWEST conversation,
+    // so a restored `editedId` points into a conversation that is no longer open: the edit targeted the
+    // wrong conversation, threw, and the composer had already cleared itself.
+    var editedId by remember { mutableStateOf<Long?>(null) }
+    var editing by remember { mutableStateOf(false) }
     var draft by rememberSaveable { mutableStateOf("") }
+    // The EDIT BODY lives in its own slot, not in `draft`.
+    //
+    // Sharing one slot meant an edit had to overwrite the user's typed prompt and then "restore" it on
+    // Back — a backup that had to be cleared in three places and could still outlive its edit, and that
+    // resurrected the message body as a draft after process death (which then sent a duplicate of the
+    // question instead of editing it). Separate slots make the two independent: abandoning an edit
+    // cannot touch the draft, and a restored draft is always a draft. `editText` is not saveable, like
+    // `editedId`, so the two always agree.
+    var editText by remember { mutableStateOf("") }
+    // The body an edit turn was started with, kept until the write is confirmed. `edit()` returns true
+    // when the JOB LAUNCHES, not when the turn succeeds, so an edit refused before it wrote (no
+    // profile, a credential that will not decrypt, a target that left the chat) closed the editor and
+    // left the typed text nowhere — the row still holds its old content. See the effect below.
+    var lastEditAttempt by remember { mutableStateOf<Pair<Long, String>?>(null) }
     var notice by rememberSaveable { mutableStateOf("") }
     var renderLab by rememberSaveable { mutableStateOf(initialSection != null) }
     var sectionMenu by rememberSaveable { mutableStateOf(false) }
@@ -162,8 +187,25 @@ private fun ChatReader(
         !chatState.generating && !following && !renderLab && !sectionMenu &&
             (chatState.rawMarkdown != null || storedMessages.isNotEmpty())
     val listState = rememberLazyListState()
+    // Confirm or recover the edit: once the turn stops, compare the row on disk with what was typed.
+    // Equal means the edit landed. Different with an error on screen means it never wrote, so give the
+    // user their text back instead of only telling them it failed.
+    LaunchedEffect(chatState.error, chatState.generating, storedMessages, lastEditAttempt) {
+        val attempt = lastEditAttempt ?: return@LaunchedEffect
+        if (chatState.generating) return@LaunchedEffect
+        val stored = storedMessages.firstOrNull { it.id == attempt.first }?.rawContent
+        if (stored == attempt.second) {
+            lastEditAttempt = null
+            return@LaunchedEffect
+        }
+        if (chatState.error != null && stored != null) {
+            editText = attempt.second
+            editedId = attempt.first
+            editing = true
+            lastEditAttempt = null
+        }
+    }
     val menuState = rememberLazyListState()
-    val historyState = rememberLazyListState()
     val labState = rememberLazyListState()
     // ponytail: saved-instance anchors, not durable force-stop bookmarks; add local persistence only if cold-launch restore is required.
     val anchors =
@@ -215,6 +257,18 @@ private fun ChatReader(
     // thousands of comparisons per frame while streaming.
     val messageById = remember(storedMessages) { storedMessages.associateBy { it.id } }
     val currentSource by rememberUpdatedState(chatState.conversationId to storedMessages)
+    // Resolved here: the presentation effect below is not a composable scope.
+    val stoppedBeforeStart =
+        androidx.compose.ui.res
+            .stringResource(R.string.reader_stopped_before_start)
+    val stoppedPartial =
+        androidx.compose.ui.res
+            .stringResource(R.string.reader_stopped_partial)
+    // The live status row hardcoded these two strings (English only) while the identical persisted
+    // status line already came from resources, so an Indonesian reader saw English mid-stream.
+    val streamingLabel =
+        androidx.compose.ui.res
+            .stringResource(R.string.reader_streaming)
     // Presentation includes status/error/provenance, not just Markdown. All fields invalidate it.
     LaunchedEffect(storedMessages, chatState.conversationId) {
         val id = chatState.conversationId
@@ -247,22 +301,39 @@ private fun ChatReader(
                 messages.filter { it.conversationId == id }.associateWith { message ->
                     previous[message] ?: run {
                         val label =
-                            if (message.role ==
-                                "USER"
-                            ) {
+                            if (message.role == "USER") {
                                 "You · hold to edit"
                             } else {
-                                "${message.providerLabel} · ${message.modelId}"
+                                // Provenance is optional: a turn that failed before a profile was
+                                // resolved has neither field, and the old interpolation printed the
+                                // literal "null · null" under it.
+                                listOfNotNull(message.providerLabel, message.modelId)
+                                    .joinToString(" · ")
+                                    .ifBlank { "Answer" }
                             }
                         listOf(message.id to ContentBlock.Heading(4, listOf(InlineContent(label)))) +
                             ResponseParser.parse(message.rawContent).map { message.id to it } +
                             if (message.status == "STOPPED" ||
                                 message.error != null
                             ) {
+                                // The status line must match the row's actual content. A Stop that lands before any
+                                // row exists (the credential read window) records a STOPPED row with no
+                                // text, and the generic "partial answer kept" claimed a partial answer
+                                // that did not exist — the same lie this fix set out to remove, just
+                                // persisted instead of transient.
                                 listOf(
                                     message.id to
                                         ContentBlock.Paragraph(
-                                            listOf(InlineContent(message.error ?: "Stopped · partial answer kept")),
+                                            listOf(
+                                                InlineContent(
+                                                    message.error
+                                                        ?: if (message.rawContent.isBlank()) {
+                                                            stoppedBeforeStart
+                                                        } else {
+                                                            stoppedPartial
+                                                        },
+                                                ),
+                                            ),
                                         ),
                                 )
                             } else {
@@ -274,8 +345,11 @@ private fun ChatReader(
         currentCoroutineContext().ensureActive()
         if (currentSource != (id to messages)) return@LaunchedEffect
         lastParseAt = System.currentTimeMillis()
-        if (id != null) recentConversations = (recentConversations - id + id).takeLast(MAX_RETAINED_CONVERSATIONS)
-        parsedRows = evictStaleConversations(rows, recentConversations + listOfNotNull(id))
+        // Merge, then bound: storing `rows` alone (the open conversation's messages) made the bound
+        // and the recency list inert, so History A -> B -> A re-parsed all of A on a watch.
+        val merged = mergeParsed(parsedRows, rows, recentConversations, id)
+        recentConversations = merged.second
+        parsedRows = merged.first
         // Same bound as the parse memo above: one entry per conversation ever opened
         // grows without limit otherwise.
         (anchors.keys - (recentConversations + listOfNotNull(id)).toSet()).forEach { anchors.remove(it) }
@@ -348,8 +422,11 @@ private fun ChatReader(
     val dragging by listState.interactionSource.collectIsDraggedAsState()
     var userScrolled by remember { mutableStateOf(false) }
     LaunchedEffect(dragging) {
-        if (dragging && !sectionMenu && !historyScreen && !providerScreen &&
-            !renderLab
+        // Detach only when the drag can actually move the list backwards, the same guard the crown
+        // uses. A drag on a conversation that fits on screen scrolled nothing, yet it hid `following`
+        // and raised the "Jump to latest" arrow over an unmoved reader.
+        if (dragging && !sectionMenu && !historyScreen && !providerScreen && !renderLab &&
+            listState.canScrollBackward
         ) {
             following = false
             followNewConversation = false
@@ -359,23 +436,14 @@ private fun ChatReader(
     LaunchedEffect(listState.isScrollInProgress) {
         if (!listState.isScrollInProgress && !dragging && userScrolled) {
             userScrolled = false
-            val info = listState.layoutInfo
-            val lastMessage = parsedRows.keys.lastOrNull()
-            val lastContentKey =
-                if (lastMessage?.status == "STOPPED" || lastMessage?.error != null) {
-                    historyKeys.dropLast(1).lastOrNull()
-                } else {
-                    historyKeys.lastOrNull()
-                }
-            val lastContent = info.visibleItemsInfo.find { it.key == lastContentKey }
-            following = chatState.generating && (
-                if (lastContentKey != null) {
-                    lastContent != null &&
-                        lastContent.offset + lastContent.size <= info.viewportEndOffset + 48
-                } else {
-                    !listState.canScrollForward
-                }
-            )
+            // "At the bottom" means the list cannot scroll forward any more. The previous test was
+            // "the last content block's bottom is inside the viewport", which stays TRUE when the
+            // reader scrolls UP one notch during streaming — the block merely moves up and remains
+            // visible — so following flipped straight back to true and the next delta snapped the
+            // reader to the newest token. One crown notch could never detach, which contradicts the
+            // rule that scrolling up must not pull the reader back down. canScrollBackward is not the
+            // test either: with a long answer it is still true at the bottom.
+            following = !listState.canScrollForward
             saveReaderPosition()
         }
     }
@@ -387,90 +455,81 @@ private fun ChatReader(
                     ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
                     ?.firstOrNull()
                     ?.takeIf { it.isNotBlank() }
-                    ?.let {
-                        draft = it
+                    ?.let { spoken ->
+                        // Voice ADDS to the draft. The draft deliberately survives backing out of the
+                        // editor, so replacing it here destroyed a typed prompt with no undo.
+                        draft = if (draft.isBlank()) spoken else draft.trimEnd() + " " + spoken
+                        // Voice is a fresh compose, never a resumed edit.
+                        editText = ""
                         editedId = null
                         editing = true
                     }
             }
         }
-    BackHandler(editing) { editing = false }
+    BackHandler(editing) {
+        editing = false
+        // Backing out abandons the edit body and NOTHING else: the user's unsent draft lives in its own
+        // slot, so it is neither restored nor destroyed here. A plain compose keeps what was typed.
+        editText = ""
+        editedId = null
+    }
     BackHandler(providerScreen) { providerScreen = false }
     BackHandler(historyScreen) { historyScreen = false }
     BackHandler(sectionMenu && !historyScreen && !providerScreen && !editing) { sectionMenu = false }
-    BackHandler(renderLab && !editing && !providerScreen && !historyScreen) {
+    // `!sectionMenu` matters: BackHandlers are LIFO and this one is registered after the menu's, so
+    // without the guard one Back press closed the menu AND discarded the RenderLab fixture.
+    BackHandler(renderLab && !editing && !providerScreen && !historyScreen && !sectionMenu) {
+        // No `sectionMenu = false` here: the guard already requires the menu to be closed, so that
+        // assignment could never change anything.
         renderLab = false
-        sectionMenu = false
     }
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         if (providerScreen) {
             ProviderScreen { providerScreen = false }
         } else if (historyScreen) {
-            LazyColumn(
-                Modifier.fillMaxSize(),
-                state = historyState,
-                contentPadding = PaddingValues(horizontal = 30.dp, vertical = 30.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                item {
-                    Text(
-                        "History",
-                        modifier = Modifier.fillMaxWidth(),
-                        textAlign = TextAlign.Center,
-                        fontSize = 18.sp,
-                    )
-                }
-                item {
-                    Button(
-                        onClick = {
-                            historyScreen = false
-                        },
-                        modifier =
-                            Modifier.fillMaxWidth().wrapContentWidth(
-                                Alignment.CenterHorizontally,
-                            ),
-                    ) { Text("Back") }
-                }
-                item {
-                    Button(enabled = !chatState.generating, onClick = {
+            HistoryScreen(
+                conversations = conversations,
+                generating = chatState.generating,
+                unsaved = chatState.unsaved,
+                currentId = chatState.conversationId,
+                onBack = { historyScreen = false },
+                onSelect = { id, messageId ->
+                    // A notice belongs to the screen that raised it (clipboard, voice). Leaving it
+                    // set pinned that line above every later conversation for the whole process.
+                    notice = ""
+                    if (id == null) {
                         chat.newChat()
-                        historyScreen = false
-                        renderLab =
-                            false
                         following = true
                         followNewConversation = false
-                    }, modifier = Modifier.fillMaxWidth()) { Text("New chat") }
-                }
-                items(conversations, key = { it.id }) { conversation ->
-                    androidx.wear.compose.material3.OutlinedButton(
-                        enabled =
-                            !chatState.generating || conversation.id == chatState.conversationId,
-                        onClick = {
-                            if (conversation.id !=
-                                chatState.conversationId
-                            ) {
-                                chat.open(conversation.id)
-                                restoredConversation = null
-                                following =
-                                    false
-                                followNewConversation = false
-                            }
-                            ; historyScreen = false
-                            renderLab = false
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) { Text(conversation.title) }
-                }
-            }
+                    } else {
+                        // A search hit names a MESSAGE. Seed the reading anchor at it, otherwise the
+                        // reader fell back to block 0 and dumped the user at the top of a long
+                        // conversation after the row promised that message. contentHash = -1 never
+                        // matches, so the restore lands on the message's first block rather than a
+                        // saved scroll offset.
+                        if (messageId != null) anchors[id] = ReaderAnchor(messageId, 0, 0, 0, -1, false)
+                        if (id != chatState.conversationId) chat.open(id)
+                        // Re-arm the restore effect even for the conversation already open, where the
+                        // id is unchanged and nothing else would make it run.
+                        restoredConversation = null
+                        following = false
+                        followNewConversation = false
+                    }
+                    historyScreen = false
+                    renderLab = false
+                },
+            )
         } else if (editing) {
             Column(
                 Modifier.fillMaxSize().padding(horizontal = 32.dp, vertical = 28.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Text("Prompt", modifier = Modifier.align(Alignment.CenterHorizontally))
+                val composing = editedId != null
+                val editorText = if (composing) editText else draft
                 BasicTextField(
-                    value = draft,
-                    onValueChange = { draft = it },
+                    value = editorText,
+                    onValueChange = { if (composing) editText = it else draft = it },
                     modifier =
                         Modifier
                             .weight(1f)
@@ -484,23 +543,42 @@ private fun ChatReader(
                 )
                 Button(
                     onClick = {
-                        if (draft.isNotBlank()) {
-                            editing = false
-                            renderLab = false
-                            sectionMenu = false
-                            following = true
-                            followNewConversation = chatState.conversationId == null
-                            val editing = editedId
-                            if (editing != null) {
-                                anchors.remove(chatState.conversationId)
-                                chat.edit(editing, draft)
-                            } else {
-                                chat.send(draft)
+                        if (editorText.isNotBlank()) {
+                            val editTarget = editedId
+                            val started =
+                                if (editTarget != null) {
+                                    anchors.remove(chatState.conversationId)
+                                    chat.edit(editTarget, editorText)
+                                } else {
+                                    chat.send(editorText)
+                                }
+                            // Only clear when the ViewModel ACCEPTED the turn. Clearing
+                            // unconditionally (before it could report refusal) threw away the
+                            // user's typed question whenever a send was refused — a failed init,
+                            // an unsaved answer — and closed the editor over it.
+                            if (started) {
+                                editing = false
+                                renderLab = false
+                                sectionMenu = false
+                                following = true
+                                followNewConversation = chatState.conversationId == null
+                                // The text now lives in the conversation. Clearing the slot that was
+                                // actually used leaves the OTHER one untouched, so an edit never eats
+                                // the user's unsent prompt and a send never eats the other way round.
+                                if (editTarget != null) {
+                                    lastEditAttempt = editTarget to editorText
+                                    editText = ""
+                                } else {
+                                    draft = ""
+                                }
+                                notice = ""
+                                editedId = null
                             }
-                            editedId = null
                         }
                     },
-                    enabled = draft.isNotBlank() && !chatState.generating,
+                    enabled =
+                        (if (editedId != null) editText else draft).isNotBlank() &&
+                            !chatState.generating && !chatState.unsaved,
                     modifier = Modifier.align(Alignment.CenterHorizontally),
                 ) {
                     Text(
@@ -557,18 +635,55 @@ private fun ChatReader(
                         kotlinx.coroutines.Dispatchers.Default,
                     ) { ResponseParser.parse(source) }
             }
+            // Keyed by the list's own stable key string, not by the block value. `ContentBlock.Paragraph`
+            // is a data class holding the whole inline run, so a value key hashed the entire streaming
+            // paragraph on every layout write and inserted a fresh entry per parse; `retainAll` then
+            // re-hashed every block of the conversation once per frame. A String key is an identity
+            // compare, and it also removes the duplicate keys a value key produced for two identical
+            // blocks inside one message.
             val blockHeights =
                 remember(chatState.conversationId, LocalDensity.current) {
-                    androidx.compose.runtime.mutableStateMapOf<Pair<Long, ContentBlock>, Int>()
+                    androidx.compose.runtime.mutableStateMapOf<String, Int>()
                 }
-            LaunchedEffect(renderedHistory) { blockHeights.keys.retainAll(renderedHistory.toSet()) }
+            LaunchedEffect(historyKeys) { blockHeights.keys.retainAll(historyKeys.toSet()) }
             val spacingPx = with(LocalDensity.current) { 12.dp.roundToPx() }
             val answerId = storedMessages.lastOrNull()?.takeIf { it.role == "ASSISTANT" }?.id
-            val answerRow = parsedRows.keys.lastOrNull()?.takeIf { it.id == answerId }
+            // Find the row BY ID rather than taking the last KEY. `parsedRows` is a LinkedHashMap keyed by
+            // the row itself, and `previous + parsed` keeps an existing key's position, so after History
+            // A→B→A nothing moved, the last key was B's message, `takeIf` failed and the row read as
+            // absent: the STOPPED/error status paragraph was counted as answer content again.
+            val answerRow =
+                remember(answerId, parsedRows) {
+                    answerId?.let { id -> parsedRows.keys.firstOrNull { it.id == id } }
+                }
             val transientStopped = chatState.interrupted && !chatState.generating && storedMessages.isEmpty()
+            // ONE source of truth for which trailing rows exist. The follow effect counts them and the
+            // LazyColumn emits them, and the two had drifted: the count ignored the unsaved-answer row
+            // and the provider-error row, and it counted live blocks even while they were suppressed —
+            // so auto-follow stopped short of the real last item.
+            val liveBlocksShown = !chatState.unsaved || historyBlocks.isEmpty()
+            val transientErrorShown =
+                !renderLab && chatState.error != null && storedMessages.none { it.error == chatState.error }
+            val unsavedRowShown = !renderLab && chatState.unsaved
+            val providerErrorShown = providerState.error != null
+            // "Ask anything" needs the conversation's parse to have run first: `storedMessages` is
+            // cleared on every observe(id), so opening a 40-message conversation flashed the empty
+            // prompt and then repopulated it. No conversation, or a parse that found nothing, is the
+            // only honest moment to invite the user to start.
+            val emptyPromptShown =
+                !renderLab && storedMessages.isEmpty() && chatState.rawMarkdown == null &&
+                    (chatState.conversationId == null || parsedConversation == chatState.conversationId)
+            val retryRowShown =
+                !renderLab && !chatState.generating && storedMessages.lastOrNull()?.role == "ASSISTANT"
+            val streamingRowShown = !renderLab && (chatState.generating || transientStopped)
+            val noticeRowShown = notice.isNotEmpty()
+            // Memoised like its two neighbours: it used to allocate an index list, a filter result and
+            // two more copies on every recomposition, i.e. once per checkpoint emission.
             val answerIndices =
-                historyBlocks.indices.filter { historyBlocks[it].first == answerId }.drop(1).let {
-                    if (answerRow?.status == "STOPPED" || answerRow?.error != null) it.dropLast(1) else it
+                remember(historyBlocks, answerId, answerRow?.status, answerRow?.error) {
+                    historyBlocks.indices.filter { historyBlocks[it].first == answerId }.drop(1).let {
+                        if (answerRow?.status == "STOPPED" || answerRow?.error != null) it.dropLast(1) else it
+                    }
                 }
             var measuredAnswer by remember(answerId, following, chatState.generating) { mutableStateOf(false) }
             LaunchedEffect(
@@ -595,17 +710,22 @@ private fun ChatReader(
                     (chatState.rawMarkdown != null || storedMessages.isNotEmpty())
                 ) {
                     val count =
-                        blocks.size + historyBlocks.size + (if (chatState.prompt.isNotEmpty()) 1 else 0) +
-                            (if (notice.isNotEmpty()) 1 else 0) + (if (chatState.error != null) 1 else 0) +
-                            (if (chatState.generating || transientStopped) 1 else 0) +
-                            (if (!chatState.generating && storedMessages.lastOrNull()?.role == "ASSISTANT") 1 else 0)
+                        historyBlocks.size +
+                            (if (liveBlocksShown) blocks.size else 0) +
+                            (if (noticeRowShown) 1 else 0) +
+                            (if (transientErrorShown) 1 else 0) +
+                            (if (unsavedRowShown) 1 else 0) +
+                            (if (providerErrorShown) 1 else 0) +
+                            (if (emptyPromptShown) 1 else 0) +
+                            (if (retryRowShown) 1 else 0) +
+                            (if (streamingRowShown) 1 else 0)
                     val firstAnswer = answerIndices.firstOrNull()?.plus(if (notice.isNotEmpty()) 1 else 0)
                     if (!chatState.generating && !measuredAnswer && firstAnswer != null) {
                         measuredAnswer = true
                         listState.scrollToItem(firstAnswer)
                         androidx.compose.runtime.withFrameNanos { }
                     }
-                    val heights = answerIndices.map { blockHeights[historyBlocks[it]] }
+                    val heights = answerIndices.map { blockHeights[historyKeys[it]] }
                     val viewport = listState.layoutInfo.let { it.viewportEndOffset - it.viewportStartOffset }
                     val answerFits =
                         heights.isNotEmpty() && heights.all { it != null } &&
@@ -617,7 +737,7 @@ private fun ChatReader(
                         listState.scrollToItem(firstAnswer)
                     } else if (listState.canScrollForward) {
                         val lastContent = answerIndices.lastOrNull()
-                        val height = lastContent?.let { blockHeights[historyBlocks[it]] }
+                        val height = lastContent?.let { blockHeights[historyKeys[it]] }
                         if (!chatState.generating && lastContent != null && height != null) {
                             listState.scrollToItem(
                                 lastContent + if (notice.isNotEmpty()) 1 else 0,
@@ -644,7 +764,16 @@ private fun ChatReader(
                     if (editing) {
                         false
                     } else {
-                        if (delta < 0 && !renderLab && !sectionMenu) following = false
+                        // Only detach when the crown can actually move the list backwards: an upward
+                        // tick on a conversation that fits on screen scrolled nothing, yet it used to
+                        // hide following and raise the jump-to-latest arrow over an unmoved reader.
+                        if (delta < 0 && !renderLab && !sectionMenu && rotaryList.canScrollBackward) {
+                            following = false
+                            followNewConversation = false
+                            // Let the scroll-end effect re-decide following by position, the same way
+                            // a finger drag does.
+                            userScrolled = true
+                        }
                         rotaryScope.launch { rotaryList.scrollBy(delta) }
                         true
                     }
@@ -680,7 +809,11 @@ private fun ChatReader(
                                         it.viewportEndOffset - it.viewportStartOffset
                                     }};answer=" +
                                     answerIndices.joinToString(",") { index ->
-                                        historyBlocks.getOrNull(index)?.let { blockHeights[it] }?.toString()
+                                        historyBlocks
+                                            .getOrNull(
+                                                index,
+                                            )?.let { blockHeights[historyKeys[index]] }
+                                            ?.toString()
                                             ?: "unknown"
                                     } +
                                     ";index=${listState.firstVisibleItemIndex}" +
@@ -720,7 +853,10 @@ private fun ChatReader(
                         }, modifier = Modifier.fillMaxWidth()) { Text("History") }
                     }
                     item {
-                        Button(enabled = !chatState.generating, onClick = {
+                        // `unsaved` implies generating == false, so the old gate enabled this button exactly in
+                        // the state where ChatViewModel.newChat() refuses: the tap closed the menu and
+                        // nothing else happened, with no explanation.
+                        Button(enabled = !chatState.generating && !chatState.unsaved, onClick = {
                             chat.newChat()
                             renderLab = false
                             sectionMenu =
@@ -751,12 +887,10 @@ private fun ChatReader(
                         }
                     }
                 } else {
-                    if (notice.isNotEmpty()) item { Text(notice, fontSize = 14.sp) }
-                    if (!renderLab &&
-                        chatState.prompt.isNotEmpty()
-                    ) {
-                        item { Text(chatState.prompt, fontSize = 14.sp, color = Color(0xFFA8C7FA)) }
-                    }
+                    if (noticeRowShown) item { Text(notice, fontSize = 14.sp) }
+                    // The newest USER row is already rendered from Room. Painting the composer
+                    // prompt again as a second copy ("You · hold to edit" heading plus this line)
+                    // showed every question twice.
                     if (!renderLab && parsedConversation == chatState.conversationId) {
                         itemsIndexed(
                             renderedHistory,
@@ -770,29 +904,39 @@ private fun ChatReader(
                                         .combinedClickable(onClick = {
                                         }, onLongClickLabel = "Edit message", onLongClick = {
                                             saveReaderPosition()
+                                            // The edit body goes to its OWN slot: the unsent draft is
+                                            // left exactly as it was, so abandoning the edit cannot
+                                            // destroy it and cannot resurrect it later either.
+                                            editText = message.rawContent
                                             editedId = messageId
-                                            draft = message.rawContent
                                             editing = true
                                         })
                                 } else {
                                     Modifier
                                 }
                             Box(
-                                Modifier.onSizeChanged { blockHeights[messageId to block] = it.height }.then(
+                                Modifier.onSizeChanged { blockHeights[historyKeys[index]] = it.height }.then(
                                     editModifier,
                                 ),
                             ) { DocumentBlock(block) }
                         }
                     }
-                    items(blocks) { DocumentBlock(it) }
+                    // The live blocks render the IN-FLIGHT answer only. When a terminal write fails, the ViewModel
+                    // puts the same text in `rawMarkdown` (so it is not lost) while the live row is
+                    // already merged into `historyBlocks` — rendering both duplicated the whole
+                    // answer and pushed the "Copy unsaved answer / Retry saving" row below the copy.
+                    // The empty-history guard keeps the answer visible if the merge did not happen.
+                    if (liveBlocksShown) {
+                        items(blocks) { DocumentBlock(it) }
+                    }
                     // One copy of the transient failure only. The same string also renders on
                     // the persisted assistant row (:255-266), so a bare `error?.let` prints it
                     // twice once the row exists. Cleared history (edit/retry/new chat) keeps the
                     // transient row as the only copy.
-                    if (!renderLab && storedMessages.none { it.error == chatState.error }) {
+                    if (transientErrorShown) {
                         chatState.error?.let { message -> item { Text(message, fontSize = 14.sp) } }
                     }
-                    if (!renderLab && chatState.unsaved) {
+                    if (unsavedRowShown) {
                         item {
                             val context = androidx.compose.ui.platform.LocalContext.current
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -817,8 +961,12 @@ private fun ChatReader(
                             }
                         }
                     }
-                    providerState.error?.let { message -> item { Text(message, fontSize = 14.sp) } }
-                    if (!renderLab && storedMessages.isEmpty() && chatState.rawMarkdown == null) {
+                    if (providerErrorShown) {
+                        providerState.error?.let { message ->
+                            item { Text(message, fontSize = 14.sp) }
+                        }
+                    }
+                    if (emptyPromptShown) {
                         item {
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Text("Ask anything", fontSize = 18.sp)
@@ -837,7 +985,7 @@ private fun ChatReader(
                             }
                         }
                     }
-                    if (!renderLab && !chatState.generating && storedMessages.lastOrNull()?.role == "ASSISTANT") {
+                    if (retryRowShown) {
                         item {
                             ReaderAction(retry = true, onClick = {
                                 anchors.remove(chatState.conversationId)
@@ -847,11 +995,18 @@ private fun ChatReader(
                             })
                         }
                     }
-                    if (!renderLab && (chatState.generating || transientStopped)) {
+                    if (streamingRowShown) {
                         item {
                             Text(
-                                if (chatState.generating) "Streaming…" else "Stopped · partial answer kept",
+                                if (chatState.generating) streamingLabel else stoppedPartial,
                                 fontSize = 12.sp,
+                                // Polite, not assertive: this node carries STATE, not answer text. A
+                                // screen reader was told nothing when streaming started or stopped, and
+                                // no live region existed anywhere in the app.
+                                modifier =
+                                    Modifier.semantics {
+                                        liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite
+                                    },
                             )
                         }
                     }
@@ -897,11 +1052,20 @@ private fun ChatReader(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         if (chatState.generating && !renderLab) {
-                            if (chatState.generating) {
+                            // `unsaved` means the turn is over and only the save is retrying: there
+                            // is no stream to stop, and offering Stop there invited a cancel that
+                            // was reported as a storage failure.
+                            if (!chatState.unsaved) {
                                 if (!following) Spacer(Modifier.width(48.dp))
-                                Button(onClick = {
-                                    chat.stop()
-                                }, modifier = Modifier.width(72.dp).height(48.dp)) { Text("Stop", fontSize = 12.sp) }
+                                // Minimums, not fixed sizes: at a 2.0x font scale "Stop" in a 72.dp box wraps
+                                // and clips inside a 48.dp height. The touch target stays 48 dp (the
+                                // platform minimum) while the label may grow.
+                                Button(
+                                    onClick = {
+                                        chat.stop()
+                                    },
+                                    modifier = Modifier.widthIn(min = 72.dp).heightIn(min = 48.dp),
+                                ) { Text("Stop", fontSize = 12.sp, maxLines = 1) }
                             }
                             if (!following) ReaderAction(retry = false, onClick = { following = true })
                         } else {
@@ -910,9 +1074,18 @@ private fun ChatReader(
                                 Modifier
                                     .size(48.dp)
                                     .semantics { contentDescription = "Keyboard input" }
-                                    // Re-entry keeps an unsent draft: Back out of the editor is not a discard.
+                                    // Re-entry keeps an unsent DRAFT: Back out of the editor is not a
+                                    // discard. The re-entry also DROPS a pending edit target —
+                                    // `editText` and `editedId` are cleared together, so a stale
+                                    // edit body can never reappear as a fresh message. (The previous
+                                    // comment claimed the target was kept; the line below contradicts
+                                    // it, and the code is the intended behaviour.)
                                     .clickable(role = Role.Button, onClick = {
                                         saveReaderPosition()
+                                        // The keyboard always composes the DRAFT. `editText` and
+                                        // `editedId` are cleared together, so a stale edit body can
+                                        // never reappear as a fresh message.
+                                        editText = ""
                                         editedId = null
                                         editing = true
                                     }),
@@ -964,6 +1137,133 @@ private fun ChatReader(
         }
     }
 }
+
+/**
+ * History: recent conversations plus a search over every message ever stored.
+ *
+ * Search lives here rather than on a second screen because History already owns the round-screen
+ * budget for a list, and a hit is just a conversation to open. It is a SQLite `LIKE` scan
+ * (`likeTerms` escapes the wildcards), not FTS5: Android's bundled SQLite has no fts5 module, which
+ * was measured on a Wear emulator as `no such module: fts5`.
+ */
+@Composable
+private fun HistoryScreen(
+    conversations: List<Conversation>,
+    generating: Boolean,
+    // `open`/`newChat` refuse while an answer is unsaved. The list used to stay enabled anyway, so a
+    // tap closed History, changed nothing, and took the search text with it — a dead tap over a
+    // reader that never moved. The menu's own New chat button was fixed for exactly this.
+    unsaved: Boolean,
+    currentId: String?,
+    onBack: () -> Unit,
+    onSelect: (String?, Long?) -> Unit,
+) {
+    val context = LocalContext.current
+    val app = context.applicationContext as NiroApplication
+    var query by rememberSaveable { mutableStateOf("") }
+    var hits by remember { mutableStateOf<List<SearchHit>>(emptyList()) }
+    var searched by remember { mutableStateOf("") }
+    // Debounced so a fast typist does not issue one SQL query per keystroke on a watch.
+    LaunchedEffect(query) {
+        if (likeTerms(query).isEmpty()) {
+            hits = emptyList()
+            searched = ""
+        } else {
+            // Drop the previous result set BEFORE the wait. It used to stay on screen for the whole
+            // debounce window, so the rows shown did not match the text in the field, and tapping
+            // one opened a conversation from the query the user had already replaced.
+            hits = emptyList()
+            searched = ""
+            kotlinx.coroutines.delay(SEARCH_DEBOUNCE_MS)
+            hits =
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    app.database.searchMessages(query, SEARCH_LIMIT)
+                }
+            searched = query
+        }
+    }
+    LazyColumn(
+        Modifier.fillMaxSize(),
+        state = rememberLazyListState(),
+        contentPadding = PaddingValues(horizontal = 30.dp, vertical = 30.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        item {
+            Text("History", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center, fontSize = 18.sp)
+        }
+        item {
+            Button(
+                onClick = onBack,
+                modifier = Modifier.fillMaxWidth().wrapContentWidth(Alignment.CenterHorizontally),
+            ) {
+                Text("Back")
+            }
+        }
+        item {
+            BasicTextField(
+                value = query,
+                onValueChange = { query = it },
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .background(Color(0xFF202124))
+                        .padding(12.dp)
+                        .semantics { contentDescription = "Search messages" },
+                singleLine = true,
+                textStyle = TextStyle(color = Color.White, fontSize = 16.sp),
+                cursorBrush =
+                    androidx.compose.ui.graphics
+                        .SolidColor(Color.White),
+                decorationBox = { field ->
+                    if (query.isEmpty()) Text("Search all messages", fontSize = 16.sp, color = Color(0xFF8E939B))
+                    field()
+                },
+            )
+        }
+        item {
+            Button(
+                enabled = !generating && !unsaved,
+                onClick = { onSelect(null, null) },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("New chat")
+            }
+        }
+        if (query.isNotBlank()) {
+            if (hits.isEmpty() && searched.isNotBlank()) item { Text("No matches.", fontSize = 14.sp) }
+            items(hits, key = { "hit-${it.messageId}" }) { hit ->
+                val label = hit.rawContent.replace(Regex("\\s+"), " ").take(80)
+                // Same guard as the conversation rows: opening during generation is refused by the
+                // ViewModel, and closing History anyway looked like a dead tap that lost the search.
+                Button(
+                    enabled = !generating && !unsaved,
+                    onClick = { onSelect(hit.conversationId, hit.messageId) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        "${if (hit.role == "USER") "You" else "Answer"}: $label",
+                        fontSize = 13.sp,
+                        maxLines = 4,
+                    )
+                }
+            }
+        } else {
+            items(conversations, key = { it.id }) { conversation ->
+                androidx.wear.compose.material3.OutlinedButton(
+                    enabled = (!generating || conversation.id == currentId) && !unsaved,
+                    onClick = { onSelect(conversation.id, null) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text(conversation.title) }
+            }
+        }
+    }
+}
+
+private const val SEARCH_DEBOUNCE_MS = 250L
+
+/** ponytail: 40 hits; a watch list never shows more without another query. */
+private const val SEARCH_LIMIT = 40
 
 /**
  * Mark a clip sensitive so Android 13+ does not show a content preview of a conversation answer on

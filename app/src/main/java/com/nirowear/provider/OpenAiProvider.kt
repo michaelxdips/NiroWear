@@ -33,17 +33,7 @@ class OpenAiProvider(
     override suspend fun validate(
         profile: ProviderProfile,
         secret: SecretValue,
-    ): ProviderError? {
-        var error: ProviderError? = ProviderError.PROTOCOL
-        streamChat(ChatRequest(listOf(ChatMessage(ChatRole.USER, "Reply OK."))), profile, secret).collect {
-            when (it) {
-                StreamEvent.Completed -> error = null
-                is StreamEvent.Failure -> error = it.error
-                else -> Unit
-            }
-        }
-        return error
-    }
+    ): ProviderError? = validateWithProbe(profile, secret)
 
     override suspend fun listModels(
         profile: ProviderProfile,
@@ -72,17 +62,11 @@ class OpenAiProvider(
             } else {
                 ModelDiscoveryResult.Models(ids)
             }
-        } catch (
-            cancelled: CancellationException,
-        ) {
+        } catch (cancelled: CancellationException) {
             throw cancelled
-        } catch (
-            error: SafeProviderException,
-        ) {
+        } catch (error: SafeProviderException) {
             ModelDiscoveryResult.Unavailable(error.error)
-        } catch (
-            _: Exception,
-        ) {
+        } catch (_: Exception) {
             ModelDiscoveryResult.Unavailable(ProviderError.PROTOCOL)
         }
 
@@ -155,7 +139,16 @@ class OpenAiProvider(
                 .post(payload.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
                 .build()
         // Each collection gets its own stateful decoder, including validation/retry collectors.
-        return flow { emitAll(http.stream(wire, OpenAiStreamDecoder()::accept)) }
+        return flow {
+            emitAll(
+                http.stream(wire, OpenAiStreamDecoder()::accept, decodeError = {
+                    _,
+                    body,
+                    ->
+                    openAiHttpError(body)
+                }),
+            )
+        }
     }
 
     private fun authenticated(
@@ -213,10 +206,6 @@ internal class OpenAiStreamDecoder {
                             response.getValue("output").jsonArray.forEach { element ->
                                 val item = element.jsonObject
                                 when (item.getValue("type").jsonPrimitive.content) {
-                                    "reasoning" -> {
-                                        Unit
-                                    }
-
                                     "message" -> {
                                         val phase = phase(item)
                                         var length = 0
@@ -224,11 +213,15 @@ internal class OpenAiStreamDecoder {
                                         require(item.getValue("status").jsonPrimitive.content == "completed")
                                         item.getValue("content").jsonArray.forEach { content ->
                                             val part = content.jsonObject
+                                            // Only output_text and refusal carry canonical text. Part
+                                            // types this build does not render (reasoning_text, ...)
+                                            // contribute nothing rather than failing the answer: the
+                                            // equality check below still catches text it missed.
                                             val visible =
                                                 when (part.getValue("type").jsonPrimitive.content) {
-                                                    "output_text" -> requireNotNull(part["text"].stringOrNull())
-                                                    "refusal" -> requireNotNull(part["refusal"].stringOrNull())
-                                                    else -> error("Unsupported content")
+                                                    "output_text" -> part["text"].stringOrNull().orEmpty()
+                                                    "refusal" -> part["refusal"].stringOrNull().orEmpty()
+                                                    else -> ""
                                                 }
                                             length += visible.length
                                             append(visible)
@@ -236,8 +229,12 @@ internal class OpenAiStreamDecoder {
                                         phases.add(OpenAiPhase(length, phase))
                                     }
 
+                                    // ResponseOutputItem is a large union (web_search_call,
+                                    // file_search_call, function_call, compaction, ...). Items other
+                                    // than a message carry no portable text, so they are skipped. The
+                                    // old `error("Unsupported item")` discarded a fully streamed answer.
                                     else -> {
-                                        error("Unsupported item")
+                                        Unit
                                     }
                                 }
                             }
@@ -259,25 +256,57 @@ internal class OpenAiStreamDecoder {
                 }
 
                 "response.incomplete" -> {
-                    listOf(StreamEvent.Failure(ProviderError.PROTOCOL))
+                    // The API documents WHY it stopped in `response.incomplete_details.reason`:
+                    // max_output_tokens | max_messages | content_filter | steered. Treating all four as
+                    // "cut at the output limit" reported a CONTENT-FILTERED answer as a length cap, and a
+                    // zero-text incomplete produced an empty SUCCESS row with a note under it.
+                    val reason =
+                        root["response"]
+                            ?.jsonObject
+                            ?.get("incomplete_details")
+                            ?.jsonObject
+                            ?.get("reason")
+                            ?.jsonPrimitive
+                            ?.contentOrNull
+                    when (reason) {
+                        // The provider stopped for policy, not for length: same meaning as a
+                        // content-filtered finish in the compatible adapter.
+                        "content_filter" -> {
+                            listOf(StreamEvent.Failure(ProviderError.PROMPT_BLOCKED))
+                        }
+
+                        // Reaches here only over WebSocket in the reference SDK; SSE cannot steer, and
+                        // nothing was cut, so the answer stands as complete.
+                        "steered" -> {
+                            if (text.isNotEmpty()) {
+                                listOf(StreamEvent.Completed)
+                            } else {
+                                listOf(StreamEvent.Failure(ProviderError.PROTOCOL))
+                            }
+                        }
+
+                        // max_output_tokens / max_messages / anything newer: the answer was cut.
+                        else -> {
+                            if (text.isNotEmpty()) {
+                                listOf(StreamEvent.Truncated)
+                            } else {
+                                listOf(StreamEvent.Failure(ProviderError.PROTOCOL))
+                            }
+                        }
+                    }
                 }
 
                 "response.output_item.added", "response.output_item.done" -> {
+                    // Informational for every item type; only a message carries the phase metadata
+                    // this client stores. Requiring an exact type set aborted legal streams.
                     val item = root.getValue("item").jsonObject
-                    require(item.getValue("type").jsonPrimitive.content in setOf("message", "reasoning"))
-                    if (item.getValue("type").jsonPrimitive.content == "message") phase(item)
+                    if (item["type"].stringOrNull() == "message") phase(item)
                     emptyList()
                 }
 
                 "response.content_part.added", "response.content_part.done" -> {
-                    require(
-                        root
-                            .getValue("part")
-                            .jsonObject
-                            .getValue("type")
-                            .jsonPrimitive.content in
-                            setOf("output_text", "refusal"),
-                    )
+                    // output_text, refusal and reasoning_text are all legal; only the first two are
+                    // rendered, and none of them may fail the stream.
                     emptyList()
                 }
 
@@ -286,7 +315,10 @@ internal class OpenAiStreamDecoder {
                 "response.reasoning_summary_text.delta", "response.reasoning_summary_text.done",
                 "response.reasoning_text.delta", "response.reasoning_text.done",
                 -> {
-                    emptyList()
+                    // Nothing to render, but a reasoning model can stream these for minutes before
+                    // the first visible token. Returning an empty list made that look like a dead
+                    // socket, so the idle deadline killed the turn. Working keeps the bound honest.
+                    listOf(StreamEvent.Working)
                 }
 
                 // Unknown events *inside the response namespace* are informational and must not abort
@@ -327,3 +359,16 @@ private fun openAiError(element: JsonElement?): ProviderError =
         "server_error", "server_is_overloaded" -> ProviderError.SERVER
         else -> ProviderError.HTTP
     }
+
+/**
+ * The reason OpenAI (or an OpenAI-shaped gateway) gives in a non-2xx body.
+ *
+ * The status alone cannot separate a bad key from an exhausted quota from a model that was retired —
+ * all three arrive as 4xx with `{"error":{"code":…}}`. Only a code this build recognises is returned;
+ * null lets the status mapping stand. The compatible adapter shares this because the wire shape is the
+ * same one it already parses for `[DONE]` and `error` frames.
+ */
+internal fun openAiHttpError(body: String): ProviderError? {
+    val error = runCatching { Json.parseToJsonElement(body).jsonObject["error"] }.getOrNull() ?: return null
+    return openAiError(error).takeIf { it != ProviderError.HTTP }
+}

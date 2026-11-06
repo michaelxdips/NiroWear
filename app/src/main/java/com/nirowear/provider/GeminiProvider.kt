@@ -36,17 +36,7 @@ class GeminiProvider(
     override suspend fun validate(
         profile: ProviderProfile,
         secret: SecretValue,
-    ): ProviderError? {
-        var error: ProviderError? = ProviderError.PROTOCOL
-        streamChat(ChatRequest(listOf(ChatMessage(ChatRole.USER, "Reply OK."))), profile, secret).collect {
-            when (it) {
-                StreamEvent.Completed -> error = null
-                is StreamEvent.Failure -> error = it.error
-                else -> Unit
-            }
-        }
-        return error
-    }
+    ): ProviderError? = validateWithProbe(profile, secret)
 
     override suspend fun listModels(
         profile: ProviderProfile,
@@ -95,17 +85,11 @@ class GeminiProvider(
             } else {
                 ModelDiscoveryResult.Models(ids.sorted())
             }
-        } catch (
-            cancelled: CancellationException,
-        ) {
+        } catch (cancelled: CancellationException) {
             throw cancelled
-        } catch (
-            error: SafeProviderException,
-        ) {
+        } catch (error: SafeProviderException) {
             ModelDiscoveryResult.Unavailable(error.error)
-        } catch (
-            _: Exception,
-        ) {
+        } catch (_: Exception) {
             ModelDiscoveryResult.Unavailable(ProviderError.PROTOCOL)
         }
 
@@ -126,6 +110,13 @@ class GeminiProvider(
         }
         val payload =
             buildJsonObject {
+                // GenerateContentRequest.store is a real boolean: "Configures the logging behavior for
+                // a given request. If set, it takes precedence over the project-level logging config."
+                // It is absent from the published proto mirror and from ai.google.dev, which is how a
+                // previous audit wrongly concluded the field was illegal — it is in the deployed
+                // discovery schema, and an unauthenticated probe confirmed only genuinely unknown
+                // fields are rejected ("Unknown name ..."), while store parsed and reached auth.
+                // Chat text must not be retained upstream, so the opt-out is sent explicitly.
                 put("store", false)
                 if (request.systemInstruction.isNotBlank()) put("systemInstruction", content(request.systemInstruction))
                 put(
@@ -160,7 +151,19 @@ class GeminiProvider(
                 .header("Accept", "text/event-stream")
                 .post(payload.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
                 .build()
-        return flow { emitAll(http.stream(wire, GeminiStreamDecoder()::accept)) }
+        return flow {
+            emitAll(
+                http.stream(
+                    wire,
+                    GeminiStreamDecoder()::accept,
+                    // Gemini reports a rejected key as HTTP 400 with the reason in the BODY, so the
+                    // status alone cannot tell it apart from a malformed request. Before this hook the
+                    // status threw before the body was read, and saving a wrong key said "Provider
+                    // rejected request. Check configuration." — the exact wrong thing to blame.
+                    decodeError = { code, body -> geminiHttpError(code, body) },
+                ),
+            )
+        }
     }
 
     private fun authenticated(
@@ -170,6 +173,37 @@ class GeminiProvider(
         .Builder()
         .url(url)
         .header("x-goog-api-key", secret.forRequest())
+}
+
+/**
+ * Maps a NON-2xx Gemini response body to an error, or null when the status says everything.
+ *
+ * The stream decoder only ever sees 2xx bodies, so its mapping could never fire for the most common
+ * failure of all: a mistyped key, which Gemini answers with HTTP 400 and `API_KEY_INVALID` in the
+ * body. Deliberately narrow — only reasons that are unambiguous about the CREDENTIAL — so a 400 about
+ * a malformed request still reads as a request problem instead of accusing the key.
+ */
+internal fun geminiHttpError(
+    code: Int,
+    body: String,
+): ProviderError? {
+    val error =
+        runCatching { Json.parseToJsonElement(body).jsonObject["error"]?.jsonObject }.getOrNull()
+            ?: return null
+    val status = error["status"]?.jsonPrimitive?.contentOrNull.orEmpty()
+    val reasons =
+        error["details"]?.jsonArray.orEmpty().mapNotNull {
+            it.jsonObject["reason"]?.jsonPrimitive?.contentOrNull
+        }
+    return when {
+        status == "UNAUTHENTICATED" || reasons.any { it.startsWith("API_KEY") } -> ProviderError.INVALID_CREDENTIAL
+        status == "PERMISSION_DENIED" -> ProviderError.PERMISSION_DENIED
+        status == "RESOURCE_EXHAUSTED" -> ProviderError.RATE_LIMITED
+        status == "NOT_FOUND" -> ProviderError.MODEL_UNAVAILABLE
+        code == 401 -> ProviderError.INVALID_CREDENTIAL
+        code == 403 -> ProviderError.PERMISSION_DENIED
+        else -> null
+    }
 }
 
 internal class GeminiStreamDecoder {
@@ -215,40 +249,92 @@ internal class GeminiStreamDecoder {
                     }
                 return listOf(StreamEvent.Failure(mapped))
             }
-            if (root["promptFeedback"]?.jsonObject?.get("blockReason") !=
-                null
-            ) {
-                return listOf(StreamEvent.Failure(ProviderError.HTTP))
+            // `promptFeedback.blockReason` means the PROMPT was filtered, not that the request was
+            // malformed. `!= null` also matched JSON null, which is a legal absent value.
+            if (root["promptFeedback"]?.jsonObject?.get("blockReason")?.stringOrNull() != null) {
+                return listOf(StreamEvent.Failure(ProviderError.PROMPT_BLOCKED))
             }
             val candidates = root["candidates"]?.jsonArray ?: return emptyList()
             if (candidates.isEmpty()) return emptyList()
-            require(candidates.size == 1)
-            val candidate = candidates.single().jsonObject
-            require(candidate["index"]?.jsonPrimitive?.intOrNull in listOf(null, 0))
+            val candidate = candidates.first().jsonObject
+            var sawThought = false
             val text =
                 buildString {
                     candidate["content"]?.jsonObject?.let { content ->
+                        // role may legitimately be absent on a single-turn reply.
                         require(content["role"]?.jsonPrimitive?.contentOrNull in listOf(null, "model"))
                         content["parts"]?.jsonArray?.forEach { element ->
                             val part = element.jsonObject
-                            require(part.keys.all { it in setOf("text", "thought", "thoughtSignature") })
+                            // No key whitelist: Part has many documented members (inlineData,
+                            // fileData, functionCall, executableCode, ...). Requiring an exact set
+                            // turned one unrecognised-but-legal field into a failed answer. Only
+                            // text contributes canonical content; thought parts are not rendered.
                             if (part["thought"]?.jsonPrimitive?.booleanOrNull != true) {
-                                val value = part["text"]?.jsonPrimitive
-                                if (value != null) {
-                                    require(value.isString)
-                                    append(value.content)
-                                }
+                                part["text"].stringOrNull()?.let { append(it) }
+                            } else {
+                                sawThought = true
                             }
                         }
                     }
                 }
             if (text.isNotEmpty()) hasText = true
             buildList {
-                if (text.isNotEmpty()) add(StreamEvent.TextDelta(text))
+                if (text.isNotEmpty()) {
+                    add(StreamEvent.TextDelta(text))
+                } else if (sawThought) {
+                    // A long thinking phase streams thought-only chunks: proof of life with nothing
+                    // to render, so the idle deadline must see it as progress.
+                    add(StreamEvent.Working)
+                }
                 when (candidate["finishReason"]?.jsonPrimitive?.contentOrNull) {
-                    null, "FINISH_REASON_UNSPECIFIED" -> Unit
-                    "STOP" -> add(if (hasText) StreamEvent.Completed else StreamEvent.Failure(ProviderError.PROTOCOL))
-                    else -> add(StreamEvent.Failure(ProviderError.PROTOCOL))
+                    null, "FINISH_REASON_UNSPECIFIED" -> {
+                        Unit
+                    }
+
+                    // Truncation and content filters are terminal states, not framing faults. The
+                    // answer that arrived is kept instead of being relabelled "Stream interrupted" — the
+                    // text is what the provider actually sent.
+                    //
+                    // MAX_TOKENS and CONTINUATION are reported as Truncated: the text stays SUCCESS and
+                    // gains the visible "reached the output limit" note. Reporting them as Completed
+                    // made a cut answer indistinguishable from a finished one.
+                    "STOP" -> {
+                        add(if (hasText) StreamEvent.Completed else StreamEvent.Failure(ProviderError.PROTOCOL))
+                    }
+
+                    "MAX_TOKENS", "CONTINUATION" -> {
+                        add(if (hasText) StreamEvent.Truncated else StreamEvent.Failure(ProviderError.PROTOCOL))
+                    }
+
+                    "SAFETY", "RECITATION", "BLOCKLIST", "PROHIBITED_CONTENT", "SPII",
+                    "IMAGE_SAFETY", "IMAGE_PROHIBITED_CONTENT", "IMAGE_RECITATION",
+                    -> {
+                        // Text already on screen here means the reply was CUT by policy, not that it
+                        // finished. Reporting Completed hid the cut behind a plausible-looking
+                        // ending; Truncated keeps the text and adds the visible note.
+                        add(
+                            if (hasText) StreamEvent.Truncated else StreamEvent.Failure(ProviderError.PROMPT_BLOCKED),
+                        )
+                    }
+
+                    // Reasons that ABORT a generation part-way. These were falling into the generic
+                    // branch and reported as Completed, so an answer that Gemini itself called
+                    // malformed, escalated or policy-limited was stored SUCCESS with no note — the same
+                    // undisclosed-cut class the Truncated event was added to remove. The text that
+                    // arrived is still kept (Failure preserves partial content).
+                    "MALFORMED_FUNCTION_CALL", "MALFORMED_RESPONSE", "MISSING_THOUGHT_SIGNATURE",
+                    "UNEXPECTED_TOOL_CALL", "TOO_MANY_TOOL_CALLS", "ESCALATION",
+                    "PUP_LIMITED_DISABLED",
+                    -> {
+                        add(StreamEvent.Failure(ProviderError.PROTOCOL))
+                    }
+
+                    // A reason this build does not know (LANGUAGE, OTHER, IMAGE_OTHER, NO_IMAGE, and
+                    // whatever the next API version adds) is a terminal state of unknown cause. With
+                    // text it is a cut of unknown cause — say so instead of guessing "finished".
+                    else -> {
+                        add(if (hasText) StreamEvent.Truncated else StreamEvent.Failure(ProviderError.PROTOCOL))
+                    }
                 }
             }
         } catch (_: Exception) {

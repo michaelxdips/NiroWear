@@ -50,6 +50,12 @@ android {
 
     buildTypes.named("release") {
         optimization { enable = true }
+        // R8 already ran with no repository-controlled rules at all; this wires the file the
+        // .gitignore allowlist promised, and keeps line numbers in obfuscated stack traces.
+        proguardFiles(
+            getDefaultProguardFile("proguard-android-optimize.txt"),
+            "proguard-rules.pro",
+        )
     }
 
     sourceSets["debug"].assets.directories.add(file("../fixtures").path)

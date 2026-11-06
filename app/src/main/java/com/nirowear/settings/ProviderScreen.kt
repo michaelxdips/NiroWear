@@ -63,6 +63,53 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.UUID
 
+/** Shown once, as the pairing note. It used to be a second copy right beside it. */
+private const val PAIRING_WARNING =
+    "Same Wi-Fi only. Your phone warns that the watch's certificate is not trusted — accept it to " +
+        "load the page. Encrypted with ECDH P-256 + AES-GCM, but the handshake is unauthenticated — " +
+        "confirm the URL on the watch matches. Prefer manual entry on untrusted networks."
+
+/** The four add-provider presets. Only the literals differ, so the button logic is written once. */
+private data class Preset(
+    val label: String,
+    val type: ProviderType,
+    val name: String,
+    val base: String,
+    val message: String,
+)
+
+private val PRESETS =
+    listOf(
+        Preset(
+            "Add compatible",
+            ProviderType.OPENAI_COMPATIBLE,
+            "Custom provider",
+            "",
+            "HTTPS API base. Root defaults to /v1.",
+        ),
+        Preset(
+            "Add OpenAI",
+            ProviderType.OPENAI,
+            "OpenAI",
+            "https://api.openai.com/v1",
+            "Native Responses. Discover models; selected model needs text validation.",
+        ),
+        Preset(
+            "Add Gemini",
+            ProviderType.GEMINI,
+            "Gemini",
+            "https://generativelanguage.googleapis.com/v1beta",
+            "Native generateContent. Discovery filters generation capability.",
+        ),
+        Preset(
+            "Add Anthropic",
+            ProviderType.ANTHROPIC,
+            "Anthropic",
+            "https://api.anthropic.com/v1",
+            "Native Messages. Use single-workspace API key.",
+        ),
+    )
+
 @Composable
 fun ProviderScreen(onBack: () -> Unit) {
     val context = LocalContext.current
@@ -84,7 +131,6 @@ fun ProviderScreen(onBack: () -> Unit) {
     // Pairing listener: exists only while this screen is composed. Never a service, never at boot.
     var pairing by remember { mutableStateOf<PairingServer?>(null) }
     var pairingNote by remember { mutableStateOf("") }
-    var paired by remember { mutableStateOf<PairingPayload?>(null) }
     // Remote input is what makes typing on a watch tolerable, so advertise it only when the enabled
     // IME list actually contains a provider that supports it.
     val remoteTyping = remember { remoteTypingHint(enabledImePackages(context)) }
@@ -121,9 +167,9 @@ fun ProviderScreen(onBack: () -> Unit) {
         }
 
     // The one save tail. Manual entry and LAN pairing both end here, so there is no second
-    // persistence path and no way for an arriving key to skip the promotion probe.
-    // One save tail for both entry paths. Manual entry passes its field value; a paired key is
-    // handed over directly so it never has to exist in the revealable editing state.
+    // persistence path and no way for an arriving key to skip the promotion probe. Manual entry
+    // passes its field value; a paired key is handed over directly so it never has to exist in
+    // the revealable editing state.
     suspend fun saveProfile(explicit: SecretValue? = null) {
         busy = true
         try {
@@ -132,9 +178,7 @@ fun ProviderScreen(onBack: () -> Unit) {
                 app.settings.save(profile(), supplied) { p, candidate ->
                     // A missing adapter is a configuration error, not a null to assert away:
                     // report it as a validation failure the user can see.
-                    val adapter =
-                        app.provider(p.type)
-                            ?: return@save ProviderError.PROTOCOL
+                    val adapter = app.provider(p.type) ?: return@save ProviderError.PROTOCOL
                     adapter.validate(p, candidate)
                 }
             key = ""
@@ -152,11 +196,33 @@ fun ProviderScreen(onBack: () -> Unit) {
         } catch (failure: Exception) {
             // A rejected replacement key arrives as SafeProviderException from the promotion probe.
             // Naming the cause beats "Secure save failed" when the real problem is a 401.
-            message = (failure as? SafeProviderException)
-                ?.error
-                ?.userMessage
-                ?.let { "$it Previous credential kept." }
-                ?: "Secure save failed. Previous credential kept. Re-enter key."
+            val specific = (failure as? SafeProviderException)?.error?.userMessage
+            // "Previous credential kept." is only true when there WAS one. On a brand-new provider the
+            // failure is a plain require() ("API key required", "Selected model ID required"), and
+            // claiming a credential was kept both lied and hid the reason.
+            val hadPrevious = edit != null
+            message =
+                when {
+                    specific != null && hadPrevious -> {
+                        "$specific Previous credential kept."
+                    }
+
+                    specific != null -> {
+                        specific
+                    }
+
+                    failure is IllegalArgumentException || failure is IllegalStateException -> {
+                        failure.message?.takeIf { it.isNotBlank() } ?: "Check the configuration and try again."
+                    }
+
+                    hadPrevious -> {
+                        "Secure save failed. Previous credential kept. Re-enter key."
+                    }
+
+                    else -> {
+                        "Secure save failed. Re-enter key."
+                    }
+                }
         } finally {
             busy = false
         }
@@ -207,13 +273,7 @@ fun ProviderScreen(onBack: () -> Unit) {
                     .onSuccess {
                         pairing = created
                         pairingNote =
-                            if (isPrivateAddress(host)) {
-                                "Same Wi-Fi only. Encrypted with ECDH P-256 + AES-GCM, but the " +
-                                    "handshake is unauthenticated — confirm the URL on the watch " +
-                                    "matches. Prefer manual entry on untrusted networks."
-                            } else {
-                                "Not a home network. Cancel if unsure."
-                            }
+                            if (isPrivateAddress(host)) PAIRING_WARNING else "Not a home network. Cancel if unsure."
                     }.onFailure {
                         runCatching { created.close() }
                         pairingNote = "Pairing unavailable. Enter the key below."
@@ -251,6 +311,22 @@ fun ProviderScreen(onBack: () -> Unit) {
             if (message.isNotBlank()) {
                 item { Text(message, fontSize = 14.sp, color = Color(0xFFFFD28A)) }
             }
+            // One preset block, four rows. They were four near-identical copies of six state
+            // assignments each; the only fields that differ are the four literals below.
+            items(PRESETS) { preset ->
+                Button(onClick = {
+                    adding = true
+                    type = preset.type
+                    name = preset.name
+                    base = preset.base
+                    model = ""
+                    key = ""
+                    validated = false
+                    reveal = false
+                    models = emptyList()
+                    message = preset.message
+                }) { Text(preset.label) }
+            }
             items(state.profiles) { p ->
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = {
@@ -287,70 +363,6 @@ fun ProviderScreen(onBack: () -> Unit) {
                     }, modifier = Modifier.fillMaxWidth()) { Text("Edit / replace key") }
                 }
             }
-            item {
-                Button(onClick = {
-                    adding = true
-                    type = ProviderType.OPENAI_COMPATIBLE
-                    name = "Custom provider"
-                    base =
-                        ""
-                    model = ""
-                    key = ""
-                    validated = false
-                    reveal = false
-                    message =
-                        "HTTPS API base. Root defaults to /v1."
-                }) { Text("Add compatible") }
-            }
-            item {
-                Button(onClick = {
-                    adding = true
-                    type = ProviderType.OPENAI
-                    name = "OpenAI"
-                    base =
-                        "https://api.openai.com/v1"
-                    model = ""
-                    key = ""
-                    validated = false
-                    reveal = false
-                    models =
-                        emptyList()
-                    message = "Native Responses. Discover models; selected model needs text validation."
-                }) { Text("Add OpenAI") }
-            }
-            item {
-                Button(onClick = {
-                    adding = true
-                    type = ProviderType.GEMINI
-                    name = "Gemini"
-                    base =
-                        "https://generativelanguage.googleapis.com/v1beta"
-                    model = ""
-                    key = ""
-                    validated = false
-                    reveal =
-                        false
-                    models = emptyList()
-                    message =
-                        "Native generateContent. Discovery filters generation capability."
-                }) { Text("Add Gemini") }
-            }
-            item {
-                Button(onClick = {
-                    adding = true
-                    type = ProviderType.ANTHROPIC
-                    name = "Anthropic"
-                    base =
-                        "https://api.anthropic.com/v1"
-                    model = ""
-                    key = ""
-                    validated = false
-                    reveal = false
-                    models =
-                        emptyList()
-                    message = "Native Messages. Use single-workspace API key."
-                }) { Text("Add Anthropic") }
-            }
         } else {
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -360,16 +372,7 @@ fun ProviderScreen(onBack: () -> Unit) {
                     ) {
                         Text(if (pairing == null) "Set up from phone" else "Cancel pairing", fontSize = 14.sp)
                     }
-                    pairing?.let { server ->
-                        Text(server.url, fontSize = 14.sp, color = Color(0xFFA8C7FA))
-                        Text(
-                            "Same Wi-Fi only. Encrypted with ECDH P-256 + AES-GCM, but the " +
-                                "handshake is unauthenticated — confirm the URL on the watch " +
-                                "matches. Prefer manual entry on untrusted networks.",
-                            fontSize = 13.sp,
-                            color = Color(0xFFB8BDC6),
-                        )
-                    }
+                    pairing?.let { server -> Text(server.url, fontSize = 14.sp, color = Color(0xFFA8C7FA)) }
                     if (pairingNote.isNotBlank()) Text(pairingNote, fontSize = 13.sp, color = Color(0xFFB8BDC6))
                 }
             }
@@ -429,6 +432,8 @@ fun ProviderScreen(onBack: () -> Unit) {
                     scope.launch {
                         busy = true
                         message = ""
+                        // Profiles are frozen at request time, so only a mode change can retarget
+                        // this request; that is exactly what the staleness check compares.
                         val input = Triple(type, base, key)
                         val inputProfileId = edit?.id
                         try {
@@ -480,6 +485,10 @@ fun ProviderScreen(onBack: () -> Unit) {
                         message = ""
                         try {
                             val p = profile()
+                            // Snapshot what is actually being validated. The key field is NOT disabled
+                            // while busy, so it can change during the request — and this is a real
+                            // (billable) generation, so the result belongs to the snapshot, not to
+                            // whatever the fields hold when it returns.
                             val inputKey = key
                             val inputProfileId = edit?.id
                             val adapter = app.provider(p.type)
@@ -488,6 +497,11 @@ fun ProviderScreen(onBack: () -> Unit) {
                                 return@launch
                             }
                             val error = adapter.validate(p, secret(p))
+                            // Any field changed under the request invalidates its result. Without this
+                            // an edited key still got "Connected. Selected model generated
+                            // successfully." for the OLD key, and a brand-new profile is saved
+                            // without a replacement probe, so the never-validated key was persisted
+                            // under a success message and then failed with 401.
                             if (p.type != type || p.displayName != name.trim() ||
                                 p.baseUrl != Endpoints.normalize(base, BuildConfig.DEBUG) ||
                                 p.selectedModelId != model.trim() ||
@@ -518,10 +532,25 @@ fun ProviderScreen(onBack: () -> Unit) {
                 if (message.isNotBlank()) Text(message, fontSize = 14.sp, color = Color(0xFFFFD28A))
             }
             item {
+                // Save must not outrun Validate.
+                //
+                // The old gate read `edit == null || key.isBlank() || validated`, which let through
+                // exactly the two cases that matter: a NEW provider was saved without ever proving the
+                // key (Save skips the probe when there is no previous profile), and an EDIT with a
+                // blank key field was saved with a changed base URL or model, unvalidated. Both then
+                // showed "Saved securely." and failed with 401 on the first send.
+                //
+                // A name-only edit still saves freely: nothing connectivity-relevant changed.
+                val original = edit
+                val connectivityChanged =
+                    original == null ||
+                        type != original.type ||
+                        base.trim() != original.baseUrl ||
+                        model.trim() != original.selectedModelId
+                val needsValidation = key.isNotBlank() || connectivityChanged
                 Button(
                     modifier = Modifier.fillMaxWidth(),
-                    enabled =
-                        !busy && (edit == null || key.isBlank() || validated),
+                    enabled = !busy && (!needsValidation || validated),
                     onClick = {
                         scope.launch {
                             stopPairing()

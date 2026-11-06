@@ -14,6 +14,10 @@ internal object NativeMathGuard {
     // Longest names first: the regex engine takes the first alternative that matches at a position,
     // so `newenvironment` would otherwise match inside `renewenvironment` and leave the `re`
     // unmatched, letting the whole command through.
+    //
+    // The trailing `(?![a-zA-Z])` is a NAME boundary, not decoration: without it `\def` matched
+    // `\definecolor`, `\let` matched any word starting with "let", and a legitimate macro was refused
+    // for sharing a prefix with a hostile one.
     private val FORBIDDEN =
         Regex(
             "\\\\(?:" +
@@ -45,20 +49,19 @@ internal object NativeMathGuard {
                     "let",
                     "csname",
                     // boxes and transforms that can force arbitrary size or layout
+                    //
+                    // Spacing commands (\hspace, \vspace, \hskip, \vskip, \kern, \rule) are NOT here:
+                    // they are ordinary layout in real formulas, they define and include nothing, and
+                    // refusing them silently degraded an honest formula to monospace source. The
+                    // renderer clamps the output bitmap, so their worst case is a bounded blank area.
                     "reflectbox",
                     "resizebox",
                     "rotatebox",
                     "scalebox",
                     "raisebox",
                     "colorbox",
-                    "hspace",
-                    "vspace",
-                    "hskip",
-                    "vskip",
-                    "kern",
-                    "rule",
                     "magnification",
-                ).joinToString("|") + ")",
+                ).joinToString("|") + ")(?![a-zA-Z])",
         )
 
     private const val MAX_SOURCE = 4096
