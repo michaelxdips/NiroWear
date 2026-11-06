@@ -82,7 +82,10 @@ jobs:
           test -n "$apk" || { echo "::error::no release APK produced"; exit 1; }
           BUILD_TOOLS=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
           "$BUILD_TOOLS/apksigner" verify --print-certs "$apk" | tee certs.txt
-          grep -q "Signer #1 certificate DN: CN=NiroWear Release" certs.txt \
+          # The signer label differs by build-tools version: "Signer #1 certificate DN: …" on older
+          # ones, "V2 Signer: certificate DN: …" on 36/37. Anchoring on the label failed a correctly
+          # signed APK (run 42201316498), so match the DN itself.
+          grep -q "certificate DN: CN=NiroWear Release" certs.txt \
             || { echo "::error::the APK is not signed by the release identity"; exit 1; }
           "$BUILD_TOOLS/aapt2" dump badging "$apk" | grep '^package:' | tee package.txt
           sha256sum "$apk" | tee sha256.txt
