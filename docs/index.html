@@ -3049,11 +3049,11 @@ adb install -r app-release.apk</pre>
           2026-11-06 (<code>264 tests / 42 suites</code>, lint 1 warning), not quoted from memory. This
           page describes <strong>0.1.1</strong>; the three audit rounds that produced it changed chat
           lifecycle, Keystore, adapter and renderer code, so any claim here that cites an earlier
-          emulator run is dated rather than current. The connected-test suite is deliberately absent
-          from this table: its last recorded run was 2026-11-02 on an emulator, and it has not been
-          re-run since, so presenting it as current would be the exact kind of claim this section
-          exists to prevent. Test sources are not published in this repository by policy, so the result
-          XML is not linkable from here.
+          emulator run is dated rather than current. The connected-test suite is now MEASURED, not
+          assumed: <strong>66 tests, 18 failing, 0 errors</strong> on a Wear OS 37 AVD (2026-11-06, its
+          first execution ever). The 18 are itemised per class in the repository README; they are open
+          work and environment limits, not a green claim. Test sources are not published in this
+          repository by policy, so the result XML is not linkable from here.
         </p>
 
       </div>
