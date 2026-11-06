@@ -108,20 +108,20 @@ NiroWear is a **standalone** Wear app: it does not require a phone companion and
 
 There is no store listing. Two supported routes:
 
-**Prebuilt APK** — grab `app-release.apk` from [NiroWear releases](https://github.com/michaelxdips/NiroWear/releases) (stable `v0.1.0`). Signed, non-debuggable, versionCode 10. The source in *this* repository builds the same app.
+**Prebuilt APK** — grab `app-release.apk` from [NiroWear releases](https://github.com/michaelxdips/NiroWear/releases) (latest `v0.1.1`). Signed, non-debuggable, versionCode 11. The source in *this* repository builds the same app; the release workflow signs it from the tag.
 
 Verify before installing:
 
 ```powershell
 Get-FileHash .\app-release.apk -Algorithm SHA256
-# expect 319AE1CFBC6EE738F0B5B8B4C185F1AB8EBF3718A2B3D2FC43AB612D51934D71
+# expect 27F1160AAFAEF51AB6222A3D2154024EC85360E061C24F4CB94A84537FCF35E9
 ```
 
 ```powershell
 adb install -r .\app-release.apk
 ```
 
-> Stable releases live at [`michaelxdips/NiroWear`](https://github.com/michaelxdips/NiroWear) from `v0.1.0` on. The signing identity is still the Android debug key (`CN=Android Debug`, SHA-256 `7D:4E:6E:99:…:AB:E3`), disclosed in the release notes — shipping with a production keystore is an owner decision, not a code change. Historical beta APKs remain at [`NiroWear-Beta`](https://github.com/michaelxdips/NiroWear-Beta) (archived, read-only).
+> Stable releases live at [`michaelxdips/NiroWear`](https://github.com/michaelxdips/NiroWear) from `v0.1.0` on. From `v0.1.1` the release key is a dedicated NiroWear identity (`CN=NiroWear Release`, SHA-256 `0D:C5:0F:C0:19:1B:36:F3:74:33:07:4F:C7:89:8B:4D:16:52:98:CA:73:65:4F:41:6F:8F:50:F0:51:86:54:3E`, valid to 2056), built and signed by `.github/workflows/release.yml`; `v0.1.0` used the Android debug lineage, so **0.1.0 installs must be uninstalled before installing 0.1.1** (uninstalling removes local chats and saved keys). Historical beta APKs remain at [`NiroWear-Beta`](https://github.com/michaelxdips/NiroWear-Beta) (archived, read-only).
 
 **From source**
 
@@ -195,12 +195,12 @@ Every number below was read from a result file produced on this tree, not quoted
 | JVM unit tests | 264 / 264, 0 failures, 0 errors, 0 skipped (42 suites) | `app/build/test-results/testDebugUnitTest/*.xml` |
 | Connected suite (emulator `NiroWear_Rebook_20261020`, destructive — not a CI gate) | 48 / 48 last recorded 2026-11-02; **not re-run** for this revision | `app/build/outputs/androidTest-results/connected/debug/*.xml` |
 | Lint | 0 errors, 1 warning: `GradleDependency` (test runner 1.5.0→1.5.2) | `app/build/reports/lint-results-debug.xml` |
-| Release APK | Source builds an **unsigned** `app-release-unsigned.apk`, 3589237 B, SHA-256 `66ABE409…BC6E`. The published `app-release.apk` (3609553 B, `319AE1CF…34D71`) is signed by the release pipeline, not by a local build. Both are `com.nirowear` v10 / `0.1.0`, minSdk 30, targetSdk 37 | `app/build/outputs/apk/release/`, `output-metadata.json` |
-| Signing identity | `CN=Android Debug`, SHA-256 `7D:4E:6E:99:…:AB:E3` (disclosed lineage) | `apksigner verify --print-certs`, release notes |
+| Release APK | `app-release.apk` 3,619,181 B, SHA-256 `27F1160A…F35E9`, `com.nirowear` v11 / `0.1.1`, minSdk 30, targetSdk 37 — **signed** when the release keystore is in the environment (`NIROWEAR_KEYSTORE`/`_PASSWORD`, `NIROWEAR_KEY_ALIAS`, `NIROWEAR_KEY_PASSWORD`), otherwise the build emits an unsigned `app-release-unsigned.apk` | `app/build/outputs/apk/release/`, `output-metadata.json` |
+| Signing identity | `CN=NiroWear Release`, SHA-256 `0D:C5:0F:C0:19:…:86:54:3E` (valid to 2056); 0.1.0 was `CN=Android Debug` `7D:4E:6E:99:…:AB:E3`, so 0.1.0 installs need an uninstall before updating | `apksigner verify --print-certs`, release notes |
 | Fuzz probes | parser/SSE/UTF-8/hostile-LaTeX/zero-width-key corpus: 21/21 PASS, 3000-mutation run clean, 10 MB payload ~360 ms | throwaway harness, not shipped |
 | Live site | zero console errors (Edge + mobile shape), all links 200, numbers match release XML | [michaelxdips.github.io/NiroWear](https://michaelxdips.github.io/NiroWear/) |
 
-CI is green on `main` (JVM + lint + ktlint + both assembles); the connected suite is a local pre-release gate because it needs an emulator. Read the full per-claim table — including what is explicitly **unverified** (real-watch battery/thermals, TalkBack audio, production-credential sweeps) — on the [site's evidence section](https://michaelxdips.github.io/NiroWear/#status) and in [docs/release/RELEASE_NOTES_0.1.0.md](docs/release/RELEASE_NOTES_0.1.0.md).
+CI is green on `main` (JVM + lint + ktlint + both assembles); the connected suite is a local pre-release gate because it needs an emulator. Read the full per-claim table — including what is explicitly **unverified** (real-watch battery/thermals, TalkBack audio, production-credential sweeps) — on the [site's evidence section](https://michaelxdips.github.io/NiroWear/#status) and in [docs/release/RELEASE_NOTES_0.1.1.md](docs/release/RELEASE_NOTES_0.1.1.md).
 
 ## Security & privacy
 

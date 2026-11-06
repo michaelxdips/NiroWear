@@ -52,7 +52,10 @@
 !docs/adr/**
 !docs/release/PRIVACY.md
 !docs/release/BUILD_AND_RECOVERY.md
-!docs/release/RELEASE_NOTES_0.1.0.md
+# Published release notes, one file per cut. A pinned name dropped the next release's notes
+# SILENTLY: RELEASE_NOTES_0.1.1.md was written, `git add -A` reported a clean six-file commit, and
+# only `git check-ignore -v` showed it missing. The glob keeps a cut's notes with its tag.
+!docs/release/RELEASE_NOTES_*.md
 !docs/release/CHANGELOG.md
 !docs/release/BETA7_TEST_SHEET.md
 !docs/memory/ARCHITECTURE.md

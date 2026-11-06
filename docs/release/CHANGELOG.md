@@ -36,7 +36,17 @@ ships in `assets/legal/`).
 - Measured: JVM 176/176, ktlint 0 errors, connected suite 48/48 on emulator
   (XML ts=2026-11-02T06:58:50, per Task 2 report; not re-run after Tasks 3-5).
 
-## Unreleased — credential safety, turn recovery, adapter reasons
+## 0.1.1 — 2026-11-06
+
+`versionCode 11`, `versionName 0.1.1`. Everything below landed since the 0.1.0 stable cut.
+
+**Signing identity changed.** 0.1.1 is signed with a dedicated NiroWear release key
+(`SHA-256 0D:C5:0F:C0:19:1B:36:F3:74:33:07:4F:C7:89:8B:4D:16:52:98:CA:73:65:4F:41:6F:8F:50:F0:51:86:54:3E`,
+valid to 2056), not the `CN=Android Debug` lineage of 0.1.0. Android will therefore refuse an in-place
+update over 0.1.0: uninstall first. That removes local chats and saved keys — credentials are
+device-bound by design, so re-enter them after installing.
+
+### credential safety, turn recovery, adapter reasons
 
 - **A transient Keystore failure no longer destroys every saved key.** `save()` treated ANY exception
   while obtaining the key — a Keystore IPC error, a daemon restart, the first access after boot — as
@@ -74,7 +84,7 @@ ships in `assets/legal/`).
   mutation-checked; the Keystore split, the turn-recovery paths and the Compose changes are
   Android-only and have no JVM test here — the instrumentation suite still needs a device.
 
-## Unreleased — stream liveness, honest status lines, table scan identity
+### stream liveness, honest status lines, table scan identity
 
 - **A reasoning model is no longer killed as a dead socket.** The idle deadline advances only on a frame
   that DECODES to an event, which is what stops a keepalive from holding the watch radio — but the
@@ -108,7 +118,7 @@ ships in `assets/legal/`).
   was mutation-checked (production line reverted → red → restored). The answer-row lookup is
   Compose-only and has no test here.
 
-## Unreleased — math rendering: cache, modest scaling, list indent
+### math rendering: cache, modest scaling, list indent
 
 - **A formula no longer flashes its raw LaTeX on every re-appearance.** Typesetting now has an
   in-memory cache (8 entries, keyed by source and size) and the composable seeds its initial state
@@ -132,7 +142,7 @@ ships in `assets/legal/`).
   3,606,893 B. The cache and the scaling retry are Android-only (they build a bitmap) and have no
   JVM test; the list indent is pinned and mutation-verified.
 
-## Unreleased — math and list repair, honest HTTP blame
+### math and list repair, honest HTTP blame
 
 - **Display math inside a nested list was never typeset.** A depth-four bullet sits at six columns; the
   marker scan stopped at three, so `listContentIndent` stayed at the depth-two value, `$$x^2$$`
@@ -167,7 +177,7 @@ ships in `assets/legal/`).
 - Measured: JVM 242/242, 41 suites, ktlint 0, Android Lint 1 (GradleDependency), release APK
   3,606,893 B. Every fix above has a test that was verified red by mutating the production line.
 
-## Unreleased — pairing hardening, memo retention, a11y/i18n passes
+### pairing hardening, memo retention, a11y/i18n passes
 
 - **A slow TLS client can no longer take the pairing session.** Over TLS the first `read()` is where
   JSSE runs the handshake, so the request wall clock could not run inside it and `soTimeout` bounds
@@ -197,7 +207,7 @@ ships in `assets/legal/`).
 - Measured: JVM 227/227, 38 suites, ktlint 0, Android Lint 1 (GradleDependency), release APK
   3,590,509 B.
 
-## Unreleased — LAN pairing served over TLS
+### LAN pairing served over TLS
 
 - **Pairing works in a browser again.** The page needed a secure context for `crypto.subtle` and was
   served over plain HTTP from a LAN IP, where it was measured absent (`isSecureContext === false`,
@@ -211,7 +221,7 @@ ships in `assets/legal/`).
   been exercised on a physical watch (no device available); the TLS handshake and the https page are
   measured on the JVM.
 
-## Unreleased — output-cap and policy cuts are disclosed
+### output-cap and policy cuts are disclosed
 
 - **A cut answer no longer looks finished.** The compatible adapter reported `finish_reason:
   "length"` as a clean completion (the only adapter that never disclosed a cut), Gemini reported a
@@ -232,7 +242,7 @@ ships in `assets/legal/`).
 - Measured: JVM 227/227, 38 suites, ktlint 0, Android Lint 1 (GradleDependency), release APK
   3,590,509 B.
 
-## Unreleased — streaming re-parse coalesced (B3-03)
+### streaming re-parse coalesced (B3-03)
 
 - **Streaming no longer re-parses the whole answer once per token.** The parse effect restarts on
   every emission, but a delta arrives far faster than a frame and the parse is non-cooperative once
@@ -254,7 +264,7 @@ ships in `assets/legal/`).
 - Regression: `StreamingParseCoalescingTest` and `StreamingParseStarvationTest`, the former verified
   failing against the pre-fix loop and the latter pinning the debounce starvation at 0 parses.
 
-## Unreleased — native math in release builds
+### native math in release builds
 
 - **LaTeX is typeset natively in release builds.** Previously the release variant rendered math as
   monospace source text and only debug typeset it. `jlatexmath-android` is now a runtime
@@ -265,7 +275,7 @@ ships in `assets/legal/`).
 - Safety behaviour unchanged: file-inclusion macros, macro definitions and unbalanced braces are
   still refused before the parser, and rendered output is bounds-checked.
 
-## Unreleased — source published under MIT
+### source published under MIT
 
 - Application source released publicly under the **MIT license**.
 - **Credential transport:** new LAN pairing page. The watch serves a one-time URL; you paste the key
