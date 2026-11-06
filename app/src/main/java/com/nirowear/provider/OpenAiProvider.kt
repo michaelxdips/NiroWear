@@ -306,7 +306,10 @@ internal class OpenAiStreamDecoder {
                 "response.reasoning_summary_text.delta", "response.reasoning_summary_text.done",
                 "response.reasoning_text.delta", "response.reasoning_text.done",
                 -> {
-                    emptyList()
+                    // Nothing to render, but a reasoning model can stream these for minutes before
+                    // the first visible token. Returning an empty list made that look like a dead
+                    // socket, so the idle deadline killed the turn. Working keeps the bound honest.
+                    listOf(StreamEvent.Working)
                 }
 
                 // Unknown events *inside the response namespace* are informational and must not abort

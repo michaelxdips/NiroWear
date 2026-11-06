@@ -158,7 +158,13 @@ internal class ProviderHttp(
                                                 ).orEmpty()
                                                 .startsWith("text/event-stream", ignoreCase = true)
                                         ) {
-                                            send(StreamEvent.Failure(ProviderError.PROTOCOL))
+                                            // A 200 that is not an event stream never reached the model.
+                                            // An HTML body means a WEB PAGE answered — captive portal,
+                                            // hotel Wi-Fi, or a base URL pointing at a site rather than
+                                            // the endpoint. Reporting that as "stream interrupted or
+                                            // unsupported" described a stream that never existed and
+                                            // promised a partial answer that was never there.
+                                            send(StreamEvent.Failure(portalOrProtocol(it)))
                                             return@launch
                                         }
                                         val source = it.body.source()
@@ -275,3 +281,15 @@ internal class ProviderHttp(
 
 private fun networkError(error: IOException) =
     if (error is SocketTimeoutException) ProviderError.TIMEOUT else ProviderError.NETWORK_UNAVAILABLE
+
+/**
+ * A 200 whose body is not an event stream. An HTML body means a WEB PAGE answered instead of the API
+ * — captive portal, hotel Wi-Fi, or a base URL pointing at a site rather than the endpoint — so the
+ * request never reached the model and the connection is the thing to check. Anything else stays a
+ * protocol problem: the provider answered, it just did not speak SSE.
+ */
+internal fun portalOrProtocol(response: Response): ProviderError {
+    val head =
+        runCatching { response.peekBody(1024).string() }.getOrDefault("")
+    return if (head.trimStart().startsWith("<")) ProviderError.NETWORK_UNAVAILABLE else ProviderError.PROTOCOL
+}

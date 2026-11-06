@@ -396,7 +396,7 @@ class ChatViewModel(
                                 }
 
                                 is StreamEvent.Failure -> {
-                                    failure = event.error.userMessage
+                                    failure = event.error.userMessage(hasText = text.isNotEmpty())
                                     terminal = "ERROR"
                                 }
 
@@ -423,6 +423,12 @@ class ChatViewModel(
                                     if (failure == null) terminal = "SUCCESS"
                                 }
 
+                                // Proof of life, not content: the idle deadline in ProviderHttp
+                                // advances on it, and there is nothing to show.
+                                StreamEvent.Working -> {
+                                    Unit
+                                }
+
                                 StreamEvent.Truncated -> {
                                     // The answer is valid but was CUT at the provider's output cap. It
                                     // stays SUCCESS so phases and the transcript are unchanged, and the
@@ -436,7 +442,11 @@ class ChatViewModel(
                                 }
                             }
                         }
-                    if (terminal != "SUCCESS" && failure == null) failure = ProviderError.PROTOCOL.userMessage
+                    // Exactly the same promise applies to a stream that ended without its terminal
+                    // event: "partial answer kept" is only true if text actually arrived.
+                    if (terminal != "SUCCESS" && failure == null) {
+                        failure = ProviderError.PROTOCOL.userMessage(hasText = text.isNotEmpty())
+                    }
                 } catch (cancelled: CancellationException) {
                     terminal = "STOPPED"
                     throw cancelled
@@ -445,7 +455,7 @@ class ChatViewModel(
                 } catch (_: CredentialUnavailable) {
                     failure = ProviderError.CREDENTIAL_REENTRY.userMessage
                 } catch (error: SafeProviderException) {
-                    failure = error.error.userMessage
+                    failure = error.error.userMessage(hasText = text.isNotEmpty())
                 } catch (_: Exception) {
                     failure = "Cannot send. Check provider setup or local storage."
                 } finally {

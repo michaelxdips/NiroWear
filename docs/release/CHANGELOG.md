@@ -36,6 +36,40 @@ ships in `assets/legal/`).
 - Measured: JVM 176/176, ktlint 0 errors, connected suite 48/48 on emulator
   (XML ts=2026-11-02T06:58:50, per Task 2 report; not re-run after Tasks 3-5).
 
+## Unreleased — stream liveness, honest status lines, table scan identity
+
+- **A reasoning model is no longer killed as a dead socket.** The idle deadline advances only on a frame
+  that DECODES to an event, which is what stops a keepalive from holding the watch radio — but the
+  adapters returned an EMPTY list for reasoning and thinking frames, which is exactly what a model
+  streams while it thinks. A turn that thought past the deadline was failed as "Provider timed out" with
+  nothing on screen. Adapters now emit `StreamEvent.Working` for those frames: proof of life, no content.
+  Pinned end-to-end over the wire with the real Anthropic decoder and an injectable 400 ms bound, and the
+  inverse is pinned too (an Anthropic keepalive must still time out).
+- **An answer cut by `pause_turn` or `tool_use` is disclosed.** Both were counted as Completed, so a
+  server-paused turn (this client never resends) and a turn that stopped to call a tool this product
+  neither renders nor executes were stored SUCCESS with no status line — the undisclosed cut `Truncated`
+  exists to remove, and Gemini's CONTINUATION was already reported that way.
+- **"Partial answer kept." is promised only when text survived.** The three causes that can leave text
+  appended it unconditionally, so a failed connection test read "Provider timed out. Partial answer
+  kept." over an empty screen. `ProviderError.userMessage(hasText)` now decides, from the turn's own
+  accumulated text.
+- **A captive portal is not an interrupted stream.** A 200 whose body is a web page read "Stream
+  interrupted or unsupported."; it now reports that the provider was not reached, while a 200 that is
+  JSON but not SSE stays a protocol problem.
+- **A list table indented deeper than its marker reports its clamped cells.** The overflow scan compared
+  masked prefixes, so `1. | a | b |` over rows indented four never matched: the library clamped the third
+  cell and the reader dropped it with no notice. Container identity is now structural — quote depth plus
+  the enclosing list's content column.
+- **`$$` inside a table row no longer shreds the table** (it produced a blank one-cell row, the formula,
+  and a stray `| y |` paragraph). **An HTML block queues no phantom dropped-cell count** that the next
+  clean table then claimed as its own.
+- **History A→B→A no longer disables the STOPPED/error prune**: the answer row is found by id instead of
+  trusting the parse memo's insertion order.
+- Measured on this tree: JVM 257/257 in 42 suites, ktlint 0, Android Lint 1 (GradleDependency), release
+  APK 3,606,893 B. Every parser/protocol fix is pinned by a test built from the measured input and each
+  was mutation-checked (production line reverted → red → restored). The answer-row lookup is
+  Compose-only and has no test here.
+
 ## Unreleased — math rendering: cache, modest scaling, list indent
 
 - **A formula no longer flashes its raw LaTeX on every re-appearance.** Typesetting now has an

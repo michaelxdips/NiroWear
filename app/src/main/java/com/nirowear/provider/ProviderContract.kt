@@ -84,7 +84,14 @@ class SecretValue(
 }
 
 enum class ProviderError(
-    val userMessage: String,
+    private val cause: String,
+    /**
+     * True when the cause is one that can leave text behind. "Partial answer kept." is a promise about
+     * THIS turn, and it is false whenever no text arrived — a failed connection test, a dead socket
+     * before the first token, a portal page. The property is cause-only on purpose (validation paths
+     * have no answer at all); [userMessage] is the form that knows whether text survived.
+     */
+    private val keepsPartial: Boolean = false,
 ) {
     PROVIDER_REQUIRED("Add or select provider from menu."),
     PROVIDER_UNSUPPORTED("Provider adapter not available yet."),
@@ -93,13 +100,24 @@ enum class ProviderError(
     RATE_LIMITED("Rate limited. Retry later."),
     MODEL_UNAVAILABLE("Model unavailable. Choose another model."),
     NETWORK_UNAVAILABLE("Cannot reach provider. Check connection."),
-    TIMEOUT("Provider timed out. Partial answer kept."),
-    RESPONSE_TOO_LARGE("Response exceeded watch safety limit. Partial answer kept."),
-    PROTOCOL("Stream interrupted or unsupported. Partial answer kept."),
+    TIMEOUT("Provider timed out.", keepsPartial = true),
+    RESPONSE_TOO_LARGE("Response exceeded watch safety limit.", keepsPartial = true),
+    PROTOCOL("Stream interrupted or unsupported.", keepsPartial = true),
     PROMPT_BLOCKED("Request blocked by the provider's safety filter. Rephrase it."),
     SERVER("Provider server error. Retry later."),
     HTTP("Provider rejected request. Check configuration."),
     CREDENTIAL_REENTRY("Secure credential unavailable. Re-enter API key."),
+    ;
+
+    /** Cause only. Use [userMessage] where an answer may exist. */
+    val userMessage: String get() = cause
+
+    /**
+     * The same cause, with the "partial answer kept" promise added only when text actually survived
+     * this turn. [hasText] must be measured, never assumed: an empty answer with that promise on
+     * screen is the app telling the user something false.
+     */
+    fun userMessage(hasText: Boolean): String = if (keepsPartial && hasText) "$cause Partial answer kept." else cause
 }
 
 // ponytail: 1M UTF-16 units per answer; raise only after watch heap/renderer acceptance.
@@ -144,6 +162,18 @@ sealed interface StreamEvent {
     ) : StreamEvent
 
     data object Completed : StreamEvent
+
+    /**
+     * The provider is WORKING and has nothing to render yet: reasoning/thinking deltas, thought parts
+     * and other internal frames the adapters deliberately do not display.
+     *
+     * The stream idle deadline advances only on a frame that decodes to an EVENT, so a keepalive
+     * cannot hold the socket (see [ProviderHttp]); that rule is right, but it made a reasoning model
+     * look dead. A turn that thinks for longer than the deadline — testable with an injectable bound —
+     * decoded every frame to an empty list and was killed as "Provider timed out" with nothing on
+     * screen. Liveness is the adapter's judgement, not the transport's, so it travels as an event.
+     */
+    data object Working : StreamEvent
 
     /**
      * Terminal: the stream ended because the model hit its OUTPUT CAP, not because it finished.

@@ -88,6 +88,18 @@ object ResponseParser {
     private val DEEP_QUOTE = Regex("^\\s*(?:>\\s*)+")
     private val DELIMITER_CELL = Regex(":?-{1,}:?")
 
+    /**
+     * Block-level HTML openers, which CommonMark reads as an HTML block up to the next blank line and
+     * which therefore never become a table. Deliberately narrow: a stray "<" in prose must not hide a
+     * real table from the overflow scan.
+     */
+    private val HTML_BLOCK =
+        Regex(
+            "^ {0,3}(?:<!--|<(?:div|table|pre|script|style|section|details|summary|figure|" +
+                "blockquote|ul|ol|dl|p|html|body)\\b)",
+            RegexOption.IGNORE_CASE,
+        )
+
     /** Block nesting allowed before the subtree is flattened. Deep enough for real answers. */
     private const val MAX_DEPTH = 24
 
@@ -256,34 +268,39 @@ object ResponseParser {
     }
 
     /**
+     * A GFM table row. A `$$` inside one is CELL TEXT, not a display opener: extracting it mid-row
+     * flushed "| " as a paragraph, clamped the row to one blank cell, and left the rest of the row as
+     * a stray "| y |" paragraph under the formula. The cell keeps its dollars and renders as inline
+     * math — degraded, but the table survives, and no content is dropped.
+     *
+     * ponytail: two pipes is a heuristic; a prose line carrying two pipes would also keep its dollars
+     * inline. Lossless, so the ceiling is display quality only.
+     */
+    private fun isTableRow(line: String): Boolean = line.trimStart().startsWith("|") || line.count { it == '|' } >= 2
+
+    /**
      * Container identity of a line, used to decide whether two lines belong to the same table.
      *
-     * A character-count comparison is wrong for list items: the header carries a `1. ` marker while
-     * its continuation rows carry the equivalent spaces, so the removal lengths differ even though
-     * CommonMark puts both in the same container. Marker characters are masked to spaces and the
-     * continuation indent (up to three) is normalised, which makes "1. |a|" and "   |---|" compare
-     * equal while keeping a quoted header distinct from an unquoted delimiter.
+     * A prefix comparison is wrong for list items: the header carries a `1. ` marker while its
+     * continuation rows carry only spaces — and may sit DEEPER than the item's content column while
+     * still being the same item. Comparing prefixes said "different container", the scan skipped the
+     * region, so a row whose extra cell the renderer clamps vanished with no notice (measured with
+     * "1. | a | b |" over rows indented four, which CommonMark does not read as a code block).
+     *
+     * So the key is STRUCTURAL: quote depth plus the enclosing list's content column, where a line
+     * that opens an item and a line indented at least to that column are the same container. Quote
+     * markers stay distinct from list markers: the library does not join a quoted header to an
+     * unquoted delimiter, and treating them as equal queued a phantom count.
      */
-    private fun containerKey(raw: String): String {
+    private fun containerKey(
+        raw: String,
+        listIndent: Int,
+    ): String {
         val content = uncontainer(raw)
-        val markers =
-            raw
-                .substring(0, raw.length - content.length)
-                // A quote marker stays a quote marker: masking it to a space made "> |a|b|" and
-                // "- |---|---|" compare EQUAL, so a quote header over a list delimiter — which the
-                // library parses as a quote and a list, not a table — queued a phantom count that the
-                // next real table popped, and that table's hidden cells went unannounced.
-                .map {
-                    if (it == '>') {
-                        it
-                    } else if (it.isDigit() || it in ".-*+)") {
-                        ' '
-                    } else {
-                        it
-                    }
-                }.joinToString("")
-        val indent = content.takeWhile { it == ' ' }.length
-        return markers + " ".repeat(indent)
+        val quoteDepth = raw.substring(0, raw.length - content.length).count { it == '>' }
+        val indent = content.length - content.trimStart(' ').length
+        val inItem = listIndent > 0 && (content.length != raw.length || indent >= listIndent)
+        return quoteDepth.toString() + ":" + if (inItem) listIndent else indent
     }
 
     /**
@@ -353,9 +370,23 @@ object ResponseParser {
         // table indented past an item's content indent is a valid list continuation, not the indented
         // code block it looks like at top level.
         var listIndent = 0
+        // An HTML block is emitted as ONE Paragraph and never becomes a table, so a table-shaped
+        // region inside it queued a count that the next real table then reported as its own clamped
+        // cells. CommonMark ends the block at the next blank line.
+        var inHtml = false
         while (index < lines.size) {
             val raw = lines[index]
             val line = uncontainer(raw)
+            if (inHtml) {
+                if (line.isBlank()) inHtml = false
+                index++
+                continue
+            }
+            if (HTML_BLOCK.find(line) != null) {
+                inHtml = true
+                index++
+                continue
+            }
             val contentLeading = line.length - line.trimStart(' ').length
             val markerIndent = listMarkerContentIndent(raw, if (listIndent > 0) Int.MAX_VALUE else 3)
             if (markerIndent != null) {
@@ -400,7 +431,7 @@ object ResponseParser {
             // marker while its continuation rows carry the resulting spaces instead, so comparing
             // removal lengths said "different container" for a table the library actually builds — the
             // scan skipped it and the overflow queue shifted by one.
-            val key = containerKey(raw)
+            val key = containerKey(raw, listIndent)
             // Four spaces of content indentation starts an INDENTED CODE BLOCK, which CommonMark
             // never turns into a table. Counting it queued a phantom that the next real table then
             // reported, so a clean table claimed hidden cells. Measured RELATIVE to the enclosing list
@@ -415,7 +446,7 @@ object ResponseParser {
             // it as a paragraph.
             if (relativeIndent >= 4 ||
                 headerCells.isEmpty() ||
-                containerKey(delimiterRaw) != key ||
+                containerKey(delimiterRaw, listIndent) != key ||
                 !isDelimiterRow(delimiter) ||
                 splitTableRow(delimiter).size != headerCells.size
             ) {
@@ -429,7 +460,7 @@ object ResponseParser {
                 val nextRaw = lines[index]
                 val nextLine = uncontainer(nextRaw)
                 // A row only belongs to this table if it sits in the same container.
-                if (containerKey(nextRaw) != key) break
+                if (containerKey(nextRaw, listIndent) != key) break
                 val nextIndent = nextLine.length - nextLine.trimStart(' ').length
                 val nextRelative = if (listIndent > 0) (nextIndent - listIndent).coerceAtLeast(0) else nextIndent
                 if (nextRelative >= 4) break
@@ -664,7 +695,7 @@ object ResponseParser {
                         trimmed.startsWith("$$") -> "$$" to "$$"
                         else -> null
                     }
-                if (opening == null && fence == null && !indented) {
+                if (opening == null && fence == null && !indented && !isTableRow(container)) {
                     // Mid-line `$$` preceded by whitespace opens display math; glued to a word
                     // (`a$$x$$b`) both dollars stay literal, like currency.
                     val mid = findMidlineDisplay(container)

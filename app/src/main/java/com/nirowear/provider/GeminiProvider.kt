@@ -257,6 +257,7 @@ internal class GeminiStreamDecoder {
             val candidates = root["candidates"]?.jsonArray ?: return emptyList()
             if (candidates.isEmpty()) return emptyList()
             val candidate = candidates.first().jsonObject
+            var sawThought = false
             val text =
                 buildString {
                     candidate["content"]?.jsonObject?.let { content ->
@@ -270,13 +271,21 @@ internal class GeminiStreamDecoder {
                             // text contributes canonical content; thought parts are not rendered.
                             if (part["thought"]?.jsonPrimitive?.booleanOrNull != true) {
                                 part["text"].stringOrNull()?.let { append(it) }
+                            } else {
+                                sawThought = true
                             }
                         }
                     }
                 }
             if (text.isNotEmpty()) hasText = true
             buildList {
-                if (text.isNotEmpty()) add(StreamEvent.TextDelta(text))
+                if (text.isNotEmpty()) {
+                    add(StreamEvent.TextDelta(text))
+                } else if (sawThought) {
+                    // A long thinking phase streams thought-only chunks: proof of life with nothing
+                    // to render, so the idle deadline must see it as progress.
+                    add(StreamEvent.Working)
+                }
                 when (candidate["finishReason"]?.jsonPrimitive?.contentOrNull) {
                     null, "FINISH_REASON_UNSPECIFIED" -> {
                         Unit

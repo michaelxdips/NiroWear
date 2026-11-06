@@ -58,6 +58,24 @@ private val KNOWN_STOP_REASONS =
         "model_context_window_exceeded",
     )
 
+/**
+ * Stop reasons that END the answer EARLY, whatever caused them.
+ *
+ * `max_tokens` and `model_context_window_exceeded` are length caps. `pause_turn` means the server
+ * paused a long turn and expects the client to resend to continue — this client never resends, so the
+ * answer is genuinely unfinished. `tool_use` means the model stopped to call a tool that this product
+ * neither renders nor executes. All four were counted as Completed, so a cut answer was stored
+ * SUCCESS with no status line: the exact undisclosed-cut class [StreamEvent.Truncated] exists to
+ * remove, and Gemini's CONTINUATION was already reported this way.
+ */
+private val CUT_STOP_REASONS =
+    setOf(
+        "max_tokens",
+        "model_context_window_exceeded",
+        "pause_turn",
+        "tool_use",
+    )
+
 class AnthropicProvider(
     client: OkHttpClient = providerHttpClient(),
     private val allowLocalHttp: Boolean = false,
@@ -262,7 +280,9 @@ internal class AnthropicStreamDecoder {
                     // is still the only thing that proves success.
                     if (content.getValue("type").jsonPrimitive.content != "text") {
                         skipped.add(index)
-                        emptyList()
+                        // A thinking block that streams for minutes is the provider WORKING, not a
+                        // dead socket: it must keep the idle deadline alive without being rendered.
+                        listOf(StreamEvent.Working)
                     } else {
                         block = index
                         val text = requireNotNull(content["text"].stringOrNull())
@@ -280,7 +300,7 @@ internal class AnthropicStreamDecoder {
                     // Deltas for a skipped (non-text) block are expected; ignore them rather than
                     // failing the stream.
                     if (index in skipped) {
-                        emptyList()
+                        listOf(StreamEvent.Working)
                     } else {
                         require(started && block != null && index == block)
                         val delta = root.getValue("delta").jsonObject
@@ -334,7 +354,7 @@ internal class AnthropicStreamDecoder {
                     require(started && block == null && (reason == null || reason in KNOWN_STOP_REASONS))
                     if (reason == null && !hasText) {
                         listOf(StreamEvent.Failure(ProviderError.PROTOCOL))
-                    } else if (reason == "max_tokens" || reason == "model_context_window_exceeded") {
+                    } else if (reason in CUT_STOP_REASONS) {
                         listOf(StreamEvent.Truncated)
                     } else {
                         listOf(StreamEvent.Completed)

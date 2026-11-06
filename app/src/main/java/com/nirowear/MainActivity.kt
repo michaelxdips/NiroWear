@@ -619,7 +619,14 @@ private fun ChatReader(
             LaunchedEffect(historyKeys) { blockHeights.keys.retainAll(historyKeys.toSet()) }
             val spacingPx = with(LocalDensity.current) { 12.dp.roundToPx() }
             val answerId = storedMessages.lastOrNull()?.takeIf { it.role == "ASSISTANT" }?.id
-            val answerRow = parsedRows.keys.lastOrNull()?.takeIf { it.id == answerId }
+            // Find the row BY ID rather than taking the last KEY. `parsedRows` is a LinkedHashMap keyed by
+            // the row itself, and `previous + parsed` keeps an existing key's position, so after History
+            // A→B→A nothing moved, the last key was B's message, `takeIf` failed and the row read as
+            // absent: the STOPPED/error status paragraph was counted as answer content again.
+            val answerRow =
+                remember(answerId, parsedRows) {
+                    answerId?.let { id -> parsedRows.keys.firstOrNull { it.id == id } }
+                }
             val transientStopped = chatState.interrupted && !chatState.generating && storedMessages.isEmpty()
             // ONE source of truth for which trailing rows exist. The follow effect counts them and the
             // LazyColumn emits them, and the two had drifted: the count ignored the unsaved-answer row
