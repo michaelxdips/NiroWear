@@ -107,7 +107,7 @@ dependencies {
     ksp("androidx.room:room-compiler:2.8.4")
     implementation("com.squareup.okhttp3:okhttp:5.5.1")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")
-    implementation("org.commonmark:commonmark:0.24.0")
+    implementation("org.commonmark:commonmark:0.32.0")
     implementation("org.commonmark:commonmark-ext-gfm-tables:0.24.0")
     implementation("org.commonmark:commonmark-ext-autolink:0.24.0")
     testImplementation("junit:junit:4.13.2")
