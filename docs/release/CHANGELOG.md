@@ -36,6 +36,33 @@ ships in `assets/legal/`).
 - Measured: JVM 176/176, ktlint 0 errors, connected suite 48/48 on emulator
   (XML ts=2026-11-02T06:58:50, per Task 2 report; not re-run after Tasks 3-5).
 
+## 0.1.2 — 2026-11-07
+
+`versionCode 12`, `versionName 0.1.2`. One behaviour change, plus the instrumentation truth.
+
+### Validate is advisory; Save is not gated on a live call
+
+Save used to be `enabled = !busy && (!needsValidation || validated)`, so a profile could not be saved
+until a real API call succeeded. That contradicts the same screen's own message — "Models unavailable.
+Enter model manually; chat still allowed" — and it makes the app unusable exactly where a watch client
+matters: offline, behind a captive portal, or while a provider is briefly down. Measured on a Wear OS 37
+AVD, the four setup tests could never reach Save at all: the button was `clickable=true enabled=false`
+with every field filled.
+
+Save now requires the data a profile needs (name, base URL, model, and a key or an existing profile).
+An unvalidated save is announced on screen ("Not validated. Saving is allowed; the first send reports
+any problem."), and a wrong key surfaces at the first send as an error row on the conversation — which
+is visible and recoverable, unlike being unable to save. Validate and Discover keep their behaviour.
+
+Evidence: `ProviderSetupUiTest` 6/6 on the AVD (previously 4 failing), JVM gate green.
+
+### Instrumentation: first execution, and the numbers corrected
+
+The published "48 connected tests, 48/48" was never reproducible — the suite on disk is **66 methods**
+and had never run on this branch. It ran on a Wear OS 37 AVD: **66 tests, 18 failing, 0 errors** at the
+start of the audit, **14 failing** after this change. The README now itemises every remaining failure
+with its measured reason instead of quoting a number nobody had executed.
+
 ## 0.1.1 — 2026-11-06
 
 `versionCode 11`, `versionName 0.1.1`. Everything below landed since the 0.1.0 stable cut.

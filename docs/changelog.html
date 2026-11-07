@@ -130,12 +130,53 @@ p:last-child{margin-bottom:0}
     <p class="meta">Generated from git history and the NiroWear release API · 2026-11-06</p>
   </div>
 
+  <!-- 0.1.2 -->
+  <article class="release">
+    <div class="rside">
+      <span class="rver">0.1.2</span>
+      <span class="rdate">2026-11-07</span>
+      <span class="rbadge latest">Latest</span>
+    </div>
+    <div class="rbody">
+      <h2>Validate is advisory; Save is not gated on a live call</h2>
+      <p>
+        Save used to stay disabled until a real API call succeeded, which made the app unusable offline,
+        behind a captive portal, or while a provider was briefly down — and contradicted the same
+        screen's "chat still allowed" message. Save now needs the data a profile needs, and an
+        unvalidated save says so on screen.
+      </p>
+      <ul>
+        <li><strong>Save requires name, base URL, model and a key (or an existing profile)</strong> — not
+          a successful live call. The first send reports a bad key as an error row on the conversation.</li>
+        <li><strong>Validate and Discover are unchanged</strong>: Validate still makes one real call,
+          Discover still lists what the provider advertises, and discovery failure still never blocks
+          manual entry.</li>
+        <li><strong>Instrumentation executed for the first time.</strong> The published "48 / 48" was
+          never reproducible: the suite is 66 methods. Measured 66 / 31 failing at the start of the
+          audit, 66 / 14 after this release; the remaining 14 are itemised in the README.</li>
+      </ul>
+      <dl class="ident">
+        <div><dt>versionCode</dt><dd>12</dd></div>
+        <div><dt>certificate</dt><dd>0dc50fc0…543e (same as 0.1.1)</dd></div>
+        <div><dt>identity</dt><dd>CN=NiroWear Release</dd></div>
+      </dl>
+      <table class="gate">
+        <thead><tr><th>Check</th><th>Result</th></tr></thead>
+        <tbody>
+          <tr><td>JVM unit tests</td><td>264 / 264, 0 failures, 42 suites</td></tr>
+          <tr><td>lint</td><td>0 errors, 1 warning (GradleDependency)</td></tr>
+          <tr><td>Instrumented (Wear OS 37 AVD)</td><td>66 tests, 14 failing — ProviderSetupUiTest now 6/6</td></tr>
+          <tr><td>assembleRelease, signed in CI</td><td>pass, certificate asserted before publish</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </article>
+
   <!-- 0.1.1 -->
   <article class="release">
     <div class="rside">
       <span class="rver">0.1.1</span>
       <span class="rdate">2026-11-06</span>
-      <span class="rbadge latest">Latest</span>
     </div>
     <div class="rbody">
       <h2>Fixes only — and the first automated signed release</h2>

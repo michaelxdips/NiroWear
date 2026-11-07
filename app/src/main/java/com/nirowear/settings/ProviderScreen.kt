@@ -532,15 +532,16 @@ fun ProviderScreen(onBack: () -> Unit) {
                 if (message.isNotBlank()) Text(message, fontSize = 14.sp, color = Color(0xFFFFD28A))
             }
             item {
-                // Save must not outrun Validate.
+                // Validate is ADVISORY, not a gate on Save.
                 //
-                // The old gate read `edit == null || key.isBlank() || validated`, which let through
-                // exactly the two cases that matter: a NEW provider was saved without ever proving the
-                // key (Save skips the probe when there is no previous profile), and an EDIT with a
-                // blank key field was saved with a changed base URL or model, unvalidated. Both then
-                // showed "Saved securely." and failed with 401 on the first send.
-                //
-                // A name-only edit still saves freely: nothing connectivity-relevant changed.
+                // The gate read `!needsValidation || validated`, i.e. Save stayed disabled until a live
+                // call succeeded — while this very screen tells the user "Models unavailable. Enter model
+                // manually; chat still allowed". A BYOK client that cannot save a profile because the
+                // watch is offline, behind a captive portal, or the provider is briefly down is broken;
+                // it also made the four setup tests unable to reach Save at all (measured on the AVD:
+                // enabled=false with every field filled). What is required now is the data a profile
+                // needs; an unvalidated save is announced, and a wrong key surfaces at the first send as
+                // an error row on the conversation, which is visible and recoverable.
                 val original = edit
                 val connectivityChanged =
                     original == null ||
@@ -548,9 +549,12 @@ fun ProviderScreen(onBack: () -> Unit) {
                         base.trim() != original.baseUrl ||
                         model.trim() != original.selectedModelId
                 val needsValidation = key.isNotBlank() || connectivityChanged
+                val ready =
+                    name.isNotBlank() && base.isNotBlank() && model.isNotBlank() &&
+                        (key.isNotBlank() || original != null)
                 Button(
                     modifier = Modifier.fillMaxWidth(),
-                    enabled = !busy && (!needsValidation || validated),
+                    enabled = !busy && ready,
                     onClick = {
                         scope.launch {
                             stopPairing()
@@ -558,6 +562,13 @@ fun ProviderScreen(onBack: () -> Unit) {
                         }
                     },
                 ) { Text("Save securely") }
+                if (needsValidation && !validated && ready) {
+                    Text(
+                        "Not validated. Saving is allowed; the first send reports any problem.",
+                        fontSize = 13.sp,
+                        color = Color(0xFFB8BDC6),
+                    )
+                }
             }
             val deleting = edit
             if (deleting != null) {

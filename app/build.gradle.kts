@@ -1,4 +1,4 @@
-plugins {
+﻿plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.devtools.ksp")
@@ -10,7 +10,7 @@ plugins {
 //
 // standard:function-naming is disabled deliberately, not to make a number green. All seven hits
 // are @Composable functions (DocumentBlock, RichText, ...), and PascalCase is the documented
-// Compose convention for composables — a composable that returns Unit is not a factory and is
+// Compose convention for composables â€” a composable that returns Unit is not a factory and is
 // named like a type on purpose. Renaming them to camelCase would make the code non-idiomatic to
 // satisfy a rule that does not model Compose. Every other standard rule stays on.
 ktlint {
@@ -31,8 +31,8 @@ android {
         applicationId = "com.nirowear"
         minSdk = 30
         targetSdk = 37
-        versionCode = 11
-        versionName = "0.1.1"
+        versionCode = 12
+        versionName = "0.1.2"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         testInstrumentationRunnerArguments["notAnnotation"] = "com.nirowear.HostDrivenGate"
     }
