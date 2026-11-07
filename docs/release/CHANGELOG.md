@@ -68,8 +68,26 @@ quoting a number nobody had executed.
 
 The test-side pass that followed (fixture cleanup, stale MockWebServer queues, geometry assertions that
 could never pass, mojibake in two literals, and a History list offset the composable discarded on every
-close) brought the measured figure to **66 tests, 2 failing, 0 errors**. One of those was a product
-fix: the History list now keeps its scroll position when it is reopened.
+close) brought the measured figure to **66 tests, 2 failing, 0 errors**. Two of those were product
+fixes: the History list now keeps its scroll position when it is reopened, and the IME is handled on
+both typing screens.
+
+### Renderer: tables and code fences are lazy items
+
+A table was one `LazyColumn` item capped at 40 rows, with a "… N more rows" line for the rest; a code
+fence had no cap at all and was a single `Text` of the whole fence. Both were the ANR shape the cap
+existed to prevent, and the cap contradicted the rule that an answer is never shortened for the screen.
+Each table row and each 24-line code chunk is now its own item, which is the upgrade path the cap's own
+comment named: nothing is withheld. Measured on the AVD: a 120-row table reaches row 119, and a
+200-line fence keeps every line (`RenderUnitTest`, 5 JVM tests).
+
+### The IME is handled
+
+`adjustResize` plus `imePadding()` on the composer and the provider form. `targetSdk 37` is
+edge-to-edge on Android 15+, where the IME no longer shrinks the window, so the keyboard covered the
+field and the Save button on a 466 px dial. The provider form's name, base URL and model also survive
+Activity recreation now; the API key deliberately does not, because a saved-instance bundle is
+plaintext on disk.
 
 ## 0.1.1 — 2026-11-06
 

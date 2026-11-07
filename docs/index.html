@@ -2218,7 +2218,9 @@ html[data-theme="dark"] .pill-none{color:#FF9C86}
         <p>
           NiroWear is a chat client for Wear OS that treats the watch as the primary device.
           Answers arrive as semantic blocks — headings, code, math, tables — and stay
-          <strong>complete</strong> instead of being trimmed to fit a notification.
+          <strong>complete</strong> instead of being trimmed to fit a notification. A 120-row table or a
+          200-line code fence is fully reachable: rows and code chunks are their own lazy items, so
+          nothing is withheld and nothing is cut to fit the dial.
         </p>
         <p>
           You bring the provider and the key. There is no account, no relay and no server
@@ -2990,9 +2992,9 @@ adb install -r app-release.apk</pre>
               <td>OpenAiProvider, AnthropicProvider, GeminiProvider, OpenAiCompatibleProvider</td>
             </tr>
             <tr>
-              <td>Renderer emits semantic blocks, never one text node</td>
-              <td><span class="pill pill-source">Source</span> <span class="pill pill-device">JVM</span> 269 tests / 43 suites, 0 failures, 0 errors, 0 skipped.</td>
-              <td>ContentBlock.kt; app/build/test-results/testDebugUnitTest/</td>
+              <td>Renderer emits semantic blocks, never one text node — and a big table or code fence expands into per-row / per-chunk lazy items, so nothing is withheld</td>
+              <td><span class="pill pill-source">Source</span> <span class="pill pill-device">JVM</span> 269 tests / 43 suites, 0 failures, 0 errors, 0 skipped. <span class="pill pill-emu">Emulator</span> A 120-row table reaches row 119 and a 200-line fence keeps every line.</td>
+              <td>ContentBlock.kt, RenderUnit.kt; RenderUnitTest; app/build/test-results/testDebugUnitTest/</td>
             </tr>
             <tr>
               <td>Native LaTeX typesetting in release builds</td>
