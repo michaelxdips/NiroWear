@@ -108,13 +108,14 @@ NiroWear is a **standalone** Wear app: it does not require a phone companion and
 
 There is no store listing. Two supported routes:
 
-**Prebuilt APK** — grab `app-release.apk` from [NiroWear releases](https://github.com/michaelxdips/NiroWear/releases) (latest `v0.1.1`). Signed, non-debuggable, versionCode 11. The source in *this* repository builds the same app; the release workflow signs it from the tag.
+**Prebuilt APK** — grab `app-release.apk` from [NiroWear releases](https://github.com/michaelxdips/NiroWear/releases) (latest `v0.1.2`). Signed, non-debuggable, versionCode 12, and it updates 0.1.1 in place (same signing identity). The source in *this* repository builds the same app; the release workflow signs it from the tag.
 
 Verify before installing:
 
 ```powershell
 Get-FileHash .\app-release.apk -Algorithm SHA256
-# expect 0BA7DDEFD7CA51528C0D3083B23BD7EE9221715A017CD7058FA8875EFB30B207
+# compare with the SHA-256 printed in that release's body — the workflow records the
+# exact size and hash of the APK it built and signed, and a local build is not bit-identical
 ```
 
 ```powershell
@@ -167,7 +168,7 @@ Name and base URL come prefilled. Then get the key onto the watch: **open the pr
 > "not private" warning: **accept it** and the page loads and encrypts normally. The listener is valid
 > for two minutes, single use, and closes when you leave the screen.
 
-**Validate · uses API** makes one real (billable) call against the selected model to prove the key and model work together. **Discover models** lists what the provider advertises; discovery failure never blocks manual entry, because compatible endpoints legitimately vary. The app never silently substitutes a model: authentication and listing are separate, and a deprecated or mistyped model surfaces as an error you can read.
+**Validate · uses API** makes one real (billable) call against the selected model to prove the key and model work together — **advisory, not a gate**: you can save a profile without it, which is what makes the app usable on a watch that is offline or behind a captive portal. Saving unvalidated says so on the screen, and a wrong key then surfaces at the first send as an error row on the conversation. **Discover models** lists what the provider advertises; discovery failure never blocks manual entry, because compatible endpoints legitimately vary. The app never silently substitutes a model: authentication and listing are separate, and a deprecated or mistyped model surfaces as an error you can read.
 
 ### Why keys are annoying, and what we tried
 
@@ -205,7 +206,7 @@ Every number below was read from a result file produced on this tree, not quoted
 | Check | Result (measured) | Where |
 |---|---|---|
 | JVM unit tests | 264 / 264, 0 failures, 0 errors, 0 skipped (42 suites) | `app/build/test-results/testDebugUnitTest/*.xml` |
-| Connected suite (Wear OS 37 AVD, destructive — not a CI gate) | **66 tests, 18 failing, 0 errors**, measured 2026-11-06 on `emulator-5554` (`NiroWear_Audit`, x86_64, 466×466). The previously published "48 / 48" was a count from an older emulator run and no longer matches the suite (66 methods). **18 are still red** — see the list below; nothing here is claimed green | `app/build/outputs/androidTest-results/connected/debug/*.xml` |
+| Connected suite (Wear OS 37 AVD, destructive — not a CI gate) | **66 tests, 14 failing, 0 errors**, measured 2026-11-07 on `emulator-5554` (`NiroWear_Audit`, x86_64, 466×466). The previously published "48 / 48" was a count from an older emulator run and no longer matches the suite (66 methods). **14 are still red** — see the list below; nothing here is claimed green | `app/build/outputs/androidTest-results/connected/debug/*.xml` |
 | Host-gated instrumentation (7 `@HostDrivenGate` methods) | written, **never executed** (they need a host script to seed state) | `app/src/androidTest` (gitignored by policy) |
 | Lint | 0 errors, 1 warning: `GradleDependency` (test runner 1.5.0→1.5.2) | `app/build/reports/lint-results-debug.xml` |
 | Release APK | Published `v0.1.1` asset: 3,621,253 B, SHA-256 `0BA7DDEF…B207`, `com.nirowear` v11 / `0.1.1`, minSdk 30, targetSdk 37 — built and signed by `.github/workflows/release.yml`. A local cut is **not** bit-identical (a local build of the same tree measured 3,619,181 B); the hash of the asset that ships is the one in that release's body. Signing is driven by the environment (`NIROWEAR_KEYSTORE`/`_PASSWORD`, `NIROWEAR_KEY_ALIAS`, `NIROWEAR_KEY_PASSWORD`); with no keystore present the build emits an unsigned `app-release-unsigned.apk` | `app/build/outputs/apk/release/`, `output-metadata.json` |
@@ -220,7 +221,6 @@ emulator cannot prove is marked as such; the rest is open work, not a green clai
 
 | Class | Failing | Why (measured, not guessed) |
 |---|---|---|
-| `ProviderSetupUiTest` | 4 | Save is gated on a successful **Validate** (`enabled = !busy && (!needsValidation || validated)`) and the test never validates. Either the test grows per-provider Validate mocks or the gate becomes optional — a product decision. |
 | `ReaderNavigationTest` | 4 | Advanced past the lookup bug (text compares now strip the renderer's FSI/PDI marks); remaining failures are scroll-geometry assertions and an IME prompt that never reaches the field. |
 | `CompatibleChatTest`, `HistoryReadFailureTest` | 2 | 10 s coroutine budgets against a software-GPU emulator; a cold start can exceed them. |
 | `NativeProviderSwitchTest` | 1 | Asserts a stored status is null where the run produces "Stream interrupted or unsupported." — unexplained, needs a decoder trace. |
