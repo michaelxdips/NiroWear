@@ -15,7 +15,15 @@
         android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
         <uses-library android:name="com.google.android.wearable" android:required="true" />
         <meta-data android:name="com.google.android.wearable.standalone" android:value="true" />
-        <activity android:name=".MainActivity" android:exported="true" android:taskAffinity="com.nirowear">
+        <!-- adjustResize is load-bearing, not cosmetic: the composer and the provider form are the
+             two screens where typing is the primary input, and both are Compose columns that rely on
+             the window shrinking. Without it the IME covered the field and the Send button on the
+             466 px dial, so a typed prompt could be neither seen nor sent. -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:taskAffinity="com.nirowear"
+            android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

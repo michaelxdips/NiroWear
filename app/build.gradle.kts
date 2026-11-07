@@ -115,7 +115,7 @@ dependencies {
     // with MIT code and distributing the executable under terms of our choice. Notices + source
     // offer ship in assets/legal; see THIRD_PARTY_NOTICES.md.
     implementation("ru.noties:jlatexmath-android:0.2.0")
-    androidTestImplementation("androidx.test:runner:1.5.0")
+    androidTestImplementation("androidx.test:runner:1.5.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
     androidTestImplementation("com.squareup.okhttp3:mockwebserver:5.5.1")
     testImplementation("com.squareup.okhttp3:mockwebserver:5.5.1")

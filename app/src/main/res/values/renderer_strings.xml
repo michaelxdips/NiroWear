@@ -8,10 +8,6 @@
     <string name="reader_streaming">Streaming…</string>
     <string name="reader_stopped_partial">Stopped · partial answer kept</string>
     <string name="reader_stopped_before_start">Stopped before the answer started</string>
-    <plurals name="renderer_hidden_rows">
-        <item quantity="one">… one more row. The table was cut to keep the reader responsive.</item>
-        <item quantity="other">… %1$d more table rows. The table was cut to keep the reader responsive.</item>
-    </plurals>
     <plurals name="renderer_hidden_cells">
         <!-- Cells are dropped by the Markdown library when a row carries more cells than the header,
              not for reader performance: the old wording told the user a performance story about

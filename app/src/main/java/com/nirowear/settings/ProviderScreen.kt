@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
@@ -27,6 +28,7 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -118,10 +120,14 @@ fun ProviderScreen(onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
     var edit by remember { mutableStateOf<ProviderProfile?>(null) }
     var adding by remember { mutableStateOf(false) }
-    var type by remember { mutableStateOf(ProviderType.OPENAI_COMPATIBLE) }
-    var name by remember { mutableStateOf("Custom provider") }
-    var base by remember { mutableStateOf("") }
-    var model by remember { mutableStateOf("") }
+    // Survive Activity recreation (rotation, theme change, a Watch-face handoff). These are the
+    // non-secret fields of a half-filled form; losing them meant re-typing a base URL on a watch
+    // keyboard. The API KEY below stays `remember` on purpose: a saved-instance bundle is plaintext
+    // on disk, and the credential contract forbids repopulating it.
+    var type by rememberSaveable { mutableStateOf(ProviderType.OPENAI_COMPATIBLE) }
+    var name by rememberSaveable { mutableStateOf("Custom provider") }
+    var base by rememberSaveable { mutableStateOf("") }
+    var model by rememberSaveable { mutableStateOf("") }
     var key by remember { mutableStateOf("") } // Never rememberSaveable, persist or repopulate decrypted secret.
     var reveal by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf("") }
@@ -282,7 +288,10 @@ fun ProviderScreen(onBack: () -> Unit) {
     }
 
     LazyColumn(
-        Modifier.fillMaxSize().background(Color.Black),
+        // imePadding: targetSdk 37 means edge-to-edge on Android 15+, where adjustResize no longer
+        // shrinks the window. Without this the keyboard sat over the API-key field and Save on the
+        // 466 px dial — the one screen where typing is the whole task.
+        Modifier.fillMaxSize().imePadding().background(Color.Black),
         state = listState,
         contentPadding = PaddingValues(horizontal = 26.dp, vertical = 30.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),

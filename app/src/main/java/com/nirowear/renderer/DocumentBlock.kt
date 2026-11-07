@@ -118,19 +118,12 @@ internal fun openHttpLink(
     }
 }
 
-/**
- * Rows a single table may render.
- *
- * The reason is COMPOSITION COST, not screen size: a table is one LazyColumn item, so every row
- * composes and measures in a single pass, and a 1000x4 table from a model becomes ~8000 Text nodes at
- * once — seconds of main-thread work and an ANR candidate. AGENTS.md forbids shortening an answer for
- * the screen, so this is a cost ceiling and the reader is told how many rows it did not show; it is not
- * a "fits the watch" opinion.
- *
- * ponytail: raise this only with a per-row LazyColumn item so the cost is paid lazily; the cap exists
- * to bound one measuring pass.
- */
-private const val MAX_TABLE_ROWS = 40
+// No row cap here any more.
+//
+// The old MAX_TABLE_ROWS = 40 existed because a table was ONE LazyColumn item, so every row composed
+// and measured in a single pass and a 1000x4 table became ~8000 Text nodes at once. The reader now
+// expands each row into its own item (RenderUnit.TableRowUnit) — the upgrade path that cap's own
+// comment named — so the cost is paid as the reader reaches a row and nothing is withheld.
 
 /** ponytail: 6 link buttons per paragraph; the rest stay inline in the text. */
 private const val MAX_LINK_ACTIONS = 6
@@ -213,43 +206,26 @@ fun DocumentBlock(block: ContentBlock) {
         }
 
         is ContentBlock.Table -> {
-            // A table is ONE LazyColumn item, so every row composes and measures in a single pass.
-            // A 1000x4 table from a model becomes ~8000 Text nodes at once — seconds of main-thread
-            // work and an ANR candidate on a watch. Cap the rendered rows and say so explicitly;
-            // silently dropping rows would read as "the table ended here", which is worse.
-            val shown = block.rows.take(MAX_TABLE_ROWS)
-            val hidden = block.rows.size - shown.size
+            // A table that still reaches here as ONE block is the small case: the reader expands
+            // anything longer than a row into per-row items (RenderUnit.TableRowUnit), so this path
+            // only draws a header-only table or a single row. The old 40-row cap and its
+            // "N rows withheld" notice are gone with the cap — nothing is withheld any more.
             val resources = LocalResources.current
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (block.rows.isEmpty()) block.headers.forEach { RichText(it, heading = 4) }
-                if (hidden > 0) {
-                    RichText(
-                        listOf(
-                            InlineContent(
-                                resources.getQuantityString(R.plurals.renderer_hidden_rows, hidden, hidden),
-                            ),
-                        ),
-                        // NOT a heading: level 4 is bold at body size, so the truncation note looked
-                        // like one more table header instead of a note about missing rows.
-                        heading = null,
-                    )
-                }
-                // The rows follow the notice on purpose: at 40 rows (~70dp each) the notice sat ten
-                // screens below the header, so a reader saw a table that simply ended.
-                shown.forEachIndexed { rowIndex, cells ->
+                block.rows.forEachIndexed { rowIndex, cells ->
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         cells.forEachIndexed { index, cell ->
                             val label = block.headers.getOrNull(index).orEmpty()
                             // Heading semantics only on the FIRST row's labels. The label is repeated
                             // per row so a watch reader keeps the column association, but marking
-                            // every repetition as a heading gave TalkBack ~120 heading stops for a
-                            // 40x3 table, all reading "Name / Price / Qty".
+                            // every repetition as a heading gave TalkBack one heading stop per row.
                             if (label.isNotEmpty()) RichText(label, heading = if (rowIndex == 0) 4 else null)
                             RichText(cell)
                         }
                     }
                     // No rule after the LAST row: a trailing rule read as a table that continued below.
-                    if (rowIndex < shown.lastIndex) {
+                    if (rowIndex < block.rows.lastIndex) {
                         Box(Modifier.fillMaxWidth().height(1.dp).background(Color(0xFF5F646C)))
                     }
                 }
@@ -272,6 +248,53 @@ fun DocumentBlock(block: ContentBlock) {
 
         ContentBlock.Divider -> {
             Box(Modifier.fillMaxWidth().height(1.dp).background(Color(0xFF5F646C)))
+        }
+    }
+}
+
+/**
+ * Renders one [RenderUnit].
+ *
+ * The reader composes these instead of whole blocks, so a long code fence or a large table pays its
+ * cost one item at a time instead of in a single measuring pass.
+ */
+@Composable
+internal fun RenderUnitView(unit: RenderUnit) {
+    when (unit) {
+        is RenderUnit.Whole -> {
+            DocumentBlock(unit.block)
+        }
+
+        is RenderUnit.CodeChunk -> {
+            Column {
+                unit.language?.let { Text(it, fontSize = 12.sp, color = Color(0xFFAACCCC)) }
+                Text(
+                    unit.lines.joinToString("\n"),
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp,
+                    // Horizontal scroll per chunk, not per fence: a 5000-line fence would otherwise
+                    // put one scroll state and one huge measured node back into a single item.
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 6.dp),
+                )
+            }
+        }
+
+        is RenderUnit.TableRowUnit -> {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    unit.cells.forEachIndexed { index, cell ->
+                        val label = unit.headers.getOrNull(index).orEmpty()
+                        // Heading semantics only on the first row, so a 100-row table does not become
+                        // 100 heading stops for TalkBack.
+                        if (label.isNotEmpty()) RichText(label, heading = if (unit.rowIndex == 0) 4 else null)
+                        RichText(cell)
+                    }
+                }
+                // A rule between rows, never after the last: a trailing rule read as a table that
+                // continued below.
+                if (!unit.last) Box(Modifier.fillMaxWidth().height(1.dp).background(Color(0xFF5F646C)))
+            }
         }
     }
 }
