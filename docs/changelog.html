@@ -158,7 +158,7 @@ p:last-child{margin-bottom:0}
           wrong: the tests share one app process, so a class that passes alone can fail in suite
           order. Test-side fixes afterwards (fixture cleanup, stale mock queues, impossible geometry
           assertions, bidi-mojibake literals, and a History list offset the composable discarded on
-          every close) brought the measured figure to <strong>66 / 3</strong>.</li>
+          every close) brought the measured figure to <strong>66 / 2</strong>.</li>
       </ul>
       <dl class="ident">
         <div><dt>versionCode</dt><dd>12</dd></div>
@@ -170,7 +170,7 @@ p:last-child{margin-bottom:0}
         <tbody>
           <tr><td>JVM unit tests</td><td>264 / 264, 0 failures, 42 suites</td></tr>
           <tr><td>lint</td><td>0 errors, 1 warning (GradleDependency)</td></tr>
-          <tr><td>Instrumented (Wear OS 37 AVD)</td><td>66 tests, 18 failing at release; 3 failing after the test-side fixes (measured)</td></tr>
+          <tr><td>Instrumented (Wear OS 37 AVD)</td><td>66 tests, 18 failing at release; 2 failing after the test-side fixes (measured)</td></tr>
           <tr><td>assembleRelease, signed in CI</td><td>pass, certificate asserted before publish</td></tr>
         </tbody>
       </table>

@@ -2991,7 +2991,7 @@ adb install -r app-release.apk</pre>
             </tr>
             <tr>
               <td>Renderer emits semantic blocks, never one text node</td>
-              <td><span class="pill pill-source">Source</span> <span class="pill pill-device">JVM</span> 264 tests / 42 suites, 0 failures, 0 errors, 0 skipped.</td>
+              <td><span class="pill pill-source">Source</span> <span class="pill pill-device">JVM</span> 269 tests / 43 suites, 0 failures, 0 errors, 0 skipped.</td>
               <td>ContentBlock.kt; app/build/test-results/testDebugUnitTest/</td>
             </tr>
             <tr>
@@ -3006,7 +3006,7 @@ adb install -r app-release.apk</pre>
             </tr>
             <tr>
               <td>Static analysis is clean</td>
-              <td><span class="pill pill-device">JVM</span> lintDebug: 0 errors, 1 warning — 1 GradleDependency (test runner 1.5.0→1.5.2). Dependency-freshness notice only; nothing failing.</td>
+              <td><span class="pill pill-device">JVM</span> lintDebug: 0 errors, 0 warnings. The last GradleDependency notice was cleared by bumping androidx.test:runner 1.5.0 → 1.5.2.</td>
               <td>app/build/reports/lint-results-debug.xml</td>
             </tr>
             <tr>
@@ -3046,15 +3046,15 @@ adb install -r app-release.apk</pre>
 
         <p class="status-note">
           The JVM and lint figures above were read from the result XML produced by a forced re-run on
-          2026-11-06 (<code>264 tests / 42 suites</code>, lint 1 warning), not quoted from memory. This
+          2026-11-08 (<code>269 tests / 43 suites</code>, lint 0 warnings), not quoted from memory. This
           page describes <strong>0.1.1</strong>; the three audit rounds that produced it changed chat
           lifecycle, Keystore, adapter and renderer code, so any claim here that cites an earlier
           emulator run is dated rather than current. The connected-test suite is now MEASURED, not
-          assumed: <strong>66 tests, 3 failing, 0 errors</strong> on a Wear OS 37 AVD (2026-11-07). An
+          assumed: <strong>66 tests, 2 failing, 0 errors</strong> on a Wear OS 37 AVD (2026-11-08). An
           earlier revision of this page said "14 failing": that figure was arithmetic from a partial
           run, not a measurement, and was wrong — the tests share one app process, so a class that
           passes on its own can still fail in suite order. A full-suite run at that point reported 18,
-          and the test-side fixes that followed brought it to the measured 3. Those
+          and the test-side fixes that followed brought it to the measured 2. Those
           are itemised per class in the repository README; they are open
           work and environment limits, not a green claim. Test sources are not published in this
           repository by policy, so the result XML is not linkable from here.

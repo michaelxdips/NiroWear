@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -95,7 +96,10 @@ import com.nirowear.data.searchMessages
 import com.nirowear.renderer.ContentBlock
 import com.nirowear.renderer.DocumentBlock
 import com.nirowear.renderer.InlineContent
+import com.nirowear.renderer.RenderUnitView
 import com.nirowear.renderer.ResponseParser
+import com.nirowear.renderer.renderUnitsFor
+import com.nirowear.renderer.unitRangeByBlock
 import com.nirowear.settings.ProviderScreen
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -256,6 +260,14 @@ private fun ChatReader(
     var footerHeight by remember { androidx.compose.runtime.mutableIntStateOf(0) }
     val renderedHistory = historyBlocks
     val historyKeys = remember(renderedHistory) { historyKeysFor(renderedHistory) }
+    // Composition is per UNIT, bookkeeping per BLOCK. A long code fence or a big table expands into
+    // many items so its cost is paid as the reader reaches it; anchors, heights and scroll targets
+    // stay expressed in blocks and are translated through `unitRanges`.
+    val renderUnits = remember(renderedHistory, historyKeys) { renderUnitsFor(renderedHistory, historyKeys) }
+    val unitRanges =
+        remember(renderUnits, renderedHistory.size) {
+            unitRangeByBlock(renderUnits, renderedHistory.size)
+        }
     // One lookup per message, not one per rendered block. The item body used to call
     // storedMessages.find { it.id == messageId } for EVERY block, which is O(blocks x messages) on
     // every recomposition — with a 200-message conversation and several blocks per message that is
@@ -365,10 +377,13 @@ private fun ChatReader(
     fun saveReaderPosition() {
         val id = chatState.conversationId ?: return
         if (parsedConversation != id || historyBlocks.isEmpty() || renderLab) return
+        // The list is indexed by UNIT; an anchor is expressed in BLOCKS. Translate before reading
+        // the message, or a flattened table/fence would save an index past the block list.
+        val unitIndex =
+            (listState.firstVisibleItemIndex - if (notice.isNotEmpty()) 1 else 0).coerceAtLeast(0)
         val index =
-            (listState.firstVisibleItemIndex - if (notice.isNotEmpty()) 1 else 0).coerceIn(
-                historyBlocks.indices,
-            )
+            renderUnits.getOrNull(unitIndex)?.blockIndex?.coerceIn(historyBlocks.indices)
+                ?: historyBlocks.indices.first
         val messageId = historyBlocks[index].first
         val message = storedMessages.find { it.id == messageId } ?: return
         anchors[id] =
@@ -406,7 +421,9 @@ private fun ChatReader(
             following = a?.following ?: (chatState.generating || followNewConversation)
             val position =
                 a?.resolve(historyBlocks, messageById.mapValues { it.value.rawContent.hashCode() }) ?: (0 to 0)
-            listState.scrollToItem(position.first + if (notice.isNotEmpty()) 1 else 0, position.second)
+            // resolve() answers in BLOCK indices; scrollToItem counts UNITS.
+            val targetUnit = unitRanges.getOrNull(position.first)?.takeIf { !it.isEmpty() }?.first ?: position.first
+            listState.scrollToItem(targetUnit + if (notice.isNotEmpty()) 1 else 0, position.second)
             restoredConversation = id
             followNewConversation = false
         }
@@ -527,7 +544,11 @@ private fun ChatReader(
             )
         } else if (editing) {
             Column(
-                Modifier.fillMaxSize().padding(horizontal = 32.dp, vertical = 28.dp),
+                // imePadding, not just adjustResize: this app targets SDK 37, so on Android 15+
+                // it is edge-to-edge by default and the IME arrives as an INSET the window no
+                // longer shrinks for. Without consuming it, the keyboard covered the field and the
+                // Send button on the 466 px dial.
+                Modifier.fillMaxSize().imePadding().padding(horizontal = 32.dp, vertical = 28.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Text("Prompt", modifier = Modifier.align(Alignment.CenterHorizontally))
@@ -716,7 +737,7 @@ private fun ChatReader(
                     (chatState.rawMarkdown != null || storedMessages.isNotEmpty())
                 ) {
                     val count =
-                        historyBlocks.size +
+                        renderUnits.size +
                             (if (liveBlocksShown) blocks.size else 0) +
                             (if (noticeRowShown) 1 else 0) +
                             (if (transientErrorShown) 1 else 0) +
@@ -725,28 +746,48 @@ private fun ChatReader(
                             (if (emptyPromptShown) 1 else 0) +
                             (if (retryRowShown) 1 else 0) +
                             (if (streamingRowShown) 1 else 0)
-                    val firstAnswer = answerIndices.firstOrNull()?.plus(if (notice.isNotEmpty()) 1 else 0)
+
+                    // Everything above is a BLOCK index; the list is indexed by UNIT. A long code
+                    // fence or a big table is many units, so a block's first item is its anchor and
+                    // its last item is what "scroll to the bottom of this block" means.
+                    fun firstUnit(blockIndex: Int): Int? =
+                        unitRanges.getOrNull(blockIndex)?.takeIf { !it.isEmpty() }?.first
+
+                    fun lastUnit(blockIndex: Int): Int? =
+                        unitRanges.getOrNull(blockIndex)?.takeIf { !it.isEmpty() }?.last
+
+                    val noticeItems = if (notice.isNotEmpty()) 1 else 0
+                    val firstAnswer = answerIndices.firstOrNull()?.let(::firstUnit)?.plus(noticeItems)
                     if (!chatState.generating && !measuredAnswer && firstAnswer != null) {
                         measuredAnswer = true
                         listState.scrollToItem(firstAnswer)
                         androidx.compose.runtime.withFrameNanos { }
                     }
-                    val heights = answerIndices.map { blockHeights[historyKeys[it]] }
+                    // Every unit of the answer, not one per block: a flattened table or fence spans
+                    // several items and a per-block height would undercount it and scroll short.
+                    val heights =
+                        answerIndices.flatMap { blockIndex ->
+                            val range = unitRanges.getOrNull(blockIndex) ?: IntRange.EMPTY
+                            range.map { unit -> blockHeights[renderUnits.getOrNull(unit)?.key] }
+                        }
                     val viewport = listState.layoutInfo.let { it.viewportEndOffset - it.viewportStartOffset }
                     val answerFits =
                         heights.isNotEmpty() && heights.all { it != null } &&
                             heights.sumOf { it ?: 0 } + spacingPx * (heights.size - 1) <= viewport - spacingPx * 2
                     if (!chatState.generating && answerRow?.status == "STOPPED") {
                         // Keep the single persisted status before Retry visible; never follow a detached reader.
-                        listState.scrollToItem(historyBlocks.lastIndex + if (notice.isNotEmpty()) 1 else 0)
+                        listState.scrollToItem(
+                            (lastUnit(historyBlocks.lastIndex) ?: (count - 1)) + noticeItems,
+                        )
                     } else if (answerFits && firstAnswer != null) {
                         listState.scrollToItem(firstAnswer)
                     } else if (listState.canScrollForward) {
                         val lastContent = answerIndices.lastOrNull()
-                        val height = lastContent?.let { blockHeights[historyKeys[it]] }
-                        if (!chatState.generating && lastContent != null && height != null) {
+                        val lastContentUnit = lastContent?.let(::lastUnit)
+                        val height = lastContentUnit?.let { blockHeights[renderUnits.getOrNull(it)?.key] }
+                        if (!chatState.generating && lastContentUnit != null && height != null) {
                             listState.scrollToItem(
-                                lastContent + if (notice.isNotEmpty()) 1 else 0,
+                                lastContentUnit + noticeItems,
                                 (height - viewport + spacingPx).coerceAtLeast(0),
                             )
                         } else {
@@ -814,13 +855,16 @@ private fun ChatReader(
                                     "viewport=${listState.layoutInfo.let {
                                         it.viewportEndOffset - it.viewportStartOffset
                                     }};answer=" +
-                                    answerIndices.joinToString(",") { index ->
-                                        historyBlocks
-                                            .getOrNull(
-                                                index,
-                                            )?.let { blockHeights[historyKeys[index]] }
-                                            ?.toString()
-                                            ?: "unknown"
+                                    answerIndices.joinToString(",") { blockIndex ->
+                                        val range = unitRanges.getOrNull(blockIndex) ?: IntRange.EMPTY
+                                        if (range.isEmpty()) {
+                                            "unknown"
+                                        } else {
+                                            range
+                                                .sumOf { unit ->
+                                                    blockHeights[renderUnits.getOrNull(unit)?.key] ?: 0
+                                                }.toString()
+                                        }
                                     } +
                                     ";index=${listState.firstVisibleItemIndex}" +
                                     ";offset=${listState.firstVisibleItemScrollOffset}" +
@@ -907,10 +951,11 @@ private fun ChatReader(
                     // showed every question twice.
                     if (!renderLab && parsedConversation == chatState.conversationId) {
                         itemsIndexed(
-                            renderedHistory,
-                            key = { index, _ -> historyKeys[index] },
-                        ) { index, (messageId, block) ->
-                            val message = messageById[messageId]
+                            renderUnits,
+                            key = { _, unit -> unit.key },
+                        ) { _, unit ->
+                            val messageId = renderedHistory.getOrNull(unit.blockIndex)?.first
+                            val message = messageId?.let { messageById[it] }
                             val editable = message?.role == "USER" && !chatState.generating
                             val editModifier =
                                 if (editable) {
@@ -922,17 +967,17 @@ private fun ChatReader(
                                             // left exactly as it was, so abandoning the edit cannot
                                             // destroy it and cannot resurrect it later either.
                                             editText = message.rawContent
-                                            editedId = messageId
+                                            editedId = message.id
                                             editing = true
                                         })
                                 } else {
                                     Modifier
                                 }
                             Box(
-                                Modifier.onSizeChanged { blockHeights[historyKeys[index]] = it.height }.then(
+                                Modifier.onSizeChanged { blockHeights[unit.key] = it.height }.then(
                                     editModifier,
                                 ),
-                            ) { DocumentBlock(block) }
+                            ) { RenderUnitView(unit) }
                         }
                     }
                     // The live blocks render the IN-FLIGHT answer only. When a terminal write fails, the ViewModel

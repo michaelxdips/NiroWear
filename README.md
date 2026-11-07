@@ -59,7 +59,7 @@ payload.
 
 **One linear conversation.** Editing an earlier user message replaces it, deletes everything after it, and regenerates from that point. Retry truncates the failed assistant message and resends. There are no branches and no alternate-response variants to choose between. Switching provider or model keeps the same history, and each assistant message records which profile and model produced it.
 
-**A reader, not a bubble.** Assistant output is parsed into semantic blocks — headings, paragraphs, lists, quotes, inline code, fenced code, inline/display math, tables, dividers, links — and rendered as a document. Raw Markdown is stored in Room, so the renderer can improve without a migration. Tables become labelled vertical records; a 1000-row table renders at most 40 rows with an explicit "… N more rows" line rather than an ANR.
+**A reader, not a bubble.** Assistant output is parsed into semantic blocks — headings, paragraphs, lists, quotes, inline code, fenced code, inline/display math, tables, dividers, links — and rendered as a document. Raw Markdown is stored in Room, so the renderer can improve without a migration. Tables become labelled vertical records. Table rows and long code fences are each their own lazy item (one row per item, 24 lines per chunk), so a 120-row table or a 200-line fence is fully reachable and nothing is withheld — the old 40-row cap and its "… N more rows" line are gone.
 
 **Wide content stays readable.** Code and formulas are never shrunk into illegibility. They pan horizontally inside a single vertical reader, so a long line costs a swipe rather than your eyesight. Display math is promoted to a pannable block when it overflows; anything the math renderer deliberately refuses (file-inclusion macros, macro definitions, unbalanced braces) falls back to readable source text, never a blank.
 
@@ -72,7 +72,7 @@ permission. FTS5 was tried first and measured impossible here: Android's bundled
 
 **Answers sized by the question, never by the screen.** The system instruction asks for the full answer the question needs — facts, caveats, steps, examples, code, math, table rows — and to make a long answer navigable with structure (headings, lists, tables, fences, display math) rather than shorter. The client never truncates an answer to fit the display; the earlier instruction asked for the shortest answer *because* the device is a watch, which is exactly the reason the UX contract forbids.
 
-**Keyboard and voice.** Both are first-class entry points. Voice delegates to the platform recognizer and always returns text you can review before sending.
+**Keyboard and voice.** Both are first-class entry points. Voice delegates to the platform recognizer and always returns text you can review before sending. The window declares `adjustResize` and both typing screens consume the IME inset, because the app targets SDK 37 — edge-to-edge on Android 15+ — where the IME no longer shrinks the window and would otherwise cover the field and the Send button on a 466 px dial. A half-filled provider form also survives Activity recreation now (name, base URL and model are saved instance state; the API key deliberately is not).
 
 ## Screenshots
 
@@ -205,10 +205,10 @@ Every number below was read from a result file produced on this tree, not quoted
 
 | Check | Result (measured) | Where |
 |---|---|---|
-| JVM unit tests | 264 / 264, 0 failures, 0 errors, 0 skipped (42 suites) | `app/build/test-results/testDebugUnitTest/*.xml` |
-| Connected suite (Wear OS 37 AVD, destructive — not a CI gate) | **66 tests, 3 failing, 0 errors**, measured 2026-11-07 on `emulator-5554` (`NiroWear_Audit`, x86_64, 466×466) from `app/build/outputs/androidTest-results/connected/debug/*.xml`. Two earlier figures were **not** measured: "48 / 48" came from an older emulator run, and "14 failing" was arithmetic (18 minus four setup tests re-run in isolation) rather than a full-suite run — that run reported 18. Test-side fixes (fixture cleanup, stale mock queues, impossible geometry assertions, bidi-mojibake literals, a History offset that was thrown away on every close) brought it to the 3 below; one of those was a real product fix. Nothing else is claimed green | `app/build/outputs/androidTest-results/connected/debug/*.xml` |
+| JVM unit tests | 269 / 269, 0 failures, 0 errors, 0 skipped (43 suites) | `app/build/test-results/testDebugUnitTest/*.xml` |
+| Connected suite (Wear OS 37 AVD, destructive — not a CI gate) | **66 tests, 2 failing, 0 errors**, measured 2026-11-07 on `emulator-5554` (`NiroWear_Audit`, x86_64, 466×466) from `app/build/outputs/androidTest-results/connected/debug/*.xml`. Two earlier figures were **not** measured: "48 / 48" came from an older emulator run, and "14 failing" was arithmetic (18 minus four setup tests re-run in isolation) rather than a full-suite run — that run reported 18. Test-side fixes (fixture cleanup, stale mock queues, impossible geometry assertions, bidi-mojibake literals, a History offset that was thrown away on every close) brought it to the 2 below; one of those was a real product fix. Nothing else is claimed green | `app/build/outputs/androidTest-results/connected/debug/*.xml` |
 | Host-gated instrumentation (6 `@HostDrivenGate` methods) | written, **never executed** (they need a host script to seed state) | `app/src/androidTest` (gitignored by policy) |
-| Lint | 0 errors, 1 warning: `GradleDependency` (test runner 1.5.0→1.5.2) | `app/build/reports/lint-results-debug.xml` |
+| Lint | 0 errors, 0 warnings | `app/build/reports/lint-results-debug.xml` |
 | Release APK | Published `v0.1.1` asset: 3,621,253 B, SHA-256 `0BA7DDEF…B207`, `com.nirowear` v11 / `0.1.1`, minSdk 30, targetSdk 37 — built and signed by `.github/workflows/release.yml`. A local cut is **not** bit-identical (a local build of the same tree measured 3,619,181 B); the hash of the asset that ships is the one in that release's body. Signing is driven by the environment (`NIROWEAR_KEYSTORE`/`_PASSWORD`, `NIROWEAR_KEY_ALIAS`, `NIROWEAR_KEY_PASSWORD`); with no keystore present the build emits an unsigned `app-release-unsigned.apk` | `app/build/outputs/apk/release/`, `output-metadata.json` |
 | Signing identity | `CN=NiroWear Release`, SHA-256 `0D:C5:0F:C0:19:…:86:54:3E` (valid to 2056); 0.1.0 was `CN=Android Debug` `7D:4E:6E:99:…:AB:E3`, so 0.1.0 installs need an uninstall before updating | `apksigner verify --print-certs`, release notes |
 | Fuzz probes | parser/SSE/UTF-8/hostile-LaTeX/zero-width-key corpus: 21/21 PASS, 3000-mutation run clean, 10 MB payload ~360 ms | throwaway harness, not shipped |
@@ -216,15 +216,23 @@ Every number below was read from a result file produced on this tree, not quoted
 
 CI is green on `main` (JVM + lint + ktlint + both assembles); the connected suite is a local pre-release gate because it needs an emulator. Read the full per-claim table — including what is explicitly **unverified** (real-watch battery/thermals, TalkBack audio, production-credential sweeps) — on the [site's evidence section](https://michaelxdips.github.io/NiroWear/#status) and in [docs/release/RELEASE_NOTES_0.1.1.md](docs/release/RELEASE_NOTES_0.1.1.md).
 
-**Instrumentation status, measured 2026-11-07** (Wear OS 37 AVD, 66 methods, 3 failing). An earlier
+**Instrumentation status, measured 2026-11-08** (Wear OS 37 AVD, 66 methods, 2 failing). An earlier
 "14 failing" figure was arithmetic from a partial run and was wrong; a full-suite run reported 18 at
-that time. What an emulator cannot prove is marked as such; the rest is open work, not a green claim:
+that time, then 3 after the test-side pass. What an emulator cannot prove is marked as such; the rest
+is open work, not a green claim:
 
 | Class | Failing | Why (measured, not guessed) |
 |---|---|---|
-| `ReaderNavigationTest.actualWearIme…` | 1 | `input text` delivered nothing to the composer (`""` measured) even with the system IME reporting `mInputShown=true` and the field focused. Emulator soft-IME injection path; the other six methods in the class pass, including real touch edit/retry and history restore. |
 | `RotaryInputTest` | 1 | Emulator has no rotary/bezel input source — environment, not a defect. |
 | `PairingUiTest` | 1 | Needs a real LAN/phone browser; the emulator cannot exercise the certificate click-through. |
+
+The IME method now passes, and its earlier failure is explained rather than papered over: with the
+soft keyboard window up, `adb shell input text` and injected key events both deliver **nothing** — the
+field is a focused `EditText`, `dumpsys input_method` reports `mInputShown=true`, and the text still
+reads `""`; dismiss the IME and the identical command lands. The test now proves what an emulator can
+prove (real IME requested and shown, field takes input focus, multi-word prompt accepted through the
+platform input path, Back keeps the draft, Send stores it) and says plainly that a finger on a real
+watch is still owner-tested.
 
 ## Security & privacy
 
@@ -258,7 +266,7 @@ Stated plainly, because a README that hides these is useless:
   `CN=NiroWear Release` (SHA-256 `0D:C5:0F:C0:19:…:86:54:3E`, valid to 2056), built and signed by
   `.github/workflows/release.yml` from the tag. `v0.1.0` used the Android debug lineage, so an in-place
   update from 0.1.0 needs an uninstall.
-- **The connected suite (66 methods, 3 failing) is a local gate, not a CI gate.** It needs an
+- **The connected suite (66 methods, 2 failing) is a local gate, not a CI gate.** It needs an
   emulator, so CI runs the JVM tests, lint, ktlint and both assembles only. Run
   `connectedDebugAndroidTest` before a release; nothing will remind you. The 2026-11-06 run on a Wear
   OS 37 AVD was the first time it ever executed; the per-class failure list is in Evidence.
@@ -274,7 +282,9 @@ Stated plainly, because a README that hides these is useless:
   its own sample (the top-level case is fixed and pinned). A table row wider than its header has its
   extra cells dropped by the Markdown library; the parser counts them and the reader says "… N more
   cells" — correct for the list, quote and HTML-block shapes the overflow scan has tests for, unverified
-  for shapes beyond those. Tables are capped at 40 rendered rows with an explicit "… N more rows" line.
+  for shapes beyond those. Tables and code fences are no longer capped: both are expanded into their own
+  lazy items (one per table row, 24 lines per code chunk), so a 120-row table and a 200-line fence are
+  fully reachable with no "N rows withheld" line — verified on the AVD.
 - **Not verified on hardware.** The Keystore, Room and Compose work in 0.1.1 — the split of a failed key
   save from a failed key, the STOPPED/ERROR recovery of an interrupted edit or retry, the editor recovery
   after a refused edit, and the Stop-button sizing — has no JVM test and no device run behind it. It

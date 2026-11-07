@@ -68,7 +68,7 @@ quoting a number nobody had executed.
 
 The test-side pass that followed (fixture cleanup, stale MockWebServer queues, geometry assertions that
 could never pass, mojibake in two literals, and a History list offset the composable discarded on every
-close) brought the measured figure to **66 tests, 3 failing, 0 errors**. One of those was a product
+close) brought the measured figure to **66 tests, 2 failing, 0 errors**. One of those was a product
 fix: the History list now keeps its scroll position when it is reopened.
 
 ## 0.1.1 — 2026-11-06

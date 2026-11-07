@@ -8,9 +8,6 @@
     <string name="reader_streaming">Mengalir…</string>
     <string name="reader_stopped_partial">Dihentikan · jawaban sebagian disimpan</string>
     <string name="reader_stopped_before_start">Dihentikan sebelum jawaban dimulai</string>
-    <plurals name="renderer_hidden_rows">
-        <item quantity="other">… %1$d baris lagi. Tabel dipotong agar pembaca tetap responsif.</item>
-    </plurals>
     <plurals name="renderer_hidden_cells">
         <item quantity="other">… %1$d sel dibuang: baris tersebut punya sel lebih banyak daripada judul tabel.</item>
     </plurals>

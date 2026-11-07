@@ -34,16 +34,19 @@ AVD at 466×466:
 
 - goal start: **66 tests, 31 failing**
 - after this release: **66 tests, 18 failing, 0 errors**
-- after the test-side fixes that followed: **66 tests, 3 failing, 0 errors**
+- after the test-side fixes that followed: **66 tests, 2 failing, 0 errors**
 
 An earlier revision of this file said "14 failing". That figure was **inferred**, not measured: it was
 the 18 from the full-suite run minus four setup tests that had been re-run and passed in isolation.
 The tests share one app process, so a class that passes alone can still fail in suite order; the
 measured number for the whole suite is 18.
 
-The three that remain are itemised per class in the repository README with the measured reason for
-each — one soft-IME `input text` that delivers nothing on the emulator, and two cases the emulator
-cannot provide (bezel input, a real phone browser). Nothing here is claimed green.
+The two that remain are itemised per class in the repository README with the measured reason for
+each — both are cases the emulator cannot provide: bezel/rotary input and a real phone browser for the
+pairing certificate click-through. The soft-IME method now passes, with the limit it hit documented:
+injected text and key events are swallowed while the soft keyboard window is up, so that test proves
+the IME is requested and shown, the field takes focus, and the composer accepts a multi-word prompt
+once the keyboard is dismissed. Nothing here is claimed green.
 
 ## Not verified here
 
