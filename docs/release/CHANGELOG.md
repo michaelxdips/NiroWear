@@ -60,8 +60,16 @@ Evidence: `ProviderSetupUiTest` 6/6 on the AVD (previously 4 failing), JVM gate 
 
 The published "48 connected tests, 48/48" was never reproducible — the suite on disk is **66 methods**
 and had never run on this branch. It ran on a Wear OS 37 AVD: **66 tests, 18 failing, 0 errors** at the
-start of the audit, **14 failing** after this change. The README now itemises every remaining failure
-with its measured reason instead of quoting a number nobody had executed.
+start of the audit and **18 failing** after this change. An earlier revision of this file said "14
+failing": that number was inferred from a partial run (18 minus four setup tests re-run in isolation),
+not measured, and was wrong — the suite shares one app process, so a class that passes alone can fail
+in suite order. The README now itemises every remaining failure with its measured reason instead of
+quoting a number nobody had executed.
+
+The test-side pass that followed (fixture cleanup, stale MockWebServer queues, geometry assertions that
+could never pass, mojibake in two literals, and a History list offset the composable discarded on every
+close) brought the measured figure to **66 tests, 4 failing, 0 errors**. One of those was a product
+fix: the History list now keeps its scroll position when it is reopened.
 
 ## 0.1.1 — 2026-11-06
 

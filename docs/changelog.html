@@ -153,7 +153,12 @@ p:last-child{margin-bottom:0}
           manual entry.</li>
         <li><strong>Instrumentation executed for the first time.</strong> The published "48 / 48" was
           never reproducible: the suite is 66 methods. Measured 66 / 31 failing at the start of the
-          audit, 66 / 14 after this release; the remaining 14 are itemised in the README.</li>
+          audit, 66 / 18 at this release; the remaining 18 were itemised in the README. An earlier
+          revision said "14" — that number was inferred from a partial run, not measured, and was
+          wrong: the tests share one app process, so a class that passes alone can fail in suite
+          order. Test-side fixes afterwards (fixture cleanup, stale mock queues, impossible geometry
+          assertions, bidi-mojibake literals, and a History list offset the composable discarded on
+          every close) brought the measured figure to <strong>66 / 4</strong>.</li>
       </ul>
       <dl class="ident">
         <div><dt>versionCode</dt><dd>12</dd></div>
@@ -165,7 +170,7 @@ p:last-child{margin-bottom:0}
         <tbody>
           <tr><td>JVM unit tests</td><td>264 / 264, 0 failures, 42 suites</td></tr>
           <tr><td>lint</td><td>0 errors, 1 warning (GradleDependency)</td></tr>
-          <tr><td>Instrumented (Wear OS 37 AVD)</td><td>66 tests, 14 failing — ProviderSetupUiTest now 6/6</td></tr>
+          <tr><td>Instrumented (Wear OS 37 AVD)</td><td>66 tests, 18 failing at release; 4 failing after the test-side fixes (measured)</td></tr>
           <tr><td>assembleRelease, signed in CI</td><td>pass, certificate asserted before publish</td></tr>
         </tbody>
       </table>

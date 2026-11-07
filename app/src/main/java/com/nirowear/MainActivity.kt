@@ -207,6 +207,11 @@ private fun ChatReader(
     }
     val menuState = rememberLazyListState()
     val labState = rememberLazyListState()
+    // Hoisted out of HistoryScreen: the composable leaves the tree when the screen closes, so
+    // `rememberLazyListState()` inside it was discarded and reopening History always jumped back to
+    // the top (measured: the item that had been at the top was no longer in the tree). A watch has
+    // room for ~2 history rows, so losing the offset means re-scrolling a long list every time.
+    val historyState = rememberLazyListState()
     // ponytail: saved-instance anchors, not durable force-stop bookmarks; add local persistence only if cold-launch restore is required.
     val anchors =
         rememberSaveable(
@@ -492,6 +497,7 @@ private fun ChatReader(
                 generating = chatState.generating,
                 unsaved = chatState.unsaved,
                 currentId = chatState.conversationId,
+                listState = historyState,
                 onBack = { historyScreen = false },
                 onSelect = { id, messageId ->
                     // A notice belongs to the screen that raised it (clipboard, voice). Leaving it
@@ -819,6 +825,14 @@ private fun ChatReader(
                                     ";index=${listState.firstVisibleItemIndex}" +
                                     ";offset=${listState.firstVisibleItemScrollOffset}" +
                                     ";forward=${listState.canScrollForward}" +
+                                    // Forward extent in PIXELS, not pixels-to-the-last-item's-edge:
+                                    // `canScrollForward` is true for a 2 px residue produced by the
+                                    // footer's own height padding, and no drag can move that far.
+                                    ";remaining=" +
+                                    listState.layoutInfo.let { info ->
+                                        val last = info.visibleItemsInfo.lastOrNull()
+                                        if (last == null) 0 else (last.offset + last.size) - info.viewportEndOffset
+                                    } +
                                     ";scrolling=${listState.isScrollInProgress}" +
                                     ";following=$following" +
                                     ";footer=$footerHeight" +
@@ -1155,6 +1169,7 @@ private fun HistoryScreen(
     // reader that never moved. The menu's own New chat button was fixed for exactly this.
     unsaved: Boolean,
     currentId: String?,
+    listState: androidx.compose.foundation.lazy.LazyListState,
     onBack: () -> Unit,
     onSelect: (String?, Long?) -> Unit,
 ) {
@@ -1184,7 +1199,7 @@ private fun HistoryScreen(
     }
     LazyColumn(
         Modifier.fillMaxSize(),
-        state = rememberLazyListState(),
+        state = listState,
         contentPadding = PaddingValues(horizontal = 30.dp, vertical = 30.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
