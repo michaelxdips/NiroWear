@@ -3050,11 +3050,11 @@ adb install -r app-release.apk</pre>
           page describes <strong>0.1.1</strong>; the three audit rounds that produced it changed chat
           lifecycle, Keystore, adapter and renderer code, so any claim here that cites an earlier
           emulator run is dated rather than current. The connected-test suite is now MEASURED, not
-          assumed: <strong>66 tests, 4 failing, 0 errors</strong> on a Wear OS 37 AVD (2026-11-07). An
+          assumed: <strong>66 tests, 3 failing, 0 errors</strong> on a Wear OS 37 AVD (2026-11-07). An
           earlier revision of this page said "14 failing": that figure was arithmetic from a partial
           run, not a measurement, and was wrong — the tests share one app process, so a class that
           passes on its own can still fail in suite order. A full-suite run at that point reported 18,
-          and the test-side fixes that followed brought it to the measured 4. Those
+          and the test-side fixes that followed brought it to the measured 3. Those
           are itemised per class in the repository README; they are open
           work and environment limits, not a green claim. Test sources are not published in this
           repository by policy, so the result XML is not linkable from here.

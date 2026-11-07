@@ -34,17 +34,16 @@ AVD at 466×466:
 
 - goal start: **66 tests, 31 failing**
 - after this release: **66 tests, 18 failing, 0 errors**
-- after the test-side fixes that followed: **66 tests, 4 failing, 0 errors**
+- after the test-side fixes that followed: **66 tests, 3 failing, 0 errors**
 
 An earlier revision of this file said "14 failing". That figure was **inferred**, not measured: it was
 the 18 from the full-suite run minus four setup tests that had been re-run and passed in isolation.
 The tests share one app process, so a class that passes alone can still fail in suite order; the
 measured number for the whole suite is 18.
 
-The four that remain are itemised per class in the repository README with the measured reason for
-each — one History scroll target that the swipe search cannot reach, one soft-IME `input text` that
-delivers nothing on the emulator, and two cases the emulator cannot provide (bezel input, a real phone
-browser). Nothing here is claimed green.
+The three that remain are itemised per class in the repository README with the measured reason for
+each — one soft-IME `input text` that delivers nothing on the emulator, and two cases the emulator
+cannot provide (bezel input, a real phone browser). Nothing here is claimed green.
 
 ## Not verified here
 
