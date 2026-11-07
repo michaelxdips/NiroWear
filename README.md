@@ -206,7 +206,7 @@ Every number below was read from a result file produced on this tree, not quoted
 | Check | Result (measured) | Where |
 |---|---|---|
 | JVM unit tests | 264 / 264, 0 failures, 0 errors, 0 skipped (42 suites) | `app/build/test-results/testDebugUnitTest/*.xml` |
-| Connected suite (Wear OS 37 AVD, destructive — not a CI gate) | **66 tests, 4 failing, 0 errors**, measured 2026-11-07 on `emulator-5554` (`NiroWear_Audit`, x86_64, 466×466) from `app/build/outputs/androidTest-results/connected/debug/*.xml`. Two earlier figures were **not** measured: "48 / 48" came from an older emulator run, and "14 failing" was arithmetic (18 minus four setup tests re-run in isolation) rather than a full-suite run — that run reported 18. Test-side fixes (fixture cleanup, stale mock queues, impossible geometry assertions, bidi-mojibake literals, a History offset that was thrown away on every close) brought it to the 4 below; one of those was a real product fix. Nothing else is claimed green | `app/build/outputs/androidTest-results/connected/debug/*.xml` |
+| Connected suite (Wear OS 37 AVD, destructive — not a CI gate) | **66 tests, 3 failing, 0 errors**, measured 2026-11-07 on `emulator-5554` (`NiroWear_Audit`, x86_64, 466×466) from `app/build/outputs/androidTest-results/connected/debug/*.xml`. Two earlier figures were **not** measured: "48 / 48" came from an older emulator run, and "14 failing" was arithmetic (18 minus four setup tests re-run in isolation) rather than a full-suite run — that run reported 18. Test-side fixes (fixture cleanup, stale mock queues, impossible geometry assertions, bidi-mojibake literals, a History offset that was thrown away on every close) brought it to the 3 below; one of those was a real product fix. Nothing else is claimed green | `app/build/outputs/androidTest-results/connected/debug/*.xml` |
 | Host-gated instrumentation (6 `@HostDrivenGate` methods) | written, **never executed** (they need a host script to seed state) | `app/src/androidTest` (gitignored by policy) |
 | Lint | 0 errors, 1 warning: `GradleDependency` (test runner 1.5.0→1.5.2) | `app/build/reports/lint-results-debug.xml` |
 | Release APK | Published `v0.1.1` asset: 3,621,253 B, SHA-256 `0BA7DDEF…B207`, `com.nirowear` v11 / `0.1.1`, minSdk 30, targetSdk 37 — built and signed by `.github/workflows/release.yml`. A local cut is **not** bit-identical (a local build of the same tree measured 3,619,181 B); the hash of the asset that ships is the one in that release's body. Signing is driven by the environment (`NIROWEAR_KEYSTORE`/`_PASSWORD`, `NIROWEAR_KEY_ALIAS`, `NIROWEAR_KEY_PASSWORD`); with no keystore present the build emits an unsigned `app-release-unsigned.apk` | `app/build/outputs/apk/release/`, `output-metadata.json` |
@@ -216,14 +216,13 @@ Every number below was read from a result file produced on this tree, not quoted
 
 CI is green on `main` (JVM + lint + ktlint + both assembles); the connected suite is a local pre-release gate because it needs an emulator. Read the full per-claim table — including what is explicitly **unverified** (real-watch battery/thermals, TalkBack audio, production-credential sweeps) — on the [site's evidence section](https://michaelxdips.github.io/NiroWear/#status) and in [docs/release/RELEASE_NOTES_0.1.1.md](docs/release/RELEASE_NOTES_0.1.1.md).
 
-**Instrumentation status, measured 2026-11-07** (Wear OS 37 AVD, 66 methods, 4 failing). An earlier
+**Instrumentation status, measured 2026-11-07** (Wear OS 37 AVD, 66 methods, 3 failing). An earlier
 "14 failing" figure was arithmetic from a partial run and was wrong; a full-suite run reported 18 at
 that time. What an emulator cannot prove is marked as such; the rest is open work, not a green claim:
 
 | Class | Failing | Why (measured, not guessed) |
 |---|---|---|
-| `ReaderNavigationTest.editAndRetry…` | 1 | "No safe touch target: Visual edit". The conversation row sits below the visible band of a top-aligned History list and the swipe search did not reach it. Scroll/fixture geometry, not a reader defect — the other five methods in the class pass, including the history-offset one. |
-| `ReaderNavigationTest.actualWearIme…` | 1 | `input text` delivered nothing to the composer (`""` measured) even with the system IME reporting `mInputShown=true`. Emulator soft-IME input path; the keyboard path itself is covered by the other five methods. |
+| `ReaderNavigationTest.actualWearIme…` | 1 | `input text` delivered nothing to the composer (`""` measured) even with the system IME reporting `mInputShown=true` and the field focused. Emulator soft-IME injection path; the other six methods in the class pass, including real touch edit/retry and history restore. |
 | `RotaryInputTest` | 1 | Emulator has no rotary/bezel input source — environment, not a defect. |
 | `PairingUiTest` | 1 | Needs a real LAN/phone browser; the emulator cannot exercise the certificate click-through. |
 
@@ -259,7 +258,7 @@ Stated plainly, because a README that hides these is useless:
   `CN=NiroWear Release` (SHA-256 `0D:C5:0F:C0:19:…:86:54:3E`, valid to 2056), built and signed by
   `.github/workflows/release.yml` from the tag. `v0.1.0` used the Android debug lineage, so an in-place
   update from 0.1.0 needs an uninstall.
-- **The connected suite (66 methods, 4 failing) is a local gate, not a CI gate.** It needs an
+- **The connected suite (66 methods, 3 failing) is a local gate, not a CI gate.** It needs an
   emulator, so CI runs the JVM tests, lint, ktlint and both assembles only. Run
   `connectedDebugAndroidTest` before a release; nothing will remind you. The 2026-11-06 run on a Wear
   OS 37 AVD was the first time it ever executed; the per-class failure list is in Evidence.
