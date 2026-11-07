@@ -33,15 +33,21 @@ the suite is **66 methods** and had never executed on this branch. It now has, o
 AVD at 466×466:
 
 - goal start: **66 tests, 31 failing**
-- after this release: **66 tests, 14 failing, 0 errors**
+- after this release: **66 tests, 18 failing, 0 errors**
+- after the test-side fixes that followed: **66 tests, 4 failing, 0 errors**
 
-The remaining failures are itemised per class in the repository README with the measured reason for
-each — a geometry assertion in the reader, fixtures that need a virgin app, 10 s coroutine budgets on a
-software GPU, and three cases an emulator cannot provide (bezel input, a LAN phone, watch restart
-semantics). Nothing here is claimed green.
+An earlier revision of this file said "14 failing". That figure was **inferred**, not measured: it was
+the 18 from the full-suite run minus four setup tests that had been re-run and passed in isolation.
+The tests share one app process, so a class that passes alone can still fail in suite order; the
+measured number for the whole suite is 18.
+
+The four that remain are itemised per class in the repository README with the measured reason for
+each — one History scroll target that the swipe search cannot reach, one soft-IME `input text` that
+delivers nothing on the emulator, and two cases the emulator cannot provide (bezel input, a real phone
+browser). Nothing here is claimed green.
 
 ## Not verified here
 
-- The 7 `@HostDrivenGate` methods are excluded from the default run and still have never executed.
+- The 6 `@HostDrivenGate` methods are excluded from the default run and still have never executed.
 - Keystore, Room and Compose paths have no JVM test; device proof for the Save change comes from the
   instrumented setup tests above.
