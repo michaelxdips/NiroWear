@@ -1,4 +1,6 @@
-﻿plugins {
+﻿import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
+plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.devtools.ksp")
@@ -94,6 +96,15 @@ android {
     }
 }
 
+// Java and Kotlin must agree on the bytecode level, and the daemon JVM is 25
+// (gradle/gradle-daemon-jvm.properties), so the Kotlin level is stated here instead of being left
+// to the compiler's default or to AGP's convention wired from compileOptions.
+kotlin {
+    compilerOptions {
+        jvmTarget = JvmTarget.JVM_17
+    }
+}
+
 dependencies {
     implementation(platform("androidx.compose:compose-bom:2026.05.01"))
     implementation("androidx.activity:activity-compose:1.13.0")
@@ -116,6 +127,10 @@ dependencies {
     // offer ship in assets/legal; see THIRD_PARTY_NOTICES.md.
     implementation("ru.noties:jlatexmath-android:0.2.0")
     androidTestImplementation("androidx.test:runner:1.5.2")
+    // FixtureIsolationTest.kt uses androidx.test.core.app.ActivityScenario. It only arrived
+    // transitively through androidx.test.ext:junit:1.1.5, so the resolved version is declared here
+    // at the version that dependency already brings in (no upgrade, no new artifact).
+    androidTestImplementation("androidx.test:core:1.5.0")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
     androidTestImplementation("com.squareup.okhttp3:mockwebserver:5.5.1")
     testImplementation("com.squareup.okhttp3:mockwebserver:5.5.1")

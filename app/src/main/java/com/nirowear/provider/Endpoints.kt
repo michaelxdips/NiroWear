@@ -5,6 +5,12 @@ import okhttp3.HttpUrl.Companion.toHttpUrl
 
 /** Input is API base, never full generation URL. Root defaults to /v1; explicit paths stay explicit. */
 object Endpoints {
+    /**
+     * Hosts whose bare form has a documented version that is NOT /v1. Only consulted when the URL
+     * carries no path segment, so a user who types a version keeps it.
+     */
+    private val DEFAULT_VERSION_BY_HOST = mapOf("generativelanguage.googleapis.com" to "v1beta")
+
     fun normalize(
         raw: String,
         allowLocalHttp: Boolean = false,
@@ -41,7 +47,13 @@ object Endpoints {
             "Enter API base, not request endpoint"
         }
         while (segments.size >= 2 && segments.takeLast(2) == listOf("v1", "v1")) segments.removeAt(segments.lastIndex)
-        if (segments.isEmpty()) segments += "v1"
+        // A bare host must default to the version its API actually serves, not to a blanket /v1.
+        // Google's REST reference documents the Gemini base as /v1beta ("GET /v1beta/models",
+        // ai.google.dev/api/models), so normalising generativelanguage.googleapis.com to /v1 sent
+        // every request one path segment away from a real endpoint; the 404 that followed maps to
+        // MODEL_UNAVAILABLE, so a base-URL mistake was reported as "choose another model". Explicit
+        // paths stay explicit: only a host with NO path segment is defaulted.
+        if (segments.isEmpty()) segments += DEFAULT_VERSION_BY_HOST[url.host.lowercase()] ?: "v1"
         return url
             .newBuilder()
             .encodedPath("/")

@@ -208,12 +208,22 @@ internal class ProviderHttp(
                                         }
                                         // Idle deadline; see the progress clock above.
                                         while (isActive && !source.exhausted()) {
+                                            // ONE budget for BOTH buffers, not one each. The pending
+                                            // line lives in the Okio buffer and then lives AGAIN in
+                                            // `frame` once appended, so bounding each separately by
+                                            // maxFrameBytes let a hostile endpoint reach roughly twice
+                                            // the cap (~13 MB) before either check fired. The line may
+                                            // now consume only what the frame has left, so the two
+                                            // allocations together stay under the cap. UTF-16 units
+                                            // never outnumber UTF-8 bytes, so `frame` cannot overshoot
+                                            // the budget either.
+                                            val remaining = (maxFrameBytes - frame.length).coerceAtLeast(1L)
                                             val line =
                                                 try {
-                                                    source.readUtf8LineStrict(maxFrameBytes)
+                                                    source.readUtf8LineStrict(remaining)
                                                 } catch (_: EOFException) {
                                                     throw SafeProviderException(
-                                                        if (source.buffer.size > maxFrameBytes) {
+                                                        if (source.buffer.size >= remaining) {
                                                             ProviderError.RESPONSE_TOO_LARGE
                                                         } else {
                                                             ProviderError.PROTOCOL
@@ -227,11 +237,6 @@ internal class ProviderHttp(
                                                 if (dispatch()) return@launch
                                             } else if (line.startsWith("data:")) {
                                                 frame.append(line.removePrefix("data:").removePrefix(" ")).append('\n')
-                                                if (frame.length >
-                                                    maxFrameBytes
-                                                ) {
-                                                    throw SafeProviderException(ProviderError.RESPONSE_TOO_LARGE)
-                                                }
                                             }
                                             // Two different bounds, deliberately:
                                             //

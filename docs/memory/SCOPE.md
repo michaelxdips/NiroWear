@@ -17,7 +17,7 @@ Validation/polish only; proven provider/security architecture stays intact. Exis
 `NiroWear_466` round 466×466 touch AVD is primary target; preserve data. Debug and
 release runtime, inspected screenshots, round-edge/font-scale/input/reader/network/
 lifecycle/accessibility checks and measured release performance required. Canonical
-matrix: TEST_MATRIX.md. Emulator, Android Studio GUI, release/debug, live APIs and
+matrix: see the Test table in README.md. Emulator, Android Studio GUI, release/debug, live APIs and
 physical watch are distinct evidence classes. No new product features. Native release
 math, real credentials and physical Xiaomi Watch 2 remain independent blockers.
 

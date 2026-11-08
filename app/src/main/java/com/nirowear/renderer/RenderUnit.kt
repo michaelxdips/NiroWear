@@ -56,6 +56,15 @@ internal sealed interface RenderUnit {
         val rowIndex: Int,
         /** A rule is drawn between rows, never after the last one. */
         val last: Boolean,
+        /**
+         * Cells the Markdown parser dropped from this table, non-zero only on the LAST row.
+         *
+         * The notice used to live in `DocumentBlock`'s single-item table branch. Expanding rows into
+         * their own units made that branch unreachable for any table with a dropped cell, so the
+         * reader silently lost the "… N more cells" line — the exact silent-clamp class the notice
+         * exists to prevent. The count now rides on the unit that draws last.
+         */
+        val droppedCells: Int = 0,
     ) : RenderUnit
 }
 
@@ -108,6 +117,8 @@ internal fun renderUnitsFor(
                                     cells = cells,
                                     rowIndex = row,
                                     last = row == block.rows.lastIndex,
+                                    // Carried on the last row so the notice is drawn once, after it.
+                                    droppedCells = if (row == block.rows.lastIndex) block.droppedCells else 0,
                                 )
                         }
                     }

@@ -57,22 +57,16 @@
 # only `git check-ignore -v` showed it missing. The glob keeps a cut's notes with its tag.
 !docs/release/RELEASE_NOTES_*.md
 !docs/release/CHANGELOG.md
-!docs/release/BETA7_TEST_SHEET.md
 !docs/memory/ARCHITECTURE.md
 !docs/memory/PROVIDERS.md
 !docs/memory/SCOPE.md
 !docs/memory/RENDERER.md
 !docs/memory/UI_RULES.md
-!docs/memory/AGORA_REFERENCE.md
 !docs/branding/**
 !docs/licenses/**
 !docs/screenshots/**
 !docs/index.html
 !docs/changelog.html
-# Implementation plans are published: they document how the repo is built and
-# maintained, and a plan nobody can read is not a plan.
-!docs/superpowers/plans/**
-!docs/superpowers/plans
 !docs/.nojekyll
 !fixtures/MATERIAL_ICONS_LICENSE.txt
 !fixtures/MATERIAL_ICONS_NOTICE.txt
@@ -80,40 +74,19 @@
 
 # 5. Hard exclusions that outrank every re-include above.
 #    Test sources, prompts, handoffs, evidence and private material are never published.
+#
+#    The allowlist used to carry one exclusion line per historical session log (MEGA_*, HANDOFF*,
+#    TEST_MATRIX, BETA3_*, ...). Those files were deleted on 2026-11-08 because nothing referenced
+#    them; the blanket `*` above already excludes anything that reappears, so only the living
+#    documents still on disk are named here.
 app/src/test/
 app/src/androidTest/
 fixtures/.gitignore
-docs/memory/MEGA_*
-docs/memory/*HANDOFF*
-docs/memory/NEXT.md
 docs/memory/DECISIONS.md
-docs/memory/LEGAL_*
 docs/memory/MATH_LICENSE_REVIEW.md
-docs/memory/TEST_MATRIX.md
-docs/memory/BETA3_*
-docs/memory/FINAL_*
-docs/memory/SOFTWARE_*
-docs/memory/ULTIMATE_*
-docs/memory/REGRESSION_*
-docs/memory/AUTONOMOUS_*
-docs/memory/PUBLISHED_*
-docs/memory/GITHUB_*
-docs/memory/LIVE_*
-docs/memory/A11Y_*
-docs/memory/UI_HARMONY_*
-docs/memory/UI_STABILIZATION_*
-docs/memory/HARMONY_*
-docs/memory/RETRY_*
-docs/memory/READER_*
 docs/memory/KNOWN_ISSUES.md
 docs/memory/PROJECT.md
-docs/memory/RELEASE_CHECKLIST.md
-docs/memory/NIROWEAR_*
-docs/memory/BETA2_*
-docs/memory/FINALIZATION_*
-docs/memory/MEGA_PLAN_*
-docs/release/BETA3_*
-docs/release/CLEANUP_MANIFEST.md
+docs/memory/CREDENTIAL_ENTRY_DESIGN.md
 artifacts/
 artifactsbeta3-uiux-2026-10-18before/
 scripts/*

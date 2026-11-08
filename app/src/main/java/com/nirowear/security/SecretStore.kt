@@ -15,6 +15,9 @@ import javax.crypto.spec.GCMParameterSpec
 
 class CredentialUnavailable : Exception("Secure credential unavailable. Re-entry required.")
 
+/** Compiled once: this runs per payload read, write and cleanup pass. */
+private val credentialRefPattern = Regex("[a-f0-9-]{36}")
+
 /** Only versioned AES-GCM nonce/ciphertext leaves Android Keystore. Never fail open. */
 class SecretStore(
     context: Context,
@@ -23,7 +26,7 @@ class SecretStore(
     private val directory = File(context.noBackupFilesDir, "credentials")
 
     private fun file(ref: String): AtomicFile {
-        require(Regex("[a-f0-9-]{36}").matches(ref)) { "Invalid credential reference" }
+        require(credentialRefPattern.matches(ref)) { "Invalid credential reference" }
         return AtomicFile(File(directory, ref))
     }
 
@@ -137,7 +140,7 @@ class SecretStore(
     fun cleanup(referenced: Set<String>) {
         directory.listFiles()?.forEach { payload ->
             val ref = payload.name.removeSuffix(".new").removeSuffix(".bak")
-            if (!Regex("[a-f0-9-]{36}").matches(ref)) return@forEach
+            if (!credentialRefPattern.matches(ref)) return@forEach
             if (ref !in referenced) {
                 file(ref).delete()
             } else if (payload.name.endsWith(".new")) {

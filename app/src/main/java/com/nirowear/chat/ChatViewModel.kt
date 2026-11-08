@@ -24,7 +24,6 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
@@ -39,8 +38,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.int
@@ -331,8 +328,14 @@ class ChatViewModel(
                         }
                     }
                     if (retry) {
+                        // Refused, not crashed: a bare `error(...)` raised IllegalStateException, and
+                        // the generic catch reported it as "Cannot send. Check provider setup or local
+                        // storage." — a provider misconfiguration for a conversation whose only problem
+                        // is that it holds no question to re-ask. Nothing was sent or written, so the
+                        // refusal records no row either (`wrote` stays false).
                         val user =
-                            dao.snapshot(conversationId).lastOrNull { it.role == "USER" } ?: error("No user message")
+                            dao.snapshot(conversationId).lastOrNull { it.role == "USER" }
+                                ?: throw TurnRefused("Nothing to retry in this chat.")
                         dao.truncate(conversationId, user.id)
                         wrote = true
                     }
@@ -467,7 +470,14 @@ class ChatViewModel(
                         failure = ProviderError.PROTOCOL.userMessage(hasText = text.isNotEmpty())
                     }
                 } catch (cancelled: CancellationException) {
-                    terminal = "STOPPED"
+                    // A Stop must not downgrade a terminal event that already arrived. This branch
+                    // used to write "STOPPED" unconditionally, so a cancel landing between
+                    // `StreamEvent.Completed` (or `Truncated`) and the stream's own close rewrote the
+                    // SUCCESS that event had just set: a finished answer was stored STOPPED, its
+                    // truncation note dropped, and `finish` deleted its phase records.
+                    // `settleCancellation` below cannot undo that — it only refuses to downgrade a
+                    // terminal that is still SUCCESS, and this line had already replaced it.
+                    if (terminal != "SUCCESS") terminal = "STOPPED"
                     throw cancelled
                 } catch (refused: TurnRefused) {
                     failure = refused.message

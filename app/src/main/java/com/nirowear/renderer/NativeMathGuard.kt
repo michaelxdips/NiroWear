@@ -50,10 +50,14 @@ internal object NativeMathGuard {
                     "csname",
                     // boxes and transforms that can force arbitrary size or layout
                     //
-                    // Spacing commands (\hspace, \vspace, \hskip, \vskip, \kern, \rule) are NOT here:
-                    // they are ordinary layout in real formulas, they define and include nothing, and
-                    // refusing them silently degraded an honest formula to monospace source. The
-                    // renderer clamps the output bitmap, so their worst case is a bounded blank area.
+                    // Spacing commands (\hspace, \vspace, \hskip, \vskip, \kern) are NOT here: they are
+                    // ordinary layout in real formulas, they define and include nothing, and refusing
+                    // them silently degraded an honest formula to monospace source.
+                    //
+                    // \rule is not listed here either — it is an honest punctuation glyph in a real
+                    // formula — but it takes EXPLICIT width/height dimensions, so it is bounded by
+                    // [MAX_RULE_DIMENSION] below instead: `\rule{8000pt}{100pt}` asked the typesetter
+                    // for a canvas no watch can allocate, before any bitmap bound could apply.
                     "reflectbox",
                     "resizebox",
                     "rotatebox",
@@ -67,11 +71,53 @@ internal object NativeMathGuard {
     private const val MAX_SOURCE = 4096
     private const val MAX_GROUPS = 128
 
+    /**
+     * Longest side a `\rule` may request, in its own units.
+     *
+     * The reference viewport is 466 px ≈ 240 pt; 600 leaves headroom for a full-width rule without
+     * admitting a dimension the typesetter would turn into a canvas the watch cannot allocate.
+     */
+    private const val MAX_RULE_DIMENSION = 600.0
+
+    private val RULE_NAME = Regex("\\\\rule(?![a-zA-Z])")
+
+    private val RULE =
+        Regex(
+            "\\\\rule(?![a-zA-Z])\\s*(?:\\[[^\\]]*\\])?\\s*\\{([^{}]*)\\}\\s*\\{([^{}]*)\\}",
+        )
+
+    private val DIMENSION =
+        Regex("\\s*(-?(?:\\d+(?:\\.\\d*)?|\\.\\d+))\\s*(?:pt|pc|bp|mm|cm|in|em|ex|px|sp|dp)?\\s*")
+
+    /**
+     * Bounds `\rule`'s explicit dimensions.
+     *
+     * A `\rule` whose two size groups are not plain bounded numbers is refused: the guard cannot
+     * prove the result fits, and a refusal costs only the typeset form (the source text is shown).
+     */
+    private fun ruleSizesAreBounded(source: String): Boolean {
+        if (!RULE_NAME.containsMatchIn(source)) return true
+        val matches = RULE.findAll(source).toList()
+        if (matches.size != RULE_NAME.findAll(source).count()) return false
+        return matches.all { match ->
+            match.groupValues.drop(1).all { raw ->
+                val value =
+                    DIMENSION
+                        .matchEntire(raw)
+                        ?.groupValues
+                        ?.get(1)
+                        ?.toDoubleOrNull()
+                value != null && value in 0.0..MAX_RULE_DIMENSION
+            }
+        }
+    }
+
     /** True only when the source is safe to hand to the typesetter. */
     fun isSafe(source: String): Boolean {
         if (source.length > MAX_SOURCE) return false
         if (source.count { it == '{' } > MAX_GROUPS) return false
         if (FORBIDDEN.containsMatchIn(source)) return false
+        if (!ruleSizesAreBounded(source)) return false
         return balanced(source)
     }
 

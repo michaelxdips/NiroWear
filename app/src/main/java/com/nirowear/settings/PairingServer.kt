@@ -86,7 +86,6 @@ internal class PairingServer(
 
     @Volatile private var active: Socket? = null
     private var worker: Thread? = null
-    private var request: Thread? = null
 
     val port: Int get() = socket.localPort
 
@@ -126,6 +125,10 @@ internal class PairingServer(
                             // finally closed the socket — so any scanner could end pairing with no
                             // token. Keep accepting; only the loop condition ends the session.
                         } finally {
+                            // `client.use` in serve closes every normal path; this is the only
+                            // path that can leave it open (Thread.start throwing before the
+                            // handler ran). close() is idempotent, so double-closing is safe.
+                            runCatching { client.close() }
                             active = null
                         }
                     }
@@ -179,13 +182,11 @@ internal class PairingServer(
                 isDaemon = true
                 start()
             }
-        request = handler
         runCatching { handler.join(REQUEST_MILLIS + HANDSHAKE_GRACE_MILLIS) }
         if (handler.isAlive) {
             runCatching { client.close() }
             runCatching { handler.join(1_000) }
         }
-        request = null
     }
 
     private fun handle(client: Socket) {
@@ -254,6 +255,7 @@ internal class PairingServer(
         // landing in the same clock tick as a real deadline) was still accepted — the test that
         // drives a ttl of 0 got a 200 instead of a 410 whenever the clock had not ticked yet.
         if (clock() >= deadline) return respond(client, 410, JSON, """{"ok":false}""")
+        if (closed) return
         if (consumed) return respond(client, 401, JSON, """{"ok":false}""")
         val root =
             runCatching { Json.parseToJsonElement(String(body, Charsets.UTF_8)).jsonObject }.getOrNull()
@@ -489,7 +491,6 @@ background:#a8c7fa;color:#062e6f;font-weight:600}
 <button id="go">Send to watch</button>
 <div id="out"></div>
 <script>
-var B='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
 function b64u(buf){var b='',u=new Uint8Array(buf),i;
 for(i=0;i<u.length;i++){b+=String.fromCharCode(u[i]);}
 return btoa(b).replace(/\+/g,'-').replace(/\//g,'_').split('=').join('');}
@@ -507,7 +508,7 @@ async function init(){
  var shared=await crypto.subtle.deriveBits({name:'ECDH',public:wp},mine.privateKey,256);
  var aes=await crypto.subtle.importKey('raw',shared,{name:'AES-GCM'},false,['encrypt']);
  ready={aes:aes,pub:b64u(await crypto.subtle.exportKey('raw',mine.publicKey)),
-  iv:crypto.getRandomValues(new Uint8Array(12)),aad:unb64u(CAP)};
+  aad:unb64u(CAP)};
 }
 document.getElementById('go').onclick=async function(){
  var out=document.getElementById('out');
@@ -516,9 +517,10 @@ document.getElementById('go').onclick=async function(){
   name:document.getElementById('name').value,base:document.getElementById('base').value,
   model:document.getElementById('model').value,key:document.getElementById('key').value});
  try{
-  // A FRESH nonce per send. Reusing ready.iv meant a second Send (the normal recovery path after a
-  // rejected key) encrypted two different plaintexts under the same key and nonce — the one thing
-  // AES-GCM must never see, because it leaks the XOR of the plaintexts and enables forgery.
+  // A FRESH nonce per send. Reusing a page-load nonce meant a second Send (the normal recovery
+  // path after a rejected key) encrypted two different plaintexts under the same key and nonce —
+  // the one thing AES-GCM must never see, because it leaks the XOR of the plaintexts and enables
+  // forgery.
   var iv=crypto.getRandomValues(new Uint8Array(12));
   var ct=await crypto.subtle.encrypt({name:'AES-GCM',iv:iv,additionalData:ready.aad},
    ready.aes,new TextEncoder().encode(body));

@@ -129,6 +129,16 @@ object ResponseParser {
     private const val MAX_CONTAINER_DEPTH = 48
 
     /**
+     * Deepest list level emitted, in list levels (not marker count).
+     *
+     * [MAX_DEPTH] bounds the RECURSION, but it still let a 24-level list through, and indentation is
+     * the one thing that cannot scale: at DocumentBlock's 16dp per level a watch paragraph is empty
+     * by level five. A deeper entry keeps its text and is emitted at this level rather than being
+     * dropped, and real answers never reach it.
+     */
+    private const val MAX_LIST_DEPTH = 4
+
+    /**
      * Collapses container markers beyond [MAX_CONTAINER_DEPTH] in one line.
      *
      * CommonMark recurses once per nesting level while building its tree — before any of our code
@@ -722,11 +732,13 @@ object ResponseParser {
                         // because flush() only emits what was already buffered and the current line
                         // had not been appended yet.
                         val before = prefix + container.substring(0, mid)
-                        opening = "$$" to "$$"
                         if (before.isNotBlank()) markdown.appendLine(before)
-                        flush()
+                        // The whole rest of the line is consumed HERE, in one left-to-right pass. It
+                        // used to hand the remainder back to the line loop (`rest = …substring(…)`),
+                        // which re-sliced the tail and rescanned it for the next `$$` for every pair:
+                        // a line of n pairs copied O(n²) characters. Each character is now copied
+                        // once, into the segment it belongs to.
                         closing = "$$"
-                        math = StringBuilder()
                         mathPrefix = prefix
                         mathContainer = prefix
                         // A mid-line display is TOP-LEVEL prose. Reusing the previous display's level
@@ -734,7 +746,32 @@ object ResponseParser {
                         // kept stripping the following lines' indentation.
                         mathDepth = 0
                         mathDedent = 0
-                        rest = container.substring(mid + 2)
+                        math = null
+                        var cursor = mid + 2
+                        while (true) {
+                            val close = closingIndex(container, "$$", cursor)
+                            if (close < 0) {
+                                // Unclosed on this line: the display continues on the following lines.
+                                // Kotlin's StringBuilder has no (CharSequence, start, end) constructor;
+                                // append range keeps this allocation-free of an intermediate String.
+                                math = StringBuilder().append(container, cursor, container.length)
+                                break
+                            }
+                            // Flush first so the buffered prose keeps its place above the formula.
+                            flush()
+                            val formula = container.substring(cursor, close).trim()
+                            // An EMPTY formula is not content (see the block-level branch below).
+                            if (formula.isNotEmpty()) blocks += ContentBlock.Math(formula, true, 0)
+                            val nextOpen = findMidlineDisplay(container, close + 2)
+                            val proseEnd = if (nextOpen < 0) container.length else nextOpen
+                            val prose = container.substring(close + 2, proseEnd)
+                            // The line prefix is re-attached so prose after a formula inside a quote
+                            // stays in that quote, exactly as the replayed remainder did before.
+                            if (prose.isNotBlank()) markdown.appendLine(prefix + prose)
+                            if (nextOpen < 0) break
+                            cursor = nextOpen + 2
+                        }
+                        rest = null
                         continue
                     }
                 }
@@ -812,9 +849,12 @@ object ResponseParser {
         return stripped
     }
 
-    /** First `$$` preceded by whitespace (mid-line display open), or -1. Skips code spans. */
-    private fun findMidlineDisplay(container: String): Int {
-        var index = 0
+    /** First `$$` preceded by whitespace (mid-line display open) at or after [from], or -1. Skips code spans. */
+    private fun findMidlineDisplay(
+        container: String,
+        from: Int = 0,
+    ): Int {
+        var index = from
         var code = false
         while (index < container.length) {
             if (container[index] == '`') {
@@ -931,7 +971,7 @@ object ResponseParser {
                                 } else {
                                     "•"
                                 }
-                            out += ContentBlock.ListEntry(marker, depth, inlines(child))
+                            out += ContentBlock.ListEntry(marker, depth.coerceAtMost(MAX_LIST_DEPTH), inlines(child))
                             first = false
                         } else {
                             // Deliberate: an item whose content is a block rather than a paragraph

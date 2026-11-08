@@ -15,16 +15,17 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.retryWhen
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -33,6 +34,11 @@ import kotlinx.serialization.json.put
 import java.util.UUID
 
 private val Context.providerData by preferencesDataStore("providers")
+
+/** Bounded like the History flow: a transient read may self-heal, a broken store must not spin. */
+private const val MAX_READ_RETRIES = 3L
+
+private val credentialRefPattern = Regex("[a-f0-9-]{36}")
 
 data class ProviderSettingsState(
     val profiles: List<ProviderProfile> = emptyList(),
@@ -52,7 +58,17 @@ class ProviderSettings(
     private val mutex = Mutex()
     val state =
         store.data
-            .map { prefs ->
+            // A failing READ is not a broken document. `.catch` below reported it and then COMPLETED
+            // the flow, and a completed flow emits nothing ever again: one transient DataStore I/O
+            // error left the provider screen showing "unavailable" for the rest of the visit, with no
+            // retry affordance. DataStore re-reads on the next collection, so bounded retries make a
+            // transient error self-heal; a store that is genuinely broken still ends in that message.
+            .retryWhen { error, attempt ->
+                if (error is CancellationException) throw error
+                if (attempt >= MAX_READ_RETRIES) return@retryWhen false
+                delay(1000L shl attempt.coerceAtMost(2L).toInt())
+                true
+            }.map { prefs ->
                 try {
                     val profiles = decode(prefs[profilesKey] ?: "[]")
                     ProviderSettingsState(profiles, readableSelection(profiles, prefs[selectedKey]))
@@ -226,8 +242,6 @@ class ProviderSettings(
             put("credentialRef", p.credentialRef)
         }
 
-    private fun encode(profiles: List<ProviderProfile>) = JsonArray(profiles.map { encodeOne(it) }).toString()
-
     /**
      * Serialise [profiles], carrying forward any RAW element this build cannot decode.
      *
@@ -255,7 +269,7 @@ class ProviderSettings(
                                 .getValue("credentialRef")
                                 .jsonPrimitive.content
                         }.getOrNull()
-                    ref != null && ref !in known && Regex("[a-f0-9-]{36}").matches(ref) &&
+                    ref != null && ref !in known && credentialRefPattern.matches(ref) &&
                         runCatching { decodeOne(element) }.isFailure
                 }
         return JsonArray(profiles.map { encodeOne(it) } + preserved).toString()
@@ -288,7 +302,7 @@ class ProviderSettings(
             return value.content
         }
         val ref = field("credentialRef")
-        require(Regex("[a-f0-9-]{36}").matches(ref)) { "Invalid credential reference" }
+        require(credentialRefPattern.matches(ref)) { "Invalid credential reference" }
         return ProviderProfile(
             field("id"),
             ProviderType.valueOf(field("type")),
@@ -318,7 +332,7 @@ internal fun referencedCredentialRefs(source: String): Set<String> {
             element.jsonObject
                 .getValue("credentialRef")
                 .jsonPrimitive.content
-        }.getOrNull()?.takeIf { Regex("[a-f0-9-]{36}").matches(it) }?.let { refs += it }
+        }.getOrNull()?.takeIf { credentialRefPattern.matches(it) }?.let { refs += it }
     }
     return refs
 }
