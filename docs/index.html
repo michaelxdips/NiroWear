@@ -2933,7 +2933,7 @@ adb install -r app-release.apk</pre>
           </div>
           <div class="limit">
             <dt>Screen reader</dt>
-            <dd>TalkBack audio acceptance is incomplete. Headings expose semantics, but a linked paragraph's "Links" group node carries no action, the composer's field relies on the visible "Prompt" heading rather than a label, a credential entry's label is read twice, and the 130 dp provider header truncates at large font scales.</dd>
+            <dd>TalkBack <em>audio</em> acceptance is still incomplete — nobody has listened to a real watch. The four measured structural dead stops are fixed: the "Links" group node is actionable (announces the count, opens the first link), the composer field carries its own label, a credential entry's label is no longer read twice, and the provider header grows to two lines instead of clipping at 130 dp.</dd>
           </div>
           <div class="limit">
             <dt>0.1.1 lifecycle fixes</dt>
@@ -3028,7 +3028,7 @@ adb install -r app-release.apk</pre>
             </tr>
             <tr>
               <td>TalkBack reads the full answer in order</td>
-              <td><span class="pill pill-none">Unverified</span> Semantics and target geometry are tested; audio output was never listened to.</td>
+              <td><span class="pill pill-none">Unverified</span> Semantics and target geometry are tested, and the four known dead stops are fixed; audio output was never listened to.</td>
               <td>—</td>
             </tr>
             <tr>
@@ -3056,9 +3056,12 @@ adb install -r app-release.apk</pre>
           earlier revision of this page said "14 failing": that figure was arithmetic from a partial
           run, not a measurement, and was wrong — the tests share one app process, so a class that
           passes on its own can still fail in suite order. A full-suite run at that point reported 18,
-          and the test-side fixes that followed brought it to the measured 2. Those
-          are itemised per class in the repository README; they are open
-          work and environment limits, not a green claim. Test sources are not published in this
+          and the test-side fixes that followed brought it to the measured 2. Those two
+          are itemised per class in the repository README and both are environment limits — an emulator
+          has no rotary/bezel source and no real phone browser for the pairing certificate
+          click-through — not product defects. Also measured on this tree: with 5,000 messages seeded
+          across 200 conversations, the history search's worst query took <strong>7 ms</strong>
+          against a 250 ms debounce, so it stays a plain <code>LIKE</code> scan with no index. Test sources are not published in this
           repository by policy, so the result XML is not linkable from here.
         </p>
 

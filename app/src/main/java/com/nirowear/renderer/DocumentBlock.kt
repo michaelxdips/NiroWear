@@ -416,11 +416,32 @@ private fun LinkActions(links: List<String>) {
     // a 466px display, after the reader had already traversed the same links inline. The remainder is
     // still reachable inside the text itself where the link is inline.
     val shown = links.take(MAX_LINK_ACTIONS)
+    // The group used to carry a contentDescription and NOTHING else: TalkBack stopped on a "Links"
+    // node that could not be activated, which is a dead stop. It now announces the count and offers
+    // a real action — opening the first link — so the stop is actionable instead of decorative.
+    // Each button below keeps its own URL as text, so the group label is not a duplicate of them.
+    val groupHint =
+        if (links.size == 1) {
+            groupLabel
+        } else {
+            "$groupLabel (${links.size})"
+        }
+    // Localized: the action label is spoken by TalkBack, so it must follow the UI language, and it
+    // carries the link count, so it is a plural.
+    val actionLabel = resources.getQuantityString(R.plurals.renderer_links_action, links.size, links.size)
     Column(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .semantics(mergeDescendants = false) { contentDescription = groupLabel },
+                .semantics(mergeDescendants = false) {
+                    contentDescription = groupHint
+                    onClick(label = actionLabel) {
+                        openHttpLink(context, shown.first())?.let {
+                            Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+                        }
+                        true
+                    }
+                },
     ) {
         shown.forEach { link ->
             Button(

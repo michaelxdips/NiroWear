@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Chat reader: composer, transcript rows, menu, history. -->
+    <string name="chat_prompt">Prompt</string>
+    <string name="chat_prompt_editor">Prompt editor</string>
+    <string name="chat_send">Send</string>
+    <string name="chat_edit_resend">Edit &amp; resend</string>
+    <string name="chat_you">You</string>
+    <string name="chat_answer">Answer</string>
+    <string name="chat_you_hold_to_edit">You · hold to edit</string>
+    <string name="chat_stop">Stop</string>
+    <string name="chat_keyboard_input">Keyboard input</string>
+    <string name="chat_voice_input">Voice input</string>
+    <string name="chat_voice_prompt">Ask NiroWear</string>
+    <string name="chat_voice_unavailable">Voice recognition unavailable. Use keyboard.</string>
+    <string name="chat_voice_blocked">Voice recognition blocked. Use keyboard.</string>
+    <string name="chat_ask_anything">Ask anything</string>
+    <string name="chat_empty_add_provider">Add provider from menu, then use keyboard or voice.</string>
+    <string name="chat_empty_start">Use keyboard or voice to start.</string>
+    <string name="chat_copy_unsaved">Copy unsaved answer</string>
+    <string name="chat_retry_saving">Retry saving</string>
+    <string name="chat_unsaved_copied">Unsaved answer copied as sensitive. Clipboard still holds plain text.</string>
+    <string name="chat_edit_message">Edit message</string>
+    <string name="chat_menu">Menu</string>
+    <string name="chat_menu_providers">Providers / model</string>
+    <string name="chat_history">History</string>
+    <string name="chat_new_chat">New chat</string>
+    <string name="chat_nav_menu">Navigation menu</string>
+    <string name="chat_reader_description">Conversation reader</string>
+    <string name="chat_back">Back</string>
+    <string name="chat_search_messages">Search messages</string>
+    <string name="chat_search_placeholder">Search all messages</string>
+    <string name="chat_no_matches">No matches.</string>
+    <string name="chat_hit_label">%1$s: %2$s</string>
+
+    <!-- Provider settings and pairing. -->
+    <string name="provider_pairing_warning">Same Wi-Fi only. Your phone warns that the watch\'s certificate is not trusted — accept it to load the page. Encrypted with ECDH P-256 + AES-GCM, but the handshake is unauthenticated — confirm the URL on the watch matches. Prefer manual entry on untrusted networks.</string>
+    <string name="provider_add_compatible">Add compatible</string>
+    <string name="provider_add_openai">Add OpenAI</string>
+    <string name="provider_add_gemini">Add Gemini</string>
+    <string name="provider_add_anthropic">Add Anthropic</string>
+    <string name="provider_preset_compatible_message">HTTPS API base. Root defaults to /v1.</string>
+    <string name="provider_preset_openai_message">Native Responses. Discover models; selected model needs text validation.</string>
+    <string name="provider_preset_gemini_message">Native generateContent. Discovery filters generation capability.</string>
+    <string name="provider_preset_anthropic_message">Native Messages. Use single-workspace API key.</string>
+    <string name="provider_name_custom">Custom provider</string>
+    <string name="provider_name_openai">OpenAI</string>
+    <string name="provider_name_gemini">Gemini</string>
+    <string name="provider_name_anthropic">Anthropic</string>
+    <string name="provider_title">Providers</string>
+    <string name="provider_title_add">Add %1$s</string>
+    <string name="provider_title_edit">Edit %1$s</string>
+    <string name="provider_back">Back</string>
+    <string name="provider_row">%1$s\n%2$s</string>
+    <string name="provider_row_selected">Selected · %1$s\n%2$s</string>
+    <string name="provider_saved_ok">Saved securely.</string>
+    <string name="provider_saved_cleanup_pending">Saved securely. Old encrypted-key cleanup pending; reopen app to retry cleanup.</string>
+    <string name="provider_error_previous_kept">%1$s Previous credential kept.</string>
+    <string name="provider_check_config">Check the configuration and try again.</string>
+    <string name="provider_save_failed_prev_kept">Secure save failed. Previous credential kept. Re-enter key.</string>
+    <string name="provider_save_failed">Secure save failed. Re-enter key.</string>
+    <string name="provider_select_failed">Selection failed. Try again.</string>
+    <string name="provider_key_configured">API key configured. Enter replacement only.</string>
+    <string name="provider_edit_replace_key">Edit / replace key</string>
+    <string name="provider_setup_from_phone">Set up from phone</string>
+    <string name="provider_cancel_pairing">Cancel pairing</string>
+    <string name="provider_no_wifi">No Wi-Fi address. Turn on Wi-Fi, or enter the key below.</string>
+    <string name="provider_key_received">Key received.</string>
+    <string name="provider_pairing_starting">Starting…</string>
+    <string name="provider_not_home_network">Not a home network. Cancel if unsure.</string>
+    <string name="provider_pairing_unavailable">Pairing unavailable. Enter the key below.</string>
+    <string name="provider_label_name">Name</string>
+    <string name="provider_label_base_url">Base URL</string>
+    <string name="provider_label_manual_model">Manual model ID</string>
+    <string name="provider_label_api_key">API key</string>
+    <string name="provider_configured_replace">Configured · enter replacement only</string>
+    <string name="provider_hide_key">Hide key</string>
+    <string name="provider_reveal_key">Reveal key</string>
+    <string name="provider_type_unavailable">This provider type is not available in this build.</string>
+    <string name="provider_models_listed">Models listed. Choose or enter manually.</string>
+    <string name="provider_models_unavailable">Models unavailable. Enter model manually; chat still allowed.</string>
+    <string name="provider_check_url_key">Check URL/key. Manual model still allowed.</string>
+    <string name="provider_discover_models">Discover models</string>
+    <string name="provider_inputs_changed">Inputs changed. Validate current settings again.</string>
+    <string name="provider_connected">Connected. Selected model generated successfully.</string>
+    <string name="provider_validate">Validate · uses API</string>
+    <string name="provider_save">Save securely</string>
+    <string name="provider_not_validated">Not validated. Saving is allowed; the first send reports any problem.</string>
+    <string name="provider_deleted">Provider deleted. History kept.</string>
+    <string name="provider_delete_failed">Delete failed. Try again.</string>
+    <string name="provider_delete">Delete provider</string>
+    <string name="provider_working">Working…</string>
+
+    <!-- Reader action button in the chat overlay. -->
+    <string name="reader_action_retry">Retry response</string>
+    <string name="reader_action_latest">Jump to latest</string>
+</resources>

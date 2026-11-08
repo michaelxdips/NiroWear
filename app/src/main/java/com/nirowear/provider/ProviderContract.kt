@@ -124,6 +124,17 @@ enum class ProviderError(
 internal const val MAX_RESPONSE_CHARS = 1_048_576
 
 /**
+ * Whole-operation budget for model discovery, per adapter.
+ *
+ * The HTTP client's own limits are per-socket (20 s connect, 90 s read), and discovery PAGES: three
+ * slow pages meant the provider screen sat in "Discovering…" for minutes with no way out, because
+ * nothing bounded the loop as a whole. This is the budget for one `listModels` call including every
+ * page. It is generous enough for a cold radio and a 10k-entry catalog on a watch, and short enough
+ * that a wedged endpoint is reported as a failure the user can act on (enter the model manually).
+ */
+internal const val DISCOVERY_BUDGET_MS = 30_000L
+
+/**
  * Null-safe, type-safe read of a JSON string field. `JsonPrimitive.content` returns the literal
  * string "null" for JSON null, and `.jsonPrimitive` throws for objects/arrays, so untrusted
  * provider payloads must go through this instead.

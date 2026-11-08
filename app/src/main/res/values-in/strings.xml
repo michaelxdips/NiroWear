@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Chat reader: composer, transcript rows, menu, history. -->
+    <string name="chat_prompt">Tulis pesan</string>
+    <string name="chat_prompt_editor">Kolom pesan</string>
+    <string name="chat_send">Kirim</string>
+    <string name="chat_edit_resend">Edit &amp; kirim ulang</string>
+    <string name="chat_you">Anda</string>
+    <string name="chat_answer">Jawaban</string>
+    <string name="chat_you_hold_to_edit">Anda · tahan untuk edit</string>
+    <string name="chat_stop">Hentikan</string>
+    <string name="chat_keyboard_input">Input keyboard</string>
+    <string name="chat_voice_input">Input suara</string>
+    <string name="chat_voice_prompt">Tanya NiroWear</string>
+    <string name="chat_voice_unavailable">Pengenalan suara tidak tersedia. Pakai keyboard.</string>
+    <string name="chat_voice_blocked">Pengenalan suara diblokir. Pakai keyboard.</string>
+    <string name="chat_ask_anything">Tanya apa saja</string>
+    <string name="chat_empty_add_provider">Tambahkan provider dari menu, lalu pakai keyboard atau suara.</string>
+    <string name="chat_empty_start">Pakai keyboard atau suara untuk mulai.</string>
+    <string name="chat_copy_unsaved">Salin jawaban belum tersimpan</string>
+    <string name="chat_retry_saving">Coba simpan lagi</string>
+    <string name="chat_unsaved_copied">Jawaban yang belum tersimpan disalin sebagai sensitif. Papan klip masih berisi teks biasa.</string>
+    <string name="chat_edit_message">Edit pesan</string>
+    <string name="chat_menu">Menu</string>
+    <string name="chat_menu_providers">Provider / model</string>
+    <string name="chat_history">Riwayat</string>
+    <string name="chat_new_chat">Chat baru</string>
+    <string name="chat_nav_menu">Menu navigasi</string>
+    <string name="chat_reader_description">Pembaca percakapan</string>
+    <string name="chat_back">Kembali</string>
+    <string name="chat_search_messages">Cari pesan</string>
+    <string name="chat_search_placeholder">Cari semua pesan</string>
+    <string name="chat_no_matches">Tidak ada hasil.</string>
+    <string name="chat_hit_label">%1$s: %2$s</string>
+
+    <!-- Provider settings and pairing. -->
+    <string name="provider_pairing_warning">Hanya Wi-Fi yang sama. Ponsel Anda memperingatkan bahwa sertifikat jam tangan tidak tepercaya — terima untuk memuat halaman. Terenkripsi dengan ECDH P-256 + AES-GCM, tetapi handshake tidak terautentikasi — pastikan URL di jam tangan cocok. Lebih baik masukkan manual di jaringan yang tidak tepercaya.</string>
+    <string name="provider_add_compatible">Tambah kompatibel</string>
+    <string name="provider_add_openai">Tambah OpenAI</string>
+    <string name="provider_add_gemini">Tambah Gemini</string>
+    <string name="provider_add_anthropic">Tambah Anthropic</string>
+    <string name="provider_preset_compatible_message">Base API HTTPS. Root default /v1.</string>
+    <string name="provider_preset_openai_message">Responses native. Temukan model; model terpilih perlu validasi teks.</string>
+    <string name="provider_preset_gemini_message">generateContent native. Penemuan model memfilter kemampuan generasi.</string>
+    <string name="provider_preset_anthropic_message">Messages native. Pakai API key satu workspace.</string>
+    <string name="provider_name_custom">Provider kustom</string>
+    <string name="provider_name_openai">OpenAI</string>
+    <string name="provider_name_gemini">Gemini</string>
+    <string name="provider_name_anthropic">Anthropic</string>
+    <string name="provider_title">Provider</string>
+    <string name="provider_title_add">Tambah %1$s</string>
+    <string name="provider_title_edit">Edit %1$s</string>
+    <string name="provider_back">Kembali</string>
+    <string name="provider_row">%1$s\n%2$s</string>
+    <string name="provider_row_selected">Terpilih · %1$s\n%2$s</string>
+    <string name="provider_saved_ok">Tersimpan dengan aman.</string>
+    <string name="provider_saved_cleanup_pending">Tersimpan dengan aman. Pembersihan kunci terenkripsi lama tertunda; buka ulang aplikasi untuk mencoba lagi.</string>
+    <string name="provider_error_previous_kept">%1$s Kredensial sebelumnya dipertahankan.</string>
+    <string name="provider_check_config">Periksa konfigurasi lalu coba lagi.</string>
+    <string name="provider_save_failed_prev_kept">Penyimpanan aman gagal. Kredensial sebelumnya dipertahankan. Masukkan ulang key.</string>
+    <string name="provider_save_failed">Penyimpanan aman gagal. Masukkan ulang key.</string>
+    <string name="provider_select_failed">Gagal memilih. Coba lagi.</string>
+    <string name="provider_key_configured">API key sudah diatur. Masukkan hanya penggantinya.</string>
+    <string name="provider_edit_replace_key">Edit / ganti key</string>
+    <string name="provider_setup_from_phone">Atur dari ponsel</string>
+    <string name="provider_cancel_pairing">Batalkan pemasangan</string>
+    <string name="provider_no_wifi">Tidak ada alamat Wi-Fi. Nyalakan Wi-Fi, atau masukkan key di bawah.</string>
+    <string name="provider_key_received">Key diterima.</string>
+    <string name="provider_pairing_starting">Memulai…</string>
+    <string name="provider_not_home_network">Bukan jaringan rumah. Batalkan jika ragu.</string>
+    <string name="provider_pairing_unavailable">Pemasangan tidak tersedia. Masukkan key di bawah.</string>
+    <string name="provider_label_name">Nama</string>
+    <string name="provider_label_base_url">Base URL</string>
+    <string name="provider_label_manual_model">ID model manual</string>
+    <string name="provider_label_api_key">API key</string>
+    <string name="provider_configured_replace">Sudah diatur · masukkan hanya pengganti</string>
+    <string name="provider_hide_key">Sembunyikan key</string>
+    <string name="provider_reveal_key">Tampilkan key</string>
+    <string name="provider_type_unavailable">Jenis provider ini tidak tersedia di build ini.</string>
+    <string name="provider_models_listed">Model terdaftar. Pilih atau masukkan manual.</string>
+    <string name="provider_models_unavailable">Model tidak tersedia. Masukkan model manual; chat tetap bisa.</string>
+    <string name="provider_check_url_key">Periksa URL/key. Model manual tetap bisa.</string>
+    <string name="provider_discover_models">Temukan model</string>
+    <string name="provider_inputs_changed">Input berubah. Validasi ulang pengaturan saat ini.</string>
+    <string name="provider_connected">Terhubung. Model terpilih berhasil menghasilkan respons.</string>
+    <string name="provider_validate">Validasi · memakai API</string>
+    <string name="provider_save">Simpan dengan aman</string>
+    <string name="provider_not_validated">Belum divalidasi. Menyimpan tetap bisa; pengiriman pertama akan melaporkan masalah.</string>
+    <string name="provider_deleted">Provider dihapus. Riwayat tetap disimpan.</string>
+    <string name="provider_delete_failed">Gagal menghapus. Coba lagi.</string>
+    <string name="provider_delete">Hapus provider</string>
+    <string name="provider_working">Bekerja…</string>
+
+    <!-- Reader action button in the chat overlay. -->
+    <string name="reader_action_retry">Ulangi jawaban</string>
+    <string name="reader_action_latest">Ke yang terbaru</string>
+</resources>

@@ -63,6 +63,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
@@ -286,6 +287,14 @@ private fun ChatReader(
     val streamingLabel =
         androidx.compose.ui.res
             .stringResource(R.string.reader_streaming)
+    // The parse effect below runs off-composition, so its row labels are resolved here.
+    val youHoldToEditLabel = stringResource(R.string.chat_you_hold_to_edit)
+    val answerLabel = stringResource(R.string.chat_answer)
+    // Same reason: the voice callback and the clipboard button are plain lambdas.
+    val voicePrompt = stringResource(R.string.chat_voice_prompt)
+    val voiceUnavailable = stringResource(R.string.chat_voice_unavailable)
+    val voiceBlocked = stringResource(R.string.chat_voice_blocked)
+    val copiedNotice = stringResource(R.string.chat_unsaved_copied)
     // Presentation includes status/error/provenance, not just Markdown. All fields invalidate it.
     LaunchedEffect(storedMessages, chatState.conversationId) {
         val id = chatState.conversationId
@@ -319,14 +328,14 @@ private fun ChatReader(
                     previous[message] ?: run {
                         val label =
                             if (message.role == "USER") {
-                                "You · hold to edit"
+                                youHoldToEditLabel
                             } else {
                                 // Provenance is optional: a turn that failed before a profile was
                                 // resolved has neither field, and the old interpolation printed the
                                 // literal "null · null" under it.
                                 listOfNotNull(message.providerLabel, message.modelId)
                                     .joinToString(" · ")
-                                    .ifBlank { "Answer" }
+                                    .ifBlank { answerLabel }
                             }
                         listOf(message.id to ContentBlock.Heading(4, listOf(InlineContent(label)))) +
                             ResponseParser.parse(message.rawContent).map { message.id to it } +
@@ -551,9 +560,11 @@ private fun ChatReader(
                 Modifier.fillMaxSize().imePadding().padding(horizontal = 32.dp, vertical = 28.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Text("Prompt", modifier = Modifier.align(Alignment.CenterHorizontally))
+                Text(stringResource(R.string.chat_prompt), modifier = Modifier.align(Alignment.CenterHorizontally))
                 val composing = editedId != null
                 val editorText = if (composing) editText else draft
+                // The `semantics` lambda is not a composable scope.
+                val promptEditorLabel = stringResource(R.string.chat_prompt_editor)
                 BasicTextField(
                     value = editorText,
                     onValueChange = { if (composing) editText = it else draft = it },
@@ -562,6 +573,11 @@ private fun ChatReader(
                             .weight(1f)
                             .fillMaxWidth()
                             .background(Color(0xFF202124))
+                            // The field carries its own label. It used to rely on the visible
+                            // "Prompt" heading above it, so TalkBack reached an unlabelled edit box
+                            // and announced only "edit box" — the heading is a separate node and does
+                            // not describe the field it sits above.
+                            .semantics { contentDescription = promptEditorLabel }
                             .padding(8.dp),
                     textStyle = TextStyle(color = Color.White, fontSize = 16.sp),
                     cursorBrush =
@@ -612,9 +628,9 @@ private fun ChatReader(
                         if (editedId ==
                             null
                         ) {
-                            "Send"
+                            stringResource(R.string.chat_send)
                         } else {
-                            "Edit & resend"
+                            stringResource(R.string.chat_edit_resend)
                         },
                     )
                 }
@@ -827,6 +843,11 @@ private fun ChatReader(
                 }
                 onDispose { rotary = null }
             }
+            // The LazyColumn's `semantics` lambda is not a composable scope.
+            val navMenuLabel = stringResource(R.string.chat_nav_menu)
+            val readerLabel = stringResource(R.string.chat_reader_description)
+            // The Menu button's own label; resolved here for the same reason.
+            val menuLabel = stringResource(R.string.chat_menu)
             LazyColumn(
                 modifier =
                     Modifier
@@ -844,11 +865,12 @@ private fun ChatReader(
                         ).semantics {
                             contentDescription =
                                 if (sectionMenu) {
-                                    "Navigation menu"
+                                    navMenuLabel
                                 } else if (renderLab) {
+                                    // Debug-only RenderLab surface, deliberately not translated.
                                     "RenderLab reader"
                                 } else {
-                                    "Conversation reader"
+                                    readerLabel
                                 }
                             if (BuildConfig.DEBUG) {
                                 stateDescription =
@@ -902,13 +924,13 @@ private fun ChatReader(
                             providerScreen = true
                             sectionMenu =
                                 false
-                        }, modifier = Modifier.fillMaxWidth()) { Text("Providers / model") }
+                        }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.chat_menu_providers)) }
                     }
                     item {
                         Button(onClick = {
                             historyScreen = true
                             sectionMenu = false
-                        }, modifier = Modifier.fillMaxWidth()) { Text("History") }
+                        }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.chat_history)) }
                     }
                     item {
                         // `unsaved` implies generating == false, so the old gate enabled this button exactly in
@@ -921,7 +943,7 @@ private fun ChatReader(
                                 false
                             following = true
                             followNewConversation = false
-                        }, modifier = Modifier.fillMaxWidth()) { Text("New chat") }
+                        }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.chat_new_chat)) }
                     }
                     if (BuildConfig.DEBUG) {
                         items(listOf("Full fixture", "Unicode", "Math", "Code", "Table", "Partial syntax")) { name ->
@@ -960,16 +982,20 @@ private fun ChatReader(
                             val editModifier =
                                 if (editable) {
                                     Modifier
-                                        .combinedClickable(onClick = {
-                                        }, onLongClickLabel = "Edit message", onLongClick = {
-                                            saveReaderPosition()
-                                            // The edit body goes to its OWN slot: the unsent draft is
-                                            // left exactly as it was, so abandoning the edit cannot
-                                            // destroy it and cannot resurrect it later either.
-                                            editText = message.rawContent
-                                            editedId = message.id
-                                            editing = true
-                                        })
+                                        .combinedClickable(
+                                            onClick = {
+                                            },
+                                            onLongClickLabel = stringResource(R.string.chat_edit_message),
+                                            onLongClick = {
+                                                saveReaderPosition()
+                                                // The edit body goes to its OWN slot: the unsent draft is
+                                                // left exactly as it was, so abandoning the edit cannot
+                                                // destroy it and cannot resurrect it later either.
+                                                editText = message.rawContent
+                                                editedId = message.id
+                                                editing = true
+                                            },
+                                        )
                                 } else {
                                     Modifier
                                 }
@@ -1011,12 +1037,12 @@ private fun ChatReader(
                                         )
                                     markClipSensitive(clip)
                                     clipboard.setPrimaryClip(clip)
-                                    notice = "Unsaved answer copied as sensitive. Clipboard still holds plain text."
-                                }) { Text("Copy unsaved answer") }
+                                    notice = copiedNotice
+                                }) { Text(stringResource(R.string.chat_copy_unsaved)) }
                                 Button(
                                     enabled = !chatState.generating,
                                     onClick = { chat.retrySaving() },
-                                ) { Text("Retry saving") }
+                                ) { Text(stringResource(R.string.chat_retry_saving)) }
                             }
                         }
                     }
@@ -1028,14 +1054,14 @@ private fun ChatReader(
                     if (emptyPromptShown) {
                         item {
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text("Ask anything", fontSize = 18.sp)
+                                Text(stringResource(R.string.chat_ask_anything), fontSize = 18.sp)
                                 Text(
                                     if (providerState.selected ==
                                         null
                                     ) {
-                                        "Add provider from menu, then use keyboard or voice."
+                                        stringResource(R.string.chat_empty_add_provider)
                                     } else {
-                                        "Use keyboard or voice to start."
+                                        stringResource(R.string.chat_empty_start)
                                     },
                                     fontSize = 14.sp,
                                     lineHeight = 20.sp,
@@ -1074,9 +1100,12 @@ private fun ChatReader(
             Box(
                 Modifier
                     .align(Alignment.TopCenter)
-                    .width(130.dp)
-                    .height(48.dp)
-                    .semantics { contentDescription = "Menu" }
+                    // Bounds are MINIMUMS, not fixed sizes: a fixed 130 dp box with maxLines = 1
+                    // clipped the provider name to "Add prov…" at a 2.0x font scale with no way to
+                    // read the rest. Growing up to 300 dp keeps it inside the dial's safe band.
+                    .widthIn(min = 130.dp, max = 300.dp)
+                    .heightIn(min = 48.dp)
+                    .semantics { contentDescription = menuLabel }
                     .clickable(role = Role.Button) {
                         if (!sectionMenu) saveReaderPosition()
                         sectionMenu = !sectionMenu
@@ -1090,9 +1119,15 @@ private fun ChatReader(
                         providerState.selected?.let { "${it.displayName} · ${it.selectedModelId}" }
                             ?: "Add provider · Menu"
                     },
-                    modifier = Modifier.height(42.dp).wrapContentHeight(Alignment.Bottom).padding(bottom = 6.dp),
+                    modifier =
+                        Modifier
+                            .heightIn(min = 42.dp)
+                            .wrapContentHeight(Alignment.Bottom)
+                            .padding(bottom = 6.dp),
                     fontSize = 12.sp,
-                    maxLines = 1,
+                    // Two lines at 2.0x instead of one clipped line. The parent's contentDescription
+                    // still carries the full text for TalkBack, so nothing is lost if it wraps.
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
@@ -1106,6 +1141,9 @@ private fun ChatReader(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
+                    // The `semantics` lambdas below are not composable scopes.
+                    val keyboardInputLabel = stringResource(R.string.chat_keyboard_input)
+                    val voiceInputLabel = stringResource(R.string.chat_voice_input)
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -1124,7 +1162,7 @@ private fun ChatReader(
                                         chat.stop()
                                     },
                                     modifier = Modifier.widthIn(min = 72.dp).heightIn(min = 48.dp),
-                                ) { Text("Stop", fontSize = 12.sp, maxLines = 1) }
+                                ) { Text(stringResource(R.string.chat_stop), fontSize = 12.sp, maxLines = 1) }
                             }
                             if (!following) ReaderAction(retry = false, onClick = { following = true })
                         } else {
@@ -1132,7 +1170,7 @@ private fun ChatReader(
                             Box(
                                 Modifier
                                     .size(48.dp)
-                                    .semantics { contentDescription = "Keyboard input" }
+                                    .semantics { contentDescription = keyboardInputLabel }
                                     // Re-entry keeps an unsent DRAFT: Back out of the editor is not a
                                     // discard. The re-entry also DROPS a pending edit target —
                                     // `editText` and `editedId` are cleared together, so a stale
@@ -1161,7 +1199,7 @@ private fun ChatReader(
                             Box(
                                 Modifier
                                     .size(48.dp)
-                                    .semantics { contentDescription = "Voice input" }
+                                    .semantics { contentDescription = voiceInputLabel }
                                     .clickable(role = Role.Button, onClick = {
                                         saveReaderPosition()
                                         try {
@@ -1171,13 +1209,13 @@ private fun ChatReader(
                                                         RecognizerIntent.EXTRA_LANGUAGE_MODEL,
                                                         RecognizerIntent.LANGUAGE_MODEL_FREE_FORM,
                                                     )
-                                                    putExtra(RecognizerIntent.EXTRA_PROMPT, "Ask NiroWear")
+                                                    putExtra(RecognizerIntent.EXTRA_PROMPT, voicePrompt)
                                                 },
                                             )
                                         } catch (_: ActivityNotFoundException) {
-                                            notice = "Voice recognition unavailable. Use keyboard."
+                                            notice = voiceUnavailable
                                         } catch (_: SecurityException) {
-                                            notice = "Voice recognition blocked. Use keyboard."
+                                            notice = voiceBlocked
                                         }
                                     }),
                                 contentAlignment = Alignment.Center,
@@ -1249,17 +1287,24 @@ private fun HistoryScreen(
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         item {
-            Text("History", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center, fontSize = 18.sp)
+            Text(
+                stringResource(R.string.chat_history),
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center,
+                fontSize = 18.sp,
+            )
         }
         item {
             Button(
                 onClick = onBack,
                 modifier = Modifier.fillMaxWidth().wrapContentWidth(Alignment.CenterHorizontally),
             ) {
-                Text("Back")
+                Text(stringResource(R.string.chat_back))
             }
         }
         item {
+            // The `semantics` lambda is not a composable scope.
+            val searchLabel = stringResource(R.string.chat_search_messages)
             BasicTextField(
                 value = query,
                 onValueChange = { query = it },
@@ -1269,14 +1314,20 @@ private fun HistoryScreen(
                         .heightIn(min = 48.dp)
                         .background(Color(0xFF202124))
                         .padding(12.dp)
-                        .semantics { contentDescription = "Search messages" },
+                        .semantics { contentDescription = searchLabel },
                 singleLine = true,
                 textStyle = TextStyle(color = Color.White, fontSize = 16.sp),
                 cursorBrush =
                     androidx.compose.ui.graphics
                         .SolidColor(Color.White),
                 decorationBox = { field ->
-                    if (query.isEmpty()) Text("Search all messages", fontSize = 16.sp, color = Color(0xFF8E939B))
+                    if (query.isEmpty()) {
+                        Text(
+                            stringResource(R.string.chat_search_placeholder),
+                            fontSize = 16.sp,
+                            color = Color(0xFF8E939B),
+                        )
+                    }
                     field()
                 },
             )
@@ -1287,13 +1338,17 @@ private fun HistoryScreen(
                 onClick = { onSelect(null, null) },
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("New chat")
+                Text(stringResource(R.string.chat_new_chat))
             }
         }
         if (query.isNotBlank()) {
-            if (hits.isEmpty() && searched.isNotBlank()) item { Text("No matches.", fontSize = 14.sp) }
+            if (hits.isEmpty() && searched.isNotBlank()) {
+                item { Text(stringResource(R.string.chat_no_matches), fontSize = 14.sp) }
+            }
             items(hits, key = { "hit-${it.messageId}" }) { hit ->
                 val label = hit.rawContent.replace(Regex("\\s+"), " ").take(80)
+                val roleLabel =
+                    stringResource(if (hit.role == "USER") R.string.chat_you else R.string.chat_answer)
                 // Same guard as the conversation rows: opening during generation is refused by the
                 // ViewModel, and closing History anyway looked like a dead tap that lost the search.
                 Button(
@@ -1302,7 +1357,7 @@ private fun HistoryScreen(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text(
-                        "${if (hit.role == "USER") "You" else "Answer"}: $label",
+                        stringResource(R.string.chat_hit_label, roleLabel, label),
                         fontSize = 13.sp,
                         maxLines = 4,
                     )
