@@ -2978,7 +2978,7 @@ adb install -r app-release.apk</pre>
           <tbody>
             <tr>
               <td>The published APK is signed by the release identity</td>
-              <td><span class="pill pill-source">Source</span> <span class="pill pill-device">JVM</span> <code>apksigner verify --print-certs</code> on the downloaded <code>v0.1.1</code> asset reports <code>CN=NiroWear Release</code> / <code>0dc50fc0…543e</code>; the release workflow asserts the same certificate before it publishes. 0.1.0 was signed with the Android debug lineage, so a 0.1.0 install must be uninstalled before updating.</td>
+              <td><span class="pill pill-source">Source</span> <span class="pill pill-device">JVM</span> <code>apksigner verify --print-certs</code> on the downloaded <code>v0.2.0</code> asset reports <code>CN=NiroWear Release</code> / <code>0dc50fc0…86543e</code>, and <code>aapt2 dump badging</code> reports <code>versionCode='13' versionName='0.2.0'</code>; the release workflow asserts the same certificate before it publishes. 0.1.0 was signed with the Android debug lineage, so a 0.1.0 install must be uninstalled before updating.</td>
               <td>.github/workflows/release.yml; release body</td>
             </tr>
             <tr>
@@ -3014,7 +3014,7 @@ adb install -r app-release.apk</pre>
             <tr>
               <td>Native LaTeX typesetting in release builds</td>
               <td><span class="pill pill-emu">Emulator</span> Release APK produced Math canvas nodes for a display integral and inline math; 30 TTF files present.</td>
-              <td>Release notes, v0.1.1</td>
+              <td>Release notes, v0.2.0</td>
             </tr>
             <tr>
               <td>Credential pairing encrypts the payload</td>
@@ -3067,16 +3067,20 @@ adb install -r app-release.apk</pre>
           page describes <strong>0.2.0</strong>; the audit rounds that produced it changed chat
           lifecycle, Keystore, adapter and renderer code, so any claim here that cites an earlier
           emulator run is dated rather than current. The connected-test suite is now MEASURED, not
-          assumed: <strong>66 tests, 3 failing, 0 errors</strong> on a Wear OS 37 AVD (2026-11-08). An
+          assumed: <strong>66 tests, 2 failing, 0 errors</strong> on a Wear OS 37 AVD (2026-11-08). An
           earlier revision of this page said "14 failing": that figure was arithmetic from a partial
           run, not a measurement, and was wrong — the tests share one app process, so a class that
           passes on its own can still fail in suite order. A full-suite run at that point reported 18,
-          and the test-side fixes that followed brought it to 2. Re-measured for this cut on the same
-          tree and on <code>main</code> at <code>118c552</code>, it is 3: two of them are environment
-          limits — an emulator has no rotary/bezel source and no real phone browser for the pairing
-          certificate click-through — and the third,
-          <code>ReaderNavigationTest#editAndRetryInvalidateRemovedContinuationThroughRealTouch</code>,
-          is pre-existing and tracked as issue #34 rather than carried forward as a green figure. Also
+          and the test-side fixes that followed brought it to 2. The two that remain are named rather
+          than counted: <code>PairingUiTest#keyArrivesFromPhoneWithoutTypingOnWatch</code> needs a real
+          phone browser for the certificate click-through, and
+          <code>RendererTapAndPanTest#wideCodeHasAccessibleHorizontalScrollInLtrAndRtl</code> fails in
+          suite order while passing in isolation on the same build. <code>RotaryInputTest</code> has
+          both passed and failed across runs here, and an emulator has no bezel source, so its result is
+          not evidence either way. Fixed and now passing:
+          <code>ReaderNavigationTest#editAndRetry…</code> (a trailing <code>Retry response</code> row
+          could sit below the fold) and
+          <code>StoppedStatusUiTest#persistedStatusAndRetryRemainReachableAtBothScales</code>. Also
           measured on this tree: with 5,000 messages seeded
           across 200 conversations, the history search's worst query took <strong>7 ms</strong>
           against a 250 ms debounce, so it stays a plain <code>LIKE</code> scan with no index. Test sources are not published in this
