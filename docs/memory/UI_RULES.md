@@ -4,7 +4,7 @@
 
 User approves Keyboard/Voice Material vectors PASS in isolated preview only.
 Do not redesign without demonstrated usability evidence. Harmony audit and proposed
-P1 corrections recorded in UI_HARMONY_AUDIT_2026-10-09.md; no findings implemented.
+P1 corrections were recorded in a now-removed 2026-10-09 audit note; no findings were implemented.
 Provider-screen black PNGs and unrelated desktop host captures are invalid visual
 evidence. Provider/form/credential appearance NOT INSPECTED. Left-aligned prose/list
 rows remain functionally appropriate; no global centering or footer redesign.

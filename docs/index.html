@@ -2997,6 +2997,21 @@ adb install -r app-release.apk</pre>
               <td>ContentBlock.kt, RenderUnit.kt; RenderUnitTest; app/build/test-results/testDebugUnitTest/</td>
             </tr>
             <tr>
+              <td>The whole interface is localized, not only the renderer</td>
+              <td><span class="pill pill-source">Source</span> 89 user-visible strings in <code>values/strings.xml</code> with a complete Indonesian set in <code>values-in/strings.xml</code>: 89 keys each, zero missing, zero undefined references. Every English value is byte-identical to the literal it replaced, so nothing that matched on text changed behaviour.</td>
+              <td>values/strings.xml, values-in/strings.xml</td>
+            </tr>
+            <tr>
+              <td>Accessibility dead stops are fixed, not just described</td>
+              <td><span class="pill pill-source">Source</span> The link group node is actionable (announces the count, opens the first link), the composer field carries its own label, a credential label is announced once, and the provider header grows to two lines instead of clipping at 130 dp. <em>Audio</em> output is still unverified.</td>
+              <td>DocumentBlock.kt, MainActivity.kt, ProviderScreen.kt</td>
+            </tr>
+            <tr>
+              <td>Pairing and model discovery never block the UI thread</td>
+              <td><span class="pill pill-source">Source</span> The listener's key generation, certificate and socket bind run on IO, and its worker join runs on a daemon thread instead of the caller. Discovery carries a 30 s whole-operation budget, because pages were bounded only per socket.</td>
+              <td>ProviderScreen.kt, PairingServer.kt, ProviderContract.kt</td>
+            </tr>
+            <tr>
               <td>Native LaTeX typesetting in release builds</td>
               <td><span class="pill pill-emu">Emulator</span> Release APK produced Math canvas nodes for a display integral and inline math; 30 TTF files present.</td>
               <td>Release notes, v0.1.1</td>

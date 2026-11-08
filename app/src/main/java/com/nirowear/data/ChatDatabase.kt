@@ -2,7 +2,6 @@ package com.nirowear.data
 
 import androidx.room.Dao
 import androidx.room.Database
-import androidx.room.Delete
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
@@ -12,7 +11,6 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.RoomDatabase
 import androidx.room.Transaction
-import androidx.room.Update
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
@@ -290,8 +288,12 @@ interface ChatDao {
         id: Long,
     )
 
-    @Query("UPDATE messages SET rawContent = :text WHERE id = :id AND role = 'USER'")
+    @Query(
+        "UPDATE messages SET rawContent = :text " +
+            "WHERE id = :id AND conversationId = :conversationId AND role = 'USER'",
+    )
     suspend fun replaceUser(
+        conversationId: String,
         id: Long,
         text: String,
     ): Int
@@ -314,8 +316,11 @@ interface ChatDao {
         text: String,
     ) {
         require(text.isNotBlank())
-        require(snapshot(conversationId).any { it.id == id && it.role == "USER" })
-        check(replaceUser(id, text) == 1)
+        // The UPDATE is the ownership check: it is scoped to this conversation and to a USER row, so
+        // a target that belongs elsewhere matches nothing and nothing is mutated. This used to load
+        // EVERY message of the conversation into memory (`snapshot(conversationId).any { ... }`) just
+        // to test one id — the whole chat, markdown included, per edit.
+        require(replaceUser(conversationId, id, text) == 1) { "Not a user message in this conversation" }
         truncate(conversationId, id)
     }
 

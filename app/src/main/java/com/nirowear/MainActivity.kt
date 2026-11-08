@@ -16,7 +16,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -59,6 +59,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -67,6 +68,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
@@ -979,23 +981,41 @@ private fun ChatReader(
                             val messageId = renderedHistory.getOrNull(unit.blockIndex)?.first
                             val message = messageId?.let { messageById[it] }
                             val editable = message?.role == "USER" && !chatState.generating
+                            // `combinedClickable` requires a non-empty onClick, so an empty one made the
+                            // row an activatable control that TalkBack announced ("double tap to
+                            // activate") while a tap did nothing. Long-press is the only real action:
+                            // a raw long-press detector plus an explicit semantics long-click action
+                            // keeps the gesture AND the TalkBack entry, and advertises no tap at all.
+                            val editLabel =
+                                if (editable) stringResource(R.string.chat_edit_message) else null
+                            val openEditor: () -> Unit = {
+                                message?.let { target ->
+                                    saveReaderPosition()
+                                    // The edit body goes to its OWN slot: the unsent draft is
+                                    // left exactly as it was, so abandoning the edit cannot
+                                    // destroy it and cannot resurrect it later either.
+                                    editText = target.rawContent
+                                    editedId = target.id
+                                    editing = true
+                                }
+                            }
                             val editModifier =
                                 if (editable) {
                                     Modifier
-                                        .combinedClickable(
-                                            onClick = {
-                                            },
-                                            onLongClickLabel = stringResource(R.string.chat_edit_message),
-                                            onLongClick = {
-                                                saveReaderPosition()
-                                                // The edit body goes to its OWN slot: the unsent draft is
-                                                // left exactly as it was, so abandoning the edit cannot
-                                                // destroy it and cannot resurrect it later either.
-                                                editText = message.rawContent
-                                                editedId = message.id
-                                                editing = true
-                                            },
-                                        )
+                                        .pointerInput(messageId) {
+                                            detectTapGestures(onLongPress = { openEditor() })
+                                        }
+                                        // NOT `mergeDescendants = true`: merging the row's children into
+                                        // one node changes the accessibility tree the reader is measured
+                                        // against, and the reader's own scroll targets depend on those
+                                        // per-block bounds. The long-click action is advertised on the row
+                                        // node without merging, which is what `combinedClickable` did.
+                                        .semantics {
+                                            onLongClick(label = editLabel, action = {
+                                                openEditor()
+                                                true
+                                            })
+                                        }
                                 } else {
                                     Modifier
                                 }
@@ -1346,7 +1366,7 @@ private fun HistoryScreen(
                 item { Text(stringResource(R.string.chat_no_matches), fontSize = 14.sp) }
             }
             items(hits, key = { "hit-${it.messageId}" }) { hit ->
-                val label = hit.rawContent.replace(Regex("\\s+"), " ").take(80)
+                val label = hit.rawContent.replace(WHITESPACE_RUN, " ").take(80)
                 val roleLabel =
                     stringResource(if (hit.role == "USER") R.string.chat_you else R.string.chat_answer)
                 // Same guard as the conversation rows: opening during generation is refused by the
@@ -1376,6 +1396,9 @@ private fun HistoryScreen(
 }
 
 private const val SEARCH_DEBOUNCE_MS = 250L
+
+/** Compiled once: a per-row `Regex(...)` re-compiled the pattern for every hit on every frame. */
+private val WHITESPACE_RUN = Regex("\\s+")
 
 /** ponytail: 40 hits; a watch list never shows more without another query. */
 private const val SEARCH_LIMIT = 40

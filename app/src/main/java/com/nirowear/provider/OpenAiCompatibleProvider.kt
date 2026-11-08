@@ -195,7 +195,15 @@ class CompatibleStreamDecoder {
                             .map { it.jsonObject }
                             .firstOrNull { (it["index"] as? JsonPrimitive)?.intOrNull == 0 }
                             ?: choices.first().jsonObject
-                    val delta = choice.getValue("delta").jsonObject
+                    // `delta` is an OPTIONAL member of the streaming choice. A final
+                    // finish_reason-only chunk (`{"choices":[{"finish_reason":"stop"}]}`) and a
+                    // gateway that serialises an absent delta as JSON null are both legal.
+                    // getValue() threw on them, so the terminal chunk decoded to PROTOCOL and a
+                    // complete answer was saved as "Stream interrupted" with no terminal evidence
+                    // left for EOF to find. Only a delta of the wrong JSON TYPE is a framing fault.
+                    val rawDelta = choice["delta"]
+                    require(rawDelta == null || rawDelta == JsonNull || rawDelta is JsonObject)
+                    val delta = (rawDelta as? JsonObject) ?: JsonObject(emptyMap())
                     // JsonNull is not Kotlin null. A gateway that serialises absent optionals as
                     // explicit nulls (`"tool_calls": null`) is emitting legal JSON, but the old
                     // `== null` check threw on the very first chunk and turned the whole answer

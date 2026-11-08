@@ -41,6 +41,7 @@ import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.Placeholder
 import androidx.compose.ui.text.PlaceholderVerticalAlign
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
@@ -60,6 +61,12 @@ import com.nirowear.R
 // FSI (U+2068) / PDI (U+2069) isolate mixed-direction inline spans.
 private const val BIDI_ISOLATE_OPEN = "\u2068"
 private const val BIDI_ISOLATE_CLOSE = "\u2069"
+
+/** Indent one list level costs. The parser caps the emitted depth against the same budget. */
+private const val LIST_INDENT_DP = 16
+
+/** Deepest list level this renderer indents. Beyond it a watch paragraph is empty. */
+private const val MAX_LIST_LEVELS = 4
 
 // A paragraph direction marker keeps the paragraph's own direction even when
 // every visible character is hidden inside FSI/PDI isolates.
@@ -129,14 +136,20 @@ internal fun openHttpLink(
 private const val MAX_LINK_ACTIONS = 6
 
 @Composable
-fun DocumentBlock(block: ContentBlock) {
+fun DocumentBlock(
+    block: ContentBlock,
+    // ONE measurer per block instead of one per paragraph: every TextMeasurer carries its own
+    // 8-entry layout cache, so a 40-paragraph answer used to hold 40 caches of the same text. The
+    // default keeps the old single-argument call site working; the reader passes its own.
+    measurer: TextMeasurer = rememberTextMeasurer(),
+) {
     when (block) {
         is ContentBlock.Paragraph -> {
-            RichText(block.content)
+            RichText(block.content, measurer = measurer)
         }
 
         is ContentBlock.Heading -> {
-            RichText(block.content, heading = block.level)
+            RichText(block.content, heading = block.level, measurer = measurer)
         }
 
         is ContentBlock.ListEntry -> {
@@ -144,7 +157,9 @@ fun DocumentBlock(block: ContentBlock) {
             // put a depth-1 child bullet to the LEFT of its parent's text column (parent text starts at
             // marker + 6dp ≈ 12dp for "•", the child bullet at 8dp), so nesting read backwards. The
             // fixed column also lines up an item's continuation paragraph, which carries no marker.
-            val depthPadding = (block.depth.coerceAtMost(4) * 16).dp
+            // The parser caps the depth at MAX_LIST_LEVELS; the coerce here keeps a block built
+            // elsewhere (tests, restored history) inside the same budget.
+            val depthPadding = (block.depth.coerceIn(0, MAX_LIST_LEVELS) * LIST_INDENT_DP).dp
             Row(
                 modifier = Modifier.padding(start = depthPadding).semantics(mergeDescendants = true) {},
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -156,7 +171,7 @@ fun DocumentBlock(block: ContentBlock) {
                     softWrap = false,
                     modifier = Modifier.widthIn(min = 22.dp),
                 )
-                RichText(block.content, modifier = Modifier.weight(1f))
+                RichText(block.content, modifier = Modifier.weight(1f), measurer = measurer)
             }
         }
 
@@ -212,7 +227,7 @@ fun DocumentBlock(block: ContentBlock) {
             // "N rows withheld" notice are gone with the cap — nothing is withheld any more.
             val resources = LocalResources.current
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                if (block.rows.isEmpty()) block.headers.forEach { RichText(it, heading = 4) }
+                if (block.rows.isEmpty()) block.headers.forEach { RichText(it, heading = 4, measurer = measurer) }
                 block.rows.forEachIndexed { rowIndex, cells ->
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         cells.forEachIndexed { index, cell ->
@@ -220,8 +235,21 @@ fun DocumentBlock(block: ContentBlock) {
                             // Heading semantics only on the FIRST row's labels. The label is repeated
                             // per row so a watch reader keeps the column association, but marking
                             // every repetition as a heading gave TalkBack one heading stop per row.
-                            if (label.isNotEmpty()) RichText(label, heading = if (rowIndex == 0) 4 else null)
-                            RichText(cell)
+                            if (label.isNotEmpty()) {
+                                RichText(
+                                    label,
+                                    heading =
+                                        if (rowIndex ==
+                                            0
+                                        ) {
+                                            4
+                                        } else {
+                                            null
+                                        },
+                                    measurer = measurer,
+                                )
+                            }
+                            RichText(cell, measurer = measurer)
                         }
                     }
                     // No rule after the LAST row: a trailing rule read as a table that continued below.
@@ -259,10 +287,13 @@ fun DocumentBlock(block: ContentBlock) {
  * cost one item at a time instead of in a single measuring pass.
  */
 @Composable
-internal fun RenderUnitView(unit: RenderUnit) {
+internal fun RenderUnitView(
+    unit: RenderUnit,
+    measurer: TextMeasurer = rememberTextMeasurer(),
+) {
     when (unit) {
         is RenderUnit.Whole -> {
-            DocumentBlock(unit.block)
+            DocumentBlock(unit.block, measurer)
         }
 
         is RenderUnit.CodeChunk -> {
@@ -287,13 +318,45 @@ internal fun RenderUnitView(unit: RenderUnit) {
                         val label = unit.headers.getOrNull(index).orEmpty()
                         // Heading semantics only on the first row, so a 100-row table does not become
                         // 100 heading stops for TalkBack.
-                        if (label.isNotEmpty()) RichText(label, heading = if (unit.rowIndex == 0) 4 else null)
-                        RichText(cell)
+                        if (label.isNotEmpty()) {
+                            RichText(
+                                label,
+                                heading =
+                                    if (unit.rowIndex ==
+                                        0
+                                    ) {
+                                        4
+                                    } else {
+                                        null
+                                    },
+                                measurer = measurer,
+                            )
+                        }
+                        RichText(cell, measurer = measurer)
                     }
                 }
                 // A rule between rows, never after the last: a trailing rule read as a table that
                 // continued below.
                 if (!unit.last) Box(Modifier.fillMaxWidth().height(1.dp).background(Color(0xFF5F646C)))
+                // Cells the parser dropped are announced after the LAST row of the table, which is
+                // where the single-item branch used to put it. Only on the final unit, or a 40-row
+                // table would repeat the same sentence 40 times.
+                if (unit.last && unit.droppedCells > 0) {
+                    val resources = LocalResources.current
+                    RichText(
+                        listOf(
+                            InlineContent(
+                                resources.getQuantityString(
+                                    R.plurals.renderer_hidden_cells,
+                                    unit.droppedCells,
+                                    unit.droppedCells,
+                                ),
+                            ),
+                        ),
+                        heading = null,
+                        measurer = measurer,
+                    )
+                }
             }
         }
     }
@@ -304,6 +367,7 @@ private fun RichText(
     content: List<InlineContent>,
     modifier: Modifier = Modifier,
     heading: Int? = null,
+    measurer: TextMeasurer = rememberTextMeasurer(),
 ) {
     val links = content.mapNotNull { it.link }.filter { isOpenableLink(it) }.distinct()
     val linkActions = links.isNotEmpty()
@@ -319,7 +383,6 @@ private fun RichText(
         return
     }
     val density = LocalDensity.current
-    val measurer = rememberTextMeasurer()
     val math = content.map { if (it.math) rememberMath(it.text) else null }
     val fallbackSize =
         when (heading) {
@@ -482,58 +545,68 @@ private fun InlineRichText(
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
+    // Both structures are hoisted out of the composition body: they were rebuilt on EVERY
+    // recomposition of the paragraph (scroll, ripple, a sibling changing), which is the one place this
+    // renderer allocates per frame. The keys are exactly what they read — the spans, the typeset
+    // drawables, the heading level and the density — and `content`/`math` compare structurally
+    // (InlineContent is a data class, a Drawable compares by identity), not by re-hashing paragraph
+    // text, so an unchanged paragraph hits the cache.
     val inline =
-        math
-            .mapIndexedNotNull { index, drawable ->
-                drawable?.let {
-                    "math$index" to
-                        InlineTextContent(
-                            Placeholder(
-                                with(density) { it.intrinsicWidth.toSp() },
-                                with(density) { it.intrinsicHeight.toSp() },
-                                PlaceholderVerticalAlign.TextCenter,
-                            ),
-                        ) { MathCanvas(drawable, content[index].text) }
-                }
-            }.toMap()
+        remember(content, math, density) {
+            math
+                .mapIndexedNotNull { index, drawable ->
+                    drawable?.let {
+                        "math$index" to
+                            InlineTextContent(
+                                Placeholder(
+                                    with(density) { it.intrinsicWidth.toSp() },
+                                    with(density) { it.intrinsicHeight.toSp() },
+                                    PlaceholderVerticalAlign.TextCenter,
+                                ),
+                            ) { MathCanvas(drawable, content[index].text) }
+                    }
+                }.toMap()
+        }
     val text =
-        buildAnnotatedString {
-            append(paragraphDirectionMarker(content))
-            content.forEachIndexed { index, span ->
-                if (math[index] != null) {
-                    appendInlineContent("math$index", span.text)
-                    return@forEachIndexed
-                }
-                // Paint a link only when it can actually be opened. Relative links, bare domains,
-                // mailto: and javascript: used to render blue and underlined with no click action,
-                // so the reader was told "this is tappable" and nothing happened.
-                val openable = span.link?.let { isOpenableLink(it) } == true
-                val style =
-                    SpanStyle(
-                        fontWeight = if (span.bold || heading != null) FontWeight.Bold else null,
-                        fontStyle = if (span.italic || span.math) FontStyle.Italic else null,
-                        fontFamily = if (span.code) FontFamily.Monospace else null,
-                        background = if (span.code) Color(0xFF25282D) else Color.Unspecified,
-                        color = if (openable) Color(0xFFA8C7FA) else Color.Unspecified,
-                        textDecoration = if (openable) TextDecoration.Underline else null,
-                    )
-                withStyle(style) {
-                    val link = span.link
-                    // Isolate mixed-direction URLs and code from surrounding text.
-                    val isolated = BIDI_ISOLATE_OPEN + span.text + BIDI_ISOLATE_CLOSE
-                    if (openable && link != null) {
-                        // ponytail: inline links have no guaranteed 48dp target; add
-                        // separate accessible actions when they preserve paragraph flow.
-                        withLink(
-                            LinkAnnotation.Clickable(link) {
-                                openHttpLink(
-                                    context,
-                                    link,
-                                )?.let { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() }
-                            },
-                        ) { append(isolated) }
-                    } else {
-                        append(isolated)
+        remember(content, math, heading, context) {
+            buildAnnotatedString {
+                append(paragraphDirectionMarker(content))
+                content.forEachIndexed { index, span ->
+                    if (math[index] != null) {
+                        appendInlineContent("math$index", span.text)
+                        return@forEachIndexed
+                    }
+                    // Paint a link only when it can actually be opened. Relative links, bare domains,
+                    // mailto: and javascript: used to render blue and underlined with no click action,
+                    // so the reader was told "this is tappable" and nothing happened.
+                    val openable = span.link?.let { isOpenableLink(it) } == true
+                    val style =
+                        SpanStyle(
+                            fontWeight = if (span.bold || heading != null) FontWeight.Bold else null,
+                            fontStyle = if (span.italic || span.math) FontStyle.Italic else null,
+                            fontFamily = if (span.code) FontFamily.Monospace else null,
+                            background = if (span.code) Color(0xFF25282D) else Color.Unspecified,
+                            color = if (openable) Color(0xFFA8C7FA) else Color.Unspecified,
+                            textDecoration = if (openable) TextDecoration.Underline else null,
+                        )
+                    withStyle(style) {
+                        val link = span.link
+                        // Isolate mixed-direction URLs and code from surrounding text.
+                        val isolated = BIDI_ISOLATE_OPEN + span.text + BIDI_ISOLATE_CLOSE
+                        if (openable && link != null) {
+                            // ponytail: inline links have no guaranteed 48dp target; add
+                            // separate accessible actions when they preserve paragraph flow.
+                            withLink(
+                                LinkAnnotation.Clickable(link) {
+                                    openHttpLink(
+                                        context,
+                                        link,
+                                    )?.let { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() }
+                                },
+                            ) { append(isolated) }
+                        } else {
+                            append(isolated)
+                        }
                     }
                 }
             }
