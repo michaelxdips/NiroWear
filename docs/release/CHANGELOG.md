@@ -73,8 +73,12 @@ pinned by commit SHA, and the release workflow is split into a read-only build j
 `publish` job.
 
 Disclosed, not fixed here: the 6 `@HostDrivenGate` methods have still never executed (#29); two
-instrumented methods need a physical watch and a real phone browser (#27, #28); CI cannot compile the
-private instrumented sources (#30); provider and network error text remains English-only (#31).
+instrumented methods need a physical watch and a real phone browser (#27, #28); the instrumented suite
+measures **66 tests, 3 failures, 0 errors** on this cut — the third,
+`ReaderNavigationTest#editAndRetryInvalidateRemovedContinuationThroughRealTouch`, fails on `main` at
+`118c552` and in isolation too, so the previously published "66 / 2" did not hold on re-measurement
+(#34); CI cannot compile the private instrumented sources (#30); provider and network error text remains
+English-only (#31).
 
 ## 0.1.0 — stable cut, 2026-11-03
 

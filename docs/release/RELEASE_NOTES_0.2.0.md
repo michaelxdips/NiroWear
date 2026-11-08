@@ -19,6 +19,10 @@ Read from the result XML, not from memory:
 - `ktlintCheck` **0 errors**; Android Lint **0 issues** (`<issues format="6"/>`, "No issues found.").
 - `assembleDebug` and `assembleRelease` **pass** on this tree. The published artifact is the one the
   workflow signs from the tag; a local cut of the same tree is not bit-identical.
+- Instrumented suite, Wear OS 37 AVD at 466 × 466: **66 tests, 3 failures, 0 errors**. Two need hardware
+  (#27, #28). The third, `ReaderNavigationTest#editAndRetryInvalidateRemovedContinuationThroughRealTouch`,
+  also fails on `main` at `118c552` and in isolation, so it predates this cut — tracked as #34. The
+  "66 / 2" this repository published before today did not hold on re-measurement.
 
 ## Nothing is withheld from a long answer any more
 
@@ -113,5 +117,8 @@ release instead of failing on it.
 - The 6 `@HostDrivenGate` methods are excluded from the default run and have still never executed (#29).
 - Two instrumented methods need hardware the emulator cannot provide: bezel/rotary input, and a real
   phone browser for the pairing certificate click-through (#27, #28).
+- A third instrumented method, `editAndRetryInvalidateRemovedContinuationThroughRealTouch`, fails with
+  "No safe touch target: Retry response" on this tree and on `main`, in the suite and alone (#34). It is
+  not diagnosed here, and no green figure is claimed for it.
 - CI still cannot compile the instrumented sources, which are private by policy (#30).
 - Error strings that originate from providers and the network remain English-only (#31).
