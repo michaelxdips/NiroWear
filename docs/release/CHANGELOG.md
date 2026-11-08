@@ -3,6 +3,79 @@
 Notable changes to NiroWear. Versions follow the published APK releases at
 [NiroWear releases](https://github.com/michaelxdips/NiroWear/releases).
 
+## 0.2.0 — 2026-11-08
+
+`versionCode 13`, `versionName 0.2.0`. The renderer stops withholding content, eight product bugs are
+fixed, the whole UI is localised, and the pairing listener no longer refuses the real browser.
+
+### A long answer is never truncated by a row cap
+
+A table was one `LazyColumn` item capped at 40 rows with a "… N more rows" line for the rest; a code
+fence was a single `Text` of the whole fence. Both were the ANR shape the cap existed to prevent, and a
+contradiction of "never shorten an answer for the screen". Each table row and each 24-line code chunk is
+its own item, so the cap is gone rather than raised. Measured on the AVD: a 120-row table reaches row
+119 and a 200-line fence keeps every line.
+
+### Eight product bugs
+
+- **Stop downgraded a finished answer.** The cancellation path wrote `STOPPED` unconditionally; it only
+  writes it when the turn had not already reached a terminal state.
+- **Retry with no user row blamed the provider.** It now refuses with "Nothing to retry in this chat."
+- **A `finish_reason`-only terminal chunk failed a complete answer.** Compatible providers may send the
+  last chunk without a `delta`; the adapter treated that as malformed. The `delta` is optional now.
+- **A bare Gemini host produced 404s.** No version segment now resolves to `/v1beta`; explicit paths are
+  preserved exactly.
+- **Pairing delivered a payload after Cancel.** The server checks its close flag before replying.
+- **Accepted-socket leak.** If `Thread.start()` threw, the accepted socket was never closed; it is closed
+  in the loop's `finally`.
+- **One transient DataStore error stranded the provider screen.** The flow completes, with a bounded
+  retry of 3 attempts at 1/2/4 s.
+- **The dropped-cells notice was unreachable.** It lived on the non-lazy table path that no longer
+  renders; it now rides the last rendered row.
+
+### The pairing listener accepts the browser behind a hostile peer
+
+`serve()` joins each request with a hard time bound, which deliberately blocks the accept loop; the
+listen backlog was **1**, so a peer that had already filled the single queue slot made the real
+connection fail with `ECONNREFUSED`. Measured as `ConnectException` in
+`PairingServerTest.aDribblingClientCannotHoldTheSession` during a full-suite run. The backlog is 8.
+
+### Accessibility: four measured dead stops
+
+The "Links" group announced a count and carried no action, so TalkBack stopped on something it could
+not activate — it opens the first link now, with a localised plural label. The composer field relied on
+a heading as its label, which is a separate node; it has its own. A credential entry announced its label
+twice; the label node is decorative. The provider header was a fixed `130 dp` box at `maxLines = 1` and
+clipped to "Add prov…" at a 2.0x font scale; it grows to two lines.
+
+### Localization: the whole UI
+
+89 user-visible strings moved out of `MainActivity`, `ProviderScreen` and `ReaderList` into
+`values/strings.xml`, with a complete Indonesian set in `values-in/strings.xml`. Technical terms (API
+key, model, provider, token) stay English. Every English value is byte-identical to the literal it
+replaced.
+
+### Freezes and bounded work
+
+`startPairing()` ran `SecureRandom`, a P-256 `KeyPairGenerator`, a self-signed certificate and a
+`ServerSocket` bind inside `onClick`, and `PairingServer.close()` joined its worker on the caller for up
+to five seconds; both are off the UI thread. Discovery gained a 30 s whole-operation budget. Math layout
+is bounded at 16384 × 1024 px and 3,000,000 px area (a 4096 px width was tried and reverted: it broke
+horizontal panning), list depth at 4, one `TextMeasurer` per item, memoised `AnnotatedString` and inline
+map, single-pass mid-line `$$`, hoisted regexes.
+
+### Footprint and build
+
+1.20 MB of dead Markdown artifacts (69 files plus `AUDIT.md`) and 5 stale tracked files removed;
+documentation went from 1.4 MB to 285 KB across 33 files, and `README.md` was rewritten around measured
+evidence. `jvmTarget` pinned to 17, the Gradle cache key hashes every toolchain input, ten actions are
+pinned by commit SHA, and the release workflow is split into a read-only build job and a write-token
+`publish` job.
+
+Disclosed, not fixed here: the 6 `@HostDrivenGate` methods have still never executed (#29); two
+instrumented methods need a physical watch and a real phone browser (#27, #28); CI cannot compile the
+private instrumented sources (#30); provider and network error text remains English-only (#31).
+
 ## 0.1.0 — stable cut, 2026-11-03
 
 Stable cut from green tree `1b389a4` (versionCode 10). Signed with the beta

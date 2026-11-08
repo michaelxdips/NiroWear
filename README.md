@@ -91,7 +91,7 @@ It exists because a watch is a bad screen for a good answer. Every other approac
 Verify what you installed:
 
 ```bash
-aapt2 dump badging app-release.apk | head -3    # versionCode 12, versionName 0.1.2
+aapt2 dump badging app-release.apk | head -3    # versionCode 13, versionName 0.2.0
 sha256sum app-release.apk                       # compare with the hash in the release body
 ```
 

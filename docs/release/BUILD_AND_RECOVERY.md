@@ -30,13 +30,13 @@ debug math tests do not establish native release behavior.
 - Before future production edits, create a new verified source-only recovery ZIP. Exclude secrets, signing keys, local.properties, emulator data and authenticated logs.
 - Do not uninstall or clear an installation holding valuable conversations/credentials. APK rollback may need database-version compatibility; verify on a fresh AVD first and obtain separate data-loss authorization if required.
 - Keys use device-bound Android Keystore encryption and backup is disabled. Broken/inaccessible keys require normal masked re-entry; no plaintext fallback or key extraction.
-- The workspace is a Git clone of `https://github.com/michaelxdips/NiroWear.git`; released tags are `v0.1.0`, `v0.1.1`, `v0.1.2`. Provenance for a shipped artifact is its tag, the workflow run that built it and the APK SHA-256 that run printed — not a local file fingerprint.
+- The workspace is a Git clone of `https://github.com/michaelxdips/NiroWear.git`; released tags are `v0.1.0`, `v0.1.1`, `v0.1.2`, `v0.2.0`. Provenance for a shipped artifact is its tag, the workflow run that built it and the APK SHA-256 that run printed — not a local file fingerprint.
 
 ## Acceptance identity
 
-The 0.1.2 artifact identity is the one the tag workflow records: it verifies
+The 0.2.0 artifact identity is the one the tag workflow records: it verifies
 `certificate DN: CN=NiroWear Release`, prints the certificate SHA-256 from `apksigner verify --print-certs`,
-and appends the APK SHA-256 (`sha256sum`) to the release body. `docs/release/RELEASE_NOTES_0.1.2.md`
+and appends the APK SHA-256 (`sha256sum`) to the release body. `docs/release/RELEASE_NOTES_0.2.0.md`
 discloses the signer. Nothing in this file re-measures any of them. The `7d4e6e99…8abe3` certificate
 fingerprint that used to be printed here belongs to the 0.1.0 debug-signed lineage and must not be used to
 identify a 0.1.1+ artifact.

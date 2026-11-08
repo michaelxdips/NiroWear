@@ -130,12 +130,76 @@ p:last-child{margin-bottom:0}
     <p class="meta">Generated from git history and the NiroWear release API · 2026-11-08</p>
   </div>
 
+  <!-- 0.2.0 -->
+  <article class="release">
+    <div class="rside">
+      <span class="rver">0.2.0</span>
+      <span class="rdate">2026-11-08</span>
+      <span class="rbadge latest">Latest</span>
+    </div>
+    <div class="rbody">
+      <h2>Nothing is withheld from a long answer</h2>
+      <p>
+        A table was one lazy item capped at 40 rows, and a code fence was a single text node holding the
+        whole fence. Both were the jank the cap was meant to prevent, and both contradicted the rule
+        that an answer is never shortened for the screen. Every table row and every 24-line code chunk
+        is its own item now, so the cap is gone rather than raised.
+      </p>
+      <ul>
+        <li><strong>Eight product bugs fixed.</strong> Stop no longer downgrades an answer that had
+          already finished; Retry with no user message refuses instead of blaming the provider; a
+          terminal chunk that carries only <code>finish_reason</code> no longer fails a complete
+          answer; a bare Gemini host resolves to <code>/v1beta</code> instead of 404ing; pairing stops
+          delivering a payload after Cancel; an accepted socket is closed when the handler thread
+          cannot start; one transient DataStore error no longer strands the provider screen; and the
+          dropped-cells notice is reachable again.</li>
+        <li><strong>The pairing listener accepts the browser behind a hostile peer.</strong> Each
+          request is joined with a hard time bound, which blocks the accept loop by design — with a
+          listen backlog of 1, a peer that filled the single queue slot made the real connection fail
+          with <code>ECONNREFUSED</code>. Measured as a <code>ConnectException</code> in the JVM suite.
+          The backlog is 8.</li>
+        <li><strong>Four accessibility dead stops removed</strong>: the Links group opens the first link
+          instead of announcing a count it could not activate, the composer field carries its own
+          label, a credential label is no longer announced twice, and the provider header survives a
+          2.0x font scale.</li>
+        <li><strong>The whole UI is localised</strong>: 89 strings moved into resources with a complete
+          Indonesian set; technical terms stay English, and every English value is byte-identical to
+          the literal it replaced.</li>
+        <li><strong>Nothing freezes the dial on input</strong>: pairing key generation, certificate
+          minting and the listener bind left <code>onClick</code>, the close-path join left the caller,
+          and discovery gained a 30 s whole-operation budget.</li>
+        <li><strong>Smaller and bounded</strong>: math layout capped at 16384 × 1024 px and 3,000,000 px
+          area, list depth at 4, memoised inline nodes, and 1.20 MB of dead Markdown artifacts deleted
+          with the documentation tree cut from 1.4 MB to 285 KB.</li>
+      </ul>
+      <dl class="ident">
+        <div><dt>versionCode</dt><dd>13</dd></div>
+        <div><dt>certificate</dt><dd>0dc50fc0…543e (same as 0.1.2)</dd></div>
+        <div><dt>identity</dt><dd>CN=NiroWear Release</dd></div>
+      </dl>
+      <table class="gate">
+        <thead><tr><th>Check</th><th>Result</th></tr></thead>
+        <tbody>
+          <tr><td>JVM unit tests</td><td>269 / 269, 0 failures, 43 suites</td></tr>
+          <tr><td>ktlint</td><td>0 errors</td></tr>
+          <tr><td>lint</td><td>0 errors, 0 warnings</td></tr>
+          <tr><td>Instrumented (Wear OS 37 AVD)</td><td>66 tests, 2 failing, 0 errors — both need hardware the emulator cannot provide (#27, #28)</td></tr>
+          <tr><td>assembleRelease, signed in CI</td><td>pass, certificate asserted before publish</td></tr>
+        </tbody>
+      </table>
+      <p class="note">
+        Unchanged and disclosed: the 6 <code>@HostDrivenGate</code> methods have still never executed
+        (#29), CI cannot compile the private instrumented sources (#30), and provider or network error
+        text remains English-only (#31).
+      </p>
+    </div>
+  </article>
+
   <!-- 0.1.2 -->
   <article class="release">
     <div class="rside">
       <span class="rver">0.1.2</span>
       <span class="rdate">2026-11-07</span>
-      <span class="rbadge latest">Latest</span>
     </div>
     <div class="rbody">
       <h2>Validate is advisory; Save is not gated on a live call</h2>
