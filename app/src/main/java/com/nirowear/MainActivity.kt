@@ -692,6 +692,9 @@ private fun ChatReader(
                 }
             LaunchedEffect(historyKeys) { blockHeights.keys.retainAll(historyKeys.toSet()) }
             val spacingPx = with(LocalDensity.current) { 12.dp.roundToPx() }
+            // Height of a trailing action row (`ReaderAction` is a 48 dp box); used to leave room for
+            // the Retry row below the answer instead of scrolling the answer itself off screen.
+            val trailingRowPx = with(LocalDensity.current) { 48.dp.roundToPx() }
             val answerId = storedMessages.lastOrNull()?.takeIf { it.role == "ASSISTANT" }?.id
             // Find the row BY ID rather than taking the last KEY. `parsedRows` is a LinkedHashMap keyed by
             // the row itself, and `previous + parsed` keeps an existing key's position, so after History
@@ -749,6 +752,11 @@ private fun ChatReader(
                 chatState.error,
                 chatState.interrupted,
                 notice,
+                // Trailing rows are appended AFTER the answer's last unit. They were not keys, so a
+                // newly visible Retry/streaming row never re-ran the follow decision and could sit
+                // entirely below the fold.
+                retryRowShown,
+                streamingRowShown,
             ) {
                 if (!renderLab && !sectionMenu && following &&
                     (chatState.conversationId == null || restoredConversation == chatState.conversationId) &&
@@ -804,9 +812,16 @@ private fun ChatReader(
                         val lastContentUnit = lastContent?.let(::lastUnit)
                         val height = lastContentUnit?.let { blockHeights[renderUnits.getOrNull(it)?.key] }
                         if (!chatState.generating && lastContentUnit != null && height != null) {
+                            // The Retry action is a trailing list item, and aligning the answer's last
+                            // unit to the viewport bottom left it below the fold: measured "No safe
+                            // touch target: Retry response" with the reader node ending at y=302 and
+                            // the row at 268..364. Scrolling to the tail instead pushed the partial
+                            // answer off screen ("Partial content retained 1.3"), so leave exactly the
+                            // trailing row's height below the answer: both stay visible.
+                            val trailing = if (retryRowShown) trailingRowPx + spacingPx else 0
                             listState.scrollToItem(
                                 lastContentUnit + noticeItems,
-                                (height - viewport + spacingPx).coerceAtLeast(0),
+                                (height - viewport + spacingPx + trailing).coerceAtLeast(0),
                             )
                         } else {
                             listState.scrollToItem((count - 1).coerceAtLeast(0))

@@ -180,18 +180,20 @@ Every number below came from a command run on this tree. Anything not measured i
 | Android Lint | **0 errors, 0 warnings** | `app/build/reports/lint-results-debug.xml` |
 | ktlint | **0 violations** | `:app:ktlintCheck` |
 | Assemblies | `assembleDebug` + `assembleRelease` pass | Gradle output |
-| Instrumented suite (Wear OS 37 AVD, 466×466) | **66 tests, 3 failing, 0 errors** | `app/build/outputs/androidTest-results/connected/debug/*.xml` |
+| Instrumented suite (Wear OS 37 AVD, 466×466) | **66 tests, 2 failing, 0 errors** | `app/build/outputs/androidTest-results/connected/debug/*.xml` |
 
-Two instrumented failures are **environmental, not defects**:
+The two remaining failures, measured on the last full run (2026-11-08):
 
-| Test | Why an emulator cannot pass it |
+| Test | Why it fails there |
 |---|---|
-| `RotaryInputTest` | No rotary/bezel input source exists to drive. |
-| `PairingUiTest` | Needs a real LAN and a phone browser to click through a self-signed certificate warning. |
+| `PairingUiTest#keyArrivesFromPhoneWithoutTypingOnWatch` | Needs a real LAN and a phone browser to click through a self-signed certificate warning. |
+| `RendererTapAndPanTest#wideCodeHasAccessibleHorizontalScrollInLtrAndRtl` | Fails in suite order and **passes in isolation** on the same build; the pan assertion depends on state a preceding test leaves behind. |
 
-The third, `ReaderNavigationTest#editAndRetryInvalidateRemovedContinuationThroughRealTouch`, fails with `No safe touch target: Retry response`. It is **not** a flake and not new: it reproduces in isolation and on `main` at `118c552`, and the failure dump puts the reader node at `Rect(0, 96 - 466, 302)` while the only action boxes sit at `y 314…410`. Open as [#34](https://github.com/michaelxdips/NiroWear/issues/34).
+`RotaryInputTest` both passes and fails across runs on this AVD. The emulator has no bezel or rotary source, so its result is not evidence either way; the real check is #27.
 
-Two published figures used to be wrong and are corrected rather than quietly dropped: `"48 / 48"` came from an older emulator run that no longer matched the suite, and `"14 failing"` was arithmetic (18 minus four tests re-run in isolation) rather than a full-suite measurement. `"66 / 2"` was measured but has not held: the same tree now measures **66 / 3** (#34).
+Fixed and now passing, after failing on the previous cut: `ReaderNavigationTest#editAndRetryInvalidateRemovedContinuationThroughRealTouch` (a trailing `Retry response` row could sit below the fold) and `StoppedStatusUiTest#persistedStatusAndRetryRemainReachableAtBothScales`.
+
+Three published figures have been wrong and are corrected rather than quietly dropped: `"48 / 48"` came from an older emulator run that no longer matched the suite, `"14 failing"` was arithmetic (18 minus four tests re-run in isolation) rather than a full-suite measurement, and `"66 / 2"` named the wrong two — re-measured, the same suite moves among a small known set run to run, which is why each is listed by name above instead of as a count alone.
 
 **Other measured facts**
 
@@ -199,7 +201,9 @@ Two published figures used to be wrong and are corrected rather than quietly dro
 - **Published artifact.** `v0.2.0` `app-release.apk`, 3,696,101 B, SHA-256 `ec77e27c…5e02b2e3` (from the release API, 2026-11-08). A local build of the same tree is **not** bit-identical; trust the hash in the release body, not a local cut.
 - **Signing identity.** `CN=NiroWear Release`, SHA-256 `0D:C5:0F:C0:19:…:86:54:3E`, valid to 2056.
 
-**Explicitly unverified.** A physical watch has never run this build: battery, thermals, real touch and bezel input, and TalkBack *audio* are unmeasured. The pairing certificate click-through on a real phone is unmeasured. Six `@HostDrivenGate` instrumentation methods need a host script to seed process-death state and have never executed. All are tracked as issues below.
+**Explicitly unverified.** A physical watch has never run this build: battery, thermals, real touch and bezel input, and TalkBack *audio* are unmeasured. The pairing certificate click-through on a real phone is unmeasured. All are tracked as issues below.
+
+**Host-driven gates.** Six instrumentation methods are excluded from the default run because they need real process death between phases (`@HostDrivenGate`, `notAnnotation` in `app/build.gradle.kts`). They are executed by `scripts/check-wear-acceptance-seed.ps1`, `scripts/check-native-restart.ps1`, `scripts/check-combined-lifecycle.ps1` and `scripts/check-credential-promotion.ps1`, each of which refuses a device whose `adb emu avd name` is not the AVD it was told to expect. Last run on a Wear OS 37 AVD: **all six pass**.
 
 ## Known limitations
 
@@ -221,7 +225,6 @@ Remaining gaps are filed rather than described:
 
 - **#27** Physical watch acceptance: battery, thermals, rotary, real keyboard, TalkBack audio
 - **#28** Pairing: verify the self-signed certificate click-through on a real phone
-- **#29** Six `@HostDrivenGate` instrumentation methods have never executed
 - **#30** CI never compiles the instrumented tests, so they rot invisibly
 - **#31** Localize error text: `ProviderError` causes and credential-entry hints
 

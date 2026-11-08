@@ -3,6 +3,44 @@
 Notable changes to NiroWear. Versions follow the published APK releases at
 [NiroWear releases](https://github.com/michaelxdips/NiroWear/releases).
 
+## Unreleased
+
+### A trailing Retry row can no longer sit below the fold
+
+The reader shows a `Retry response` action as the last item of the list. When an answer is taller than
+the viewport, the follow-scroll aligned the answer's last unit to the bottom edge, which left that row
+entirely below it: measured `No safe touch target: Retry response`, with the reader node ending at
+`y=302` and the row at `268..364` — more than half of a 96 px target unreachable. Two trailing-row flags
+(`retryRowShown`, `streamingRowShown`) were also missing from the follow-effect's keys, so a row that
+appeared after the last scroll never re-ran the decision.
+
+The scroll now leaves exactly the trailing row's height below the answer, so the answer's tail *and* the
+action stay on screen. Scrolling to the tail alone was tried first and pushed the partial answer out of
+view (`Partial content retained 1.3` in `StoppedStatusUiTest`), which is why the fix reserves room
+instead of jumping.
+
+### The six host-driven gates have now executed, and they pass
+
+Tracked as #29 since the suite was first measured. All six ran on a Wear OS 37 AVD with a real
+`am force-stop` between phases: three `WearAcceptanceSeedTest` methods (13 documents verified across a
+process death), `CombinedLifecycleTest#combinedReleaseGate` (seed-kill → continue → verify),
+`NativeProviderSwitchTest#activeHttpProcessDeathProbe` (killed mid-HTTP, partial persisted as `STOPPED`
+with its profile and model, follow-up settled with no replay) and
+`CredentialPromotionCrashTest#promotionRestartProbe` at all six promotion points.
+
+Two of them could never have passed as written, which is what "never executed" was hiding:
+`save()` deliberately does not retarget the selection, so both gates have to call `select()` explicitly.
+That is a test-side bug in a gate nobody had run — no product behaviour changed for it. The runner
+scripts now take `-Serial` and `-ExpectedAvd` and refuse unless `adb emu avd name` reports exactly that
+AVD, so none of them can be pointed at a watch holding real credentials.
+
+Measured on this tree: JVM **269 / 269** across 43 suites, ktlint 0, Android Lint 0 issues,
+`assembleDebug` + `assembleRelease` pass, and the instrumented suite is **66 tests, 2 failures,
+0 errors** — `PairingUiTest#keyArrivesFromPhoneWithoutTypingOnWatch` (needs a real phone browser) and
+`RendererTapAndPanTest#wideCodeHasAccessibleHorizontalScrollInLtrAndRtl` (fails in suite order, passes in
+isolation on the same build). `RotaryInputTest` passed on this run and has failed on others; an emulator
+has no bezel source, so it is not evidence either way.
+
 ## 0.2.0 — 2026-11-08
 
 `versionCode 13`, `versionName 0.2.0`. The renderer stops withholding content, eight product bugs are
