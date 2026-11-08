@@ -2228,8 +2228,8 @@ html[data-theme="dark"] .pill-none{color:#FF9C86}
         </p>
 
         <div class="actions">
-          <a class="btn" href="https://github.com/michaelxdips/NiroWear/releases/download/v0.1.2/app-release.apk">
-            Download APK <span class="sz">3.6 MB · v0.1.2</span>
+          <a class="btn" href="https://github.com/michaelxdips/NiroWear/releases/download/v0.2.0/app-release.apk">
+            Download APK <span class="sz">v0.2.0</span>
           </a>
           <a class="btn line" href="#bench">Try the renderer</a>
         </div>
@@ -2857,7 +2857,7 @@ HTTP/1.1 400
             <pre>adb install -r app-release.apk</pre>
           </div>
           <p class="fine">
-            Signed · non-debuggable · versionCode 12 · the exact size and SHA-256 are printed in the release body by the workflow that built it
+            Signed · non-debuggable · versionCode 13 · the exact size and SHA-256 are printed in the release body by the workflow that built it
           </p>
         </div>
 
@@ -3064,17 +3064,20 @@ adb install -r app-release.apk</pre>
         <p class="status-note">
           The JVM and lint figures above were read from the result XML produced by a forced re-run on
           2026-11-08 (<code>269 tests / 43 suites</code>, lint 0 warnings), not quoted from memory. This
-          page describes <strong>0.1.1</strong>; the three audit rounds that produced it changed chat
+          page describes <strong>0.2.0</strong>; the audit rounds that produced it changed chat
           lifecycle, Keystore, adapter and renderer code, so any claim here that cites an earlier
           emulator run is dated rather than current. The connected-test suite is now MEASURED, not
-          assumed: <strong>66 tests, 2 failing, 0 errors</strong> on a Wear OS 37 AVD (2026-11-08). An
+          assumed: <strong>66 tests, 3 failing, 0 errors</strong> on a Wear OS 37 AVD (2026-11-08). An
           earlier revision of this page said "14 failing": that figure was arithmetic from a partial
           run, not a measurement, and was wrong — the tests share one app process, so a class that
           passes on its own can still fail in suite order. A full-suite run at that point reported 18,
-          and the test-side fixes that followed brought it to the measured 2. Those two
-          are itemised per class in the repository README and both are environment limits — an emulator
-          has no rotary/bezel source and no real phone browser for the pairing certificate
-          click-through — not product defects. Also measured on this tree: with 5,000 messages seeded
+          and the test-side fixes that followed brought it to 2. Re-measured for this cut on the same
+          tree and on <code>main</code> at <code>118c552</code>, it is 3: two of them are environment
+          limits — an emulator has no rotary/bezel source and no real phone browser for the pairing
+          certificate click-through — and the third,
+          <code>ReaderNavigationTest#editAndRetryInvalidateRemovedContinuationThroughRealTouch</code>,
+          is pre-existing and tracked as issue #34 rather than carried forward as a green figure. Also
+          measured on this tree: with 5,000 messages seeded
           across 200 conversations, the history search's worst query took <strong>7 ms</strong>
           against a 250 ms debounce, so it stays a plain <code>LIKE</code> scan with no index. Test sources are not published in this
           repository by policy, so the result XML is not linkable from here.

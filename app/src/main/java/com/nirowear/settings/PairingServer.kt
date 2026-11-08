@@ -78,7 +78,15 @@ internal class PairingServer(
         SelfSignedCert
             .serverContext(tlsKey, SelfSignedCert.mint(tlsKey, host, hostAddress))
             .serverSocketFactory
-            .createServerSocket(0, 1, hostAddress)
+            // Backlog 1 refused the real browser whenever a hostile peer had already filled the
+            // single queue slot while serve() was joining it: measured as ConnectException in
+            // PairingServerTest.aDribblingClientCannotHoldTheSession. The queue only has to outlast
+            // one join, so a handful of slots is enough.
+            // Backlog 1 refused the real browser whenever a hostile peer had already filled the
+            // single queue slot while serve() was joining it: measured as ConnectException in
+            // PairingServerTest.aDribblingClientCannotHoldTheSession. The queue only has to outlast
+            // one join, so a handful of slots is enough.
+            .createServerSocket(0, 8, hostAddress)
 
     @Volatile private var consumed = false
 

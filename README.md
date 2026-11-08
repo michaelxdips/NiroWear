@@ -91,7 +91,7 @@ It exists because a watch is a bad screen for a good answer. Every other approac
 Verify what you installed:
 
 ```bash
-aapt2 dump badging app-release.apk | head -3    # versionCode 12, versionName 0.1.2
+aapt2 dump badging app-release.apk | head -3    # versionCode 13, versionName 0.2.0
 sha256sum app-release.apk                       # compare with the hash in the release body
 ```
 
@@ -180,16 +180,18 @@ Every number below came from a command run on this tree. Anything not measured i
 | Android Lint | **0 errors, 0 warnings** | `app/build/reports/lint-results-debug.xml` |
 | ktlint | **0 violations** | `:app:ktlintCheck` |
 | Assemblies | `assembleDebug` + `assembleRelease` pass | Gradle output |
-| Instrumented suite (Wear OS 37 AVD, 466×466) | **66 tests, 2 failing, 0 errors** | `app/build/outputs/androidTest-results/connected/debug/*.xml` |
+| Instrumented suite (Wear OS 37 AVD, 466×466) | **66 tests, 3 failing, 0 errors** | `app/build/outputs/androidTest-results/connected/debug/*.xml` |
 
-The two instrumented failures are **environmental, not defects**:
+Two instrumented failures are **environmental, not defects**:
 
 | Test | Why an emulator cannot pass it |
 |---|---|
 | `RotaryInputTest` | No rotary/bezel input source exists to drive. |
 | `PairingUiTest` | Needs a real LAN and a phone browser to click through a self-signed certificate warning. |
 
-Two published figures used to be wrong and are corrected rather than quietly dropped: `"48 / 48"` came from an older emulator run that no longer matched the suite, and `"14 failing"` was arithmetic (18 minus four tests re-run in isolation) rather than a full-suite measurement. A full run reported 18; the current figure is 2.
+The third, `ReaderNavigationTest#editAndRetryInvalidateRemovedContinuationThroughRealTouch`, fails with `No safe touch target: Retry response`. It is **not** a flake and not new: it reproduces in isolation and on `main` at `118c552`, and the failure dump puts the reader node at `Rect(0, 96 - 466, 302)` while the only action boxes sit at `y 314…410`. Open as [#34](https://github.com/michaelxdips/NiroWear/issues/34).
+
+Two published figures used to be wrong and are corrected rather than quietly dropped: `"48 / 48"` came from an older emulator run that no longer matched the suite, and `"14 failing"` was arithmetic (18 minus four tests re-run in isolation) rather than a full-suite measurement. `"66 / 2"` was measured but has not held: the same tree now measures **66 / 3** (#34).
 
 **Other measured facts**
 
