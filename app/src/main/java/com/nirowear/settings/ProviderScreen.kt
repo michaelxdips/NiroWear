@@ -2,6 +2,7 @@ package com.nirowear.settings
 
 import android.os.SystemClock
 import android.view.WindowManager
+import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -36,6 +37,8 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
@@ -50,7 +53,9 @@ import androidx.wear.compose.material3.OutlinedButton
 import androidx.wear.compose.material3.Text
 import com.nirowear.BuildConfig
 import com.nirowear.NiroApplication
+import com.nirowear.R
 import com.nirowear.data.ProviderSettingsState
+import com.nirowear.provider.DISCOVERY_BUDGET_MS
 import com.nirowear.provider.Endpoints
 import com.nirowear.provider.ModelDiscoveryResult
 import com.nirowear.provider.ProviderError
@@ -63,58 +68,59 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.util.UUID
-
-/** Shown once, as the pairing note. It used to be a second copy right beside it. */
-private const val PAIRING_WARNING =
-    "Same Wi-Fi only. Your phone warns that the watch's certificate is not trusted — accept it to " +
-        "load the page. Encrypted with ECDH P-256 + AES-GCM, but the handshake is unauthenticated — " +
-        "confirm the URL on the watch matches. Prefer manual entry on untrusted networks."
 
 /** The four add-provider presets. Only the literals differ, so the button logic is written once. */
 private data class Preset(
-    val label: String,
+    @param:StringRes val label: Int,
     val type: ProviderType,
-    val name: String,
+    @param:StringRes val name: Int,
     val base: String,
-    val message: String,
+    @param:StringRes val message: Int,
 )
 
 private val PRESETS =
     listOf(
         Preset(
-            "Add compatible",
+            R.string.provider_add_compatible,
             ProviderType.OPENAI_COMPATIBLE,
-            "Custom provider",
+            R.string.provider_name_custom,
             "",
-            "HTTPS API base. Root defaults to /v1.",
+            R.string.provider_preset_compatible_message,
         ),
         Preset(
-            "Add OpenAI",
+            R.string.provider_add_openai,
             ProviderType.OPENAI,
-            "OpenAI",
+            R.string.provider_name_openai,
             "https://api.openai.com/v1",
-            "Native Responses. Discover models; selected model needs text validation.",
+            R.string.provider_preset_openai_message,
         ),
         Preset(
-            "Add Gemini",
+            R.string.provider_add_gemini,
             ProviderType.GEMINI,
-            "Gemini",
+            R.string.provider_name_gemini,
             "https://generativelanguage.googleapis.com/v1beta",
-            "Native generateContent. Discovery filters generation capability.",
+            R.string.provider_preset_gemini_message,
         ),
         Preset(
-            "Add Anthropic",
+            R.string.provider_add_anthropic,
             ProviderType.ANTHROPIC,
-            "Anthropic",
+            R.string.provider_name_anthropic,
             "https://api.anthropic.com/v1",
-            "Native Messages. Use single-workspace API key.",
+            R.string.provider_preset_anthropic_message,
         ),
     )
 
 @Composable
 fun ProviderScreen(onBack: () -> Unit) {
     val context = LocalContext.current
+    // Resolved ONCE here and read inside the coroutine callbacks. Lint's
+    // LocalContextGetResourceValueCall exists because calling resources.getString(...) from a
+    // composable re-reads configuration state on every recomposition; LocalResources is the
+    // configuration-aware handle Compose provides for exactly this, and the renderer already
+    // uses it the same way.
+    val resources = androidx.compose.ui.platform.LocalResources.current
     val app = context.applicationContext as NiroApplication
     val state by app.settings.state.collectAsStateWithLifecycle(initialValue = ProviderSettingsState())
     val scope = rememberCoroutineScope()
@@ -125,7 +131,8 @@ fun ProviderScreen(onBack: () -> Unit) {
     // keyboard. The API KEY below stays `remember` on purpose: a saved-instance bundle is plaintext
     // on disk, and the credential contract forbids repopulating it.
     var type by rememberSaveable { mutableStateOf(ProviderType.OPENAI_COMPATIBLE) }
-    var name by rememberSaveable { mutableStateOf("Custom provider") }
+    val customProviderName = stringResource(R.string.provider_name_custom)
+    var name by rememberSaveable { mutableStateOf(customProviderName) }
     var base by rememberSaveable { mutableStateOf("") }
     var model by rememberSaveable { mutableStateOf("") }
     var key by remember { mutableStateOf("") } // Never rememberSaveable, persist or repopulate decrypted secret.
@@ -133,6 +140,9 @@ fun ProviderScreen(onBack: () -> Unit) {
     var message by remember { mutableStateOf("") }
     var models by remember { mutableStateOf<List<String>>(emptyList()) }
     var busy by remember { mutableStateOf(false) }
+    // Guards a double tap while the listener is being created off the UI thread: a second tap would
+    // otherwise build a second server and bind a second port.
+    var pairingStarting by remember { mutableStateOf(false) }
     var validated by remember { mutableStateOf(false) }
     // Pairing listener: exists only while this screen is composed. Never a service, never at boot.
     var pairing by remember { mutableStateOf<PairingServer?>(null) }
@@ -193,9 +203,9 @@ fun ProviderScreen(onBack: () -> Unit) {
             models = emptyList()
             message =
                 if (cleaned) {
-                    "Saved securely."
+                    resources.getString(R.string.provider_saved_ok)
                 } else {
-                    "Saved securely. Old encrypted-key cleanup pending; reopen app to retry cleanup."
+                    resources.getString(R.string.provider_saved_cleanup_pending)
                 }
         } catch (cancelled: CancellationException) {
             throw cancelled
@@ -210,7 +220,7 @@ fun ProviderScreen(onBack: () -> Unit) {
             message =
                 when {
                     specific != null && hadPrevious -> {
-                        "$specific Previous credential kept."
+                        resources.getString(R.string.provider_error_previous_kept, specific)
                     }
 
                     specific != null -> {
@@ -218,15 +228,17 @@ fun ProviderScreen(onBack: () -> Unit) {
                     }
 
                     failure is IllegalArgumentException || failure is IllegalStateException -> {
-                        failure.message?.takeIf { it.isNotBlank() } ?: "Check the configuration and try again."
+                        failure.message
+                            ?.takeIf { it.isNotBlank() }
+                            ?: resources.getString(R.string.provider_check_config)
                     }
 
                     hadPrevious -> {
-                        "Secure save failed. Previous credential kept. Re-enter key."
+                        resources.getString(R.string.provider_save_failed_prev_kept)
                     }
 
                     else -> {
-                        "Secure save failed. Re-enter key."
+                        resources.getString(R.string.provider_save_failed)
                     }
                 }
         } finally {
@@ -235,56 +247,79 @@ fun ProviderScreen(onBack: () -> Unit) {
     }
 
     fun stopPairing(note: String = "") {
+        // close() shuts the sockets synchronously, which is fast; the worker join it also starts is
+        // on its own daemon thread, so this no longer freezes the dial while a peer sits in read().
         pairing?.close()
         pairing = null
         pairingNote = note
     }
 
+    /**
+     * Starts the pairing listener WITHOUT blocking the UI thread.
+     *
+     * The constructor does real work — SecureRandom, a P-256 KeyPairGenerator, a self-signed
+     * certificate, and a ServerSocket bind — and `start()` spawns the accept loop. Running all of
+     * that inside `onClick` stalled the provider screen on the exact tap that is supposed to respond
+     * instantly. It runs on IO now and reports back on the main thread.
+     */
     fun startPairing() {
+        if (pairingStarting) return
         val host = lanAddress()
         if (host == null) {
-            pairingNote = "No Wi-Fi address. Turn on Wi-Fi, or enter the key below."
+            pairingNote = resources.getString(R.string.provider_no_wifi)
             return
         }
-        // The constructor itself does real work — SecureRandom, a P-256 KeyPairGenerator, and a
-        // ServerSocket bind. Only start() used to be guarded, so a Wi-Fi drop between lanAddress()
-        // and the bind threw BindException out of the Compose onClick and killed the process. Both
-        // are guarded now, and a failed start closes the already-bound socket instead of leaking
-        // the fd until process death.
-        val server =
-            runCatching {
-                PairingServer(host, clock = SystemClock::elapsedRealtime) { payload ->
-                    scope.launch {
-                        stopPairing("Key received.")
-                        edit = null
-                        adding = true
-                        reveal = false
-                        validated = false
-                        models = emptyList()
-                        type = payload.type
-                        name = payload.name.ifBlank { payload.type.label }
-                        base = payload.baseUrl
-                        model = payload.modelId
-                        // The key arrived encrypted and is handed straight to storage. Putting it in the
-                        // editing field would make it revealable and screenshot-adjacent for no benefit;
-                        // the field stays blank, exactly as it does after a manual save.
-                        key = ""
-                        saveProfile(SecretValue(sanitizeKey(payload.apiKey)))
+        pairingStarting = true
+        pairingNote = resources.getString(R.string.provider_pairing_starting)
+        scope.launch {
+            val started =
+                withContext(Dispatchers.IO) {
+                    // The constructor itself does real work — SecureRandom, a P-256 KeyPairGenerator,
+                    // and a ServerSocket bind. Only start() used to be guarded, so a Wi-Fi drop
+                    // between lanAddress() and the bind threw BindException out of the Compose
+                    // onClick and killed the process. Both are guarded now, and a failed start closes
+                    // the already-bound socket instead of leaking the fd until process death.
+                    runCatching {
+                        PairingServer(host, clock = SystemClock::elapsedRealtime) { payload ->
+                            scope.launch {
+                                stopPairing(resources.getString(R.string.provider_key_received))
+                                edit = null
+                                adding = true
+                                reveal = false
+                                validated = false
+                                models = emptyList()
+                                type = payload.type
+                                name = payload.name.ifBlank { payload.type.label }
+                                base = payload.baseUrl
+                                model = payload.modelId
+                                // The key arrived encrypted and is handed straight to storage. Putting
+                                // it in the editing field would make it revealable and
+                                // screenshot-adjacent for no benefit; the field stays blank, exactly
+                                // as it does after a manual save.
+                                key = ""
+                                saveProfile(SecretValue(sanitizeKey(payload.apiKey)))
+                            }
+                        }
+                    }.mapCatching { created ->
+                        created.start()
+                        created
+                    }.onFailure { created ->
+                        // A half-started listener must not keep its fd until process death.
+                        runCatching { (created as? PairingServer)?.close() }
                     }
                 }
-            }
-        server
-            .onSuccess { created ->
-                runCatching { created.start() }
-                    .onSuccess {
-                        pairing = created
-                        pairingNote =
-                            if (isPrivateAddress(host)) PAIRING_WARNING else "Not a home network. Cancel if unsure."
-                    }.onFailure {
-                        runCatching { created.close() }
-                        pairingNote = "Pairing unavailable. Enter the key below."
-                    }
-            }.onFailure { pairingNote = "Pairing unavailable. Enter the key below." }
+            pairingStarting = false
+            started
+                .onSuccess { created ->
+                    pairing = created
+                    pairingNote =
+                        if (isPrivateAddress(host)) {
+                            resources.getString(R.string.provider_pairing_warning)
+                        } else {
+                            resources.getString(R.string.provider_not_home_network)
+                        }
+                }.onFailure { pairingNote = resources.getString(R.string.provider_pairing_unavailable) }
+        }
     }
 
     LazyColumn(
@@ -297,8 +332,17 @@ fun ProviderScreen(onBack: () -> Unit) {
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         item {
+            val title =
+                if (adding || edit != null) {
+                    stringResource(
+                        if (edit != null) R.string.provider_title_edit else R.string.provider_title_add,
+                        type.label,
+                    )
+                } else {
+                    stringResource(R.string.provider_title)
+                }
             Text(
-                if (adding || edit != null) "${if (edit != null) "Edit" else "Add"} ${type.label}" else "Providers",
+                title,
                 modifier = Modifier.fillMaxWidth().wrapContentWidth(Alignment.CenterHorizontally),
                 fontSize = 18.sp,
             )
@@ -308,7 +352,7 @@ fun ProviderScreen(onBack: () -> Unit) {
                 onClick = onBack,
                 modifier = Modifier.fillMaxWidth().wrapContentWidth(Alignment.CenterHorizontally),
             ) {
-                Text("Back")
+                Text(stringResource(R.string.provider_back))
             }
         }
         val stateError = state.error
@@ -323,18 +367,21 @@ fun ProviderScreen(onBack: () -> Unit) {
             // One preset block, four rows. They were four near-identical copies of six state
             // assignments each; the only fields that differ are the four literals below.
             items(PRESETS) { preset ->
+                val presetLabel = stringResource(preset.label)
+                val presetName = stringResource(preset.name)
+                val presetMessage = stringResource(preset.message)
                 Button(onClick = {
                     adding = true
                     type = preset.type
-                    name = preset.name
+                    name = presetName
                     base = preset.base
                     model = ""
                     key = ""
                     validated = false
                     reveal = false
                     models = emptyList()
-                    message = preset.message
-                }) { Text(preset.label) }
+                    message = presetMessage
+                }) { Text(presetLabel) }
             }
             items(state.profiles) { p ->
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -347,12 +394,20 @@ fun ProviderScreen(onBack: () -> Unit) {
                             ) {
                                 throw cancelled
                             } catch (_: Exception) {
-                                message = "Selection failed. Try again."
+                                message = resources.getString(R.string.provider_select_failed)
                             }
                         }
                     }, modifier = Modifier.fillMaxWidth()) {
                         Text(
-                            "${if (state.selectedId == p.id) "Selected · " else ""}${p.displayName}\n${p.selectedModelId}",
+                            stringResource(
+                                if (state.selectedId == p.id) {
+                                    R.string.provider_row_selected
+                                } else {
+                                    R.string.provider_row
+                                },
+                                p.displayName,
+                                p.selectedModelId,
+                            ),
                             fontSize = 14.sp,
                         )
                     }
@@ -368,8 +423,8 @@ fun ProviderScreen(onBack: () -> Unit) {
                         reveal = false
                         models = emptyList()
                         message =
-                            "API key configured. Enter replacement only."
-                    }, modifier = Modifier.fillMaxWidth()) { Text("Edit / replace key") }
+                            resources.getString(R.string.provider_key_configured)
+                    }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.provider_edit_replace_key)) }
                 }
             }
         } else {
@@ -379,26 +434,35 @@ fun ProviderScreen(onBack: () -> Unit) {
                         onClick = { if (pairing == null) startPairing() else stopPairing() },
                         modifier = Modifier.fillMaxWidth(),
                     ) {
-                        Text(if (pairing == null) "Set up from phone" else "Cancel pairing", fontSize = 14.sp)
+                        Text(
+                            stringResource(
+                                if (pairing == null) {
+                                    R.string.provider_setup_from_phone
+                                } else {
+                                    R.string.provider_cancel_pairing
+                                },
+                            ),
+                            fontSize = 14.sp,
+                        )
                     }
                     pairing?.let { server -> Text(server.url, fontSize = 14.sp, color = Color(0xFFA8C7FA)) }
                     if (pairingNote.isNotBlank()) Text(pairingNote, fontSize = 13.sp, color = Color(0xFFB8BDC6))
                 }
             }
             item {
-                Entry("Name", name) {
+                Entry(stringResource(R.string.provider_label_name), name) {
                     name = it
                     validated = false
                 }
             }
             item {
-                Entry("Base URL", base, keyboardType = KeyboardType.Uri) {
+                Entry(stringResource(R.string.provider_label_base_url), base, keyboardType = KeyboardType.Uri) {
                     base = it
                     validated = false
                 }
             }
             item {
-                Entry("Manual model ID", model) {
+                Entry(stringResource(R.string.provider_label_manual_model), model) {
                     model = it
                     validated = false
                 }
@@ -408,7 +472,7 @@ fun ProviderScreen(onBack: () -> Unit) {
                     // ponytail: recreate password semantics; remove when Compose fixes dynamic isPassword updates.
                     key(reveal) {
                         Entry(
-                            "API key",
+                            stringResource(R.string.provider_label_api_key),
                             key,
                             keyboardType = KeyboardType.Password,
                             visualTransformation =
@@ -423,7 +487,11 @@ fun ProviderScreen(onBack: () -> Unit) {
                     if (edit !=
                         null
                     ) {
-                        Text("Configured · enter replacement only", fontSize = 14.sp, color = Color(0xFFB8BDC6))
+                        Text(
+                            stringResource(R.string.provider_configured_replace),
+                            fontSize = 14.sp,
+                            color = Color(0xFFB8BDC6),
+                        )
                     }
                     keyMismatchHint(key, type)?.let { Text(it, fontSize = 14.sp, color = Color(0xFFFFD28A)) }
                     if (key.isBlank() &&
@@ -433,7 +501,13 @@ fun ProviderScreen(onBack: () -> Unit) {
                     }
                     OutlinedButton(onClick = {
                         reveal = !reveal
-                    }, modifier = Modifier.fillMaxWidth()) { Text(if (reveal) "Hide key" else "Reveal key") }
+                    }, modifier = Modifier.fillMaxWidth()) {
+                        Text(
+                            stringResource(
+                                if (reveal) R.string.provider_hide_key else R.string.provider_reveal_key,
+                            ),
+                        )
+                    }
                 }
             }
             item {
@@ -449,35 +523,42 @@ fun ProviderScreen(onBack: () -> Unit) {
                             val p = profile()
                             val adapter = app.provider(p.type)
                             if (adapter == null) {
-                                message = "This provider type is not available in this build."
+                                message = resources.getString(R.string.provider_type_unavailable)
                                 return@launch
                             }
-                            val result = adapter.listModels(p, secret(p))
+                            // A whole-operation budget, not just the client's per-socket limits:
+                            // discovery pages, so a slow endpoint could keep this screen in
+                            // "Discovering…" for minutes. On expiry the user is told to type the
+                            // model, which is the same advice a failed discovery already gives.
+                            val result =
+                                withTimeoutOrNull(DISCOVERY_BUDGET_MS) {
+                                    adapter.listModels(p, secret(p))
+                                } ?: ModelDiscoveryResult.Unavailable(ProviderError.TIMEOUT)
                             if (input != Triple(type, base, key) || inputProfileId != edit?.id) return@launch
                             when (result) {
                                 is ModelDiscoveryResult.Models -> {
                                     models = result.ids
                                     message =
-                                        "Models listed. Choose or enter manually."
+                                        resources.getString(R.string.provider_models_listed)
                                 }
 
                                 is ModelDiscoveryResult.Unavailable -> {
                                     models = emptyList()
                                     message =
-                                        "Models unavailable. Enter model manually; chat still allowed."
+                                        resources.getString(R.string.provider_models_unavailable)
                                 }
                             }
                         } catch (cancelled: CancellationException) {
                             throw cancelled
                         } catch (_: Exception) {
                             if (input == Triple(type, base, key) && inputProfileId == edit?.id) {
-                                message = "Check URL/key. Manual model still allowed."
+                                message = resources.getString(R.string.provider_check_url_key)
                             }
                         } finally {
                             busy = false
                         }
                     }
-                }) { Text("Discover models") }
+                }) { Text(stringResource(R.string.provider_discover_models)) }
             }
             items(models) { id ->
                 Button(onClick = {
@@ -502,7 +583,7 @@ fun ProviderScreen(onBack: () -> Unit) {
                             val inputProfileId = edit?.id
                             val adapter = app.provider(p.type)
                             if (adapter == null) {
-                                message = "This provider type is not available in this build."
+                                message = resources.getString(R.string.provider_type_unavailable)
                                 return@launch
                             }
                             val error = adapter.validate(p, secret(p))
@@ -517,11 +598,11 @@ fun ProviderScreen(onBack: () -> Unit) {
                                 key != inputKey ||
                                 inputProfileId != edit?.id
                             ) {
-                                message = "Inputs changed. Validate current settings again."
+                                message = resources.getString(R.string.provider_inputs_changed)
                                 return@launch
                             }
                             validated = error == null
-                            message = error?.userMessage ?: "Connected. Selected model generated successfully."
+                            message = error?.userMessage ?: resources.getString(R.string.provider_connected)
                         } catch (cancelled: CancellationException) {
                             throw cancelled
                         } catch (failure: Exception) {
@@ -532,7 +613,7 @@ fun ProviderScreen(onBack: () -> Unit) {
                             busy = false
                         }
                     }
-                }) { Text("Validate · uses API") }
+                }) { Text(stringResource(R.string.provider_validate)) }
             }
             // One shared result row, right after the action buttons. It used to sit at the list
             // tail below Save/Delete, so Validate/Discover output was invisible without a long
@@ -570,10 +651,10 @@ fun ProviderScreen(onBack: () -> Unit) {
                             saveProfile()
                         }
                     },
-                ) { Text("Save securely") }
+                ) { Text(stringResource(R.string.provider_save)) }
                 if (needsValidation && !validated && ready) {
                     Text(
-                        "Not validated. Saving is allowed; the first send reports any problem.",
+                        stringResource(R.string.provider_not_validated),
                         fontSize = 13.sp,
                         color = Color(0xFFB8BDC6),
                     )
@@ -589,20 +670,20 @@ fun ProviderScreen(onBack: () -> Unit) {
                                 edit = null
                                 key = ""
                                 message =
-                                    "Provider deleted. History kept."
+                                    resources.getString(R.string.provider_deleted)
                             } catch (
                                 cancelled: CancellationException,
                             ) {
                                 throw cancelled
                             } catch (_: Exception) {
-                                message = "Delete failed. Try again."
+                                message = resources.getString(R.string.provider_delete_failed)
                             }
                         }
-                    }) { Text("Delete provider") }
+                    }) { Text(stringResource(R.string.provider_delete)) }
                 }
             }
         }
-        if (busy) item { Text("Working…", fontSize = 14.sp) }
+        if (busy) item { Text(stringResource(R.string.provider_working), fontSize = 14.sp) }
     }
 }
 
@@ -616,7 +697,15 @@ private fun Entry(
 ) {
     var focused by remember { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(label, fontSize = 14.sp, color = Color(0xFFB8BDC6))
+        // Decorative. The field below carries the same label as its contentDescription, so leaving
+        // this Text in the accessibility tree made TalkBack read every entry's name twice: once for
+        // the label node, once for the field it labels.
+        Text(
+            label,
+            fontSize = 14.sp,
+            color = Color(0xFFB8BDC6),
+            modifier = Modifier.clearAndSetSemantics {},
+        )
         BasicTextField(
             value,
             onChange,

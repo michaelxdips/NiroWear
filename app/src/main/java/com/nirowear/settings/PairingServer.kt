@@ -143,14 +143,24 @@ internal class PairingServer(
     override fun close() {
         if (closed) return
         closed = true
+        // Both closes are what actually stop the listener and unblock the worker; they are fast and
+        // stay on the caller so `close()` returns with the port already shut.
         runCatching { socket.close() }
         // Closing the listener alone leaves the worker blocked in read() on an accepted client, so
         // the socket would outlive the screen. Closing the active client unblocks it.
         runCatching { active?.close() }
-        // Join the worker so close() proves the listener is dead. Skip it when the worker is the
-        // caller: its own `finally` calls close(), and a self-join burned five seconds of a daemon
-        // thread every time the session ended by itself.
-        if (worker != Thread.currentThread()) runCatching { worker?.join(5000) }
+        // The join used to run on the CALLER, which is the Compose UI thread on the two paths that
+        // matter (the Pairing button and the screen's onDispose): a session ending while a peer sat
+        // in read() froze the dial for up to five seconds. It now happens on a short-lived daemon
+        // thread, so the proof still exists without costing a frame. Skipped when the worker is the
+        // caller — its own `finally` calls close(), and a self-join is a guaranteed five-second wait.
+        if (worker != Thread.currentThread()) {
+            worker?.let { dying ->
+                Thread {
+                    runCatching { dying.join(5000) }
+                }.apply { isDaemon = true }.start()
+            }
+        }
     }
 
     /**

@@ -5,6 +5,12 @@
     <string name="renderer_math_description">Math: %1$s</string>
     <string name="renderer_quote">Quote</string>
     <string name="renderer_links">Links</string>
+    <!-- The link group node is actionable (it opens the first link) so TalkBack does not dead-stop
+         on it. A plural because the spoken label carries the link count. -->
+    <plurals name="renderer_links_action">
+        <item quantity="one">Open the first link (%1$d link)</item>
+        <item quantity="other">Open the first link (%1$d links)</item>
+    </plurals>
     <string name="reader_streaming">Streaming…</string>
     <string name="reader_stopped_partial">Stopped · partial answer kept</string>
     <string name="reader_stopped_before_start">Stopped before the answer started</string>

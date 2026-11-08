@@ -68,10 +68,14 @@ payload.
 **Searchable history.** History carries a full-text search over every stored message. It is a plain
 SQLite `LIKE` scan with escaped wildcards — no dependency, no virtual table, no migration, no extra
 permission. FTS5 was tried first and measured impossible here: Android's bundled SQLite answers
-`no such module: fts5` on a Wear OS emulator, so an FTS index would have crashed the upgrade.
+`no such module: fts5` on a Wear OS emulator, so an FTS index would have crashed the upgrade. The
+no-index decision is measured, not assumed: with **5,000 messages across 200 conversations** seeded on
+the AVD, the worst query took **7 ms** (`aurora`, one term; a common word returned in 0–1 ms) against
+a 250 ms debounce, so an index would cost a migration and buy nothing a user could feel.
 
 **Answers sized by the question, never by the screen.** The system instruction asks for the full answer the question needs — facts, caveats, steps, examples, code, math, table rows — and to make a long answer navigable with structure (headings, lists, tables, fences, display math) rather than shorter. The client never truncates an answer to fit the display; the earlier instruction asked for the shortest answer *because* the device is a watch, which is exactly the reason the UX contract forbids.
 
+**Localized, not just the renderer.** Every user-facing string in the chat, provider and pairing screens comes from resources — 89 keys in `values/strings.xml` with a complete Indonesian set in `values-in/strings.xml` (the renderer already had its own). Technical terms users expect in English (API key, model, provider, token) stay in English; everything else is translated.
 **Keyboard and voice.** Both are first-class entry points. Voice delegates to the platform recognizer and always returns text you can review before sending. The window declares `adjustResize` and both typing screens consume the IME inset, because the app targets SDK 37 — edge-to-edge on Android 15+ — where the IME no longer shrinks the window and would otherwise cover the field and the Send button on a 466 px dial. A half-filled provider form also survives Activity recreation now (name, base URL and model are saved instance state; the API key deliberately is not).
 
 ## Screenshots
@@ -206,7 +210,7 @@ Every number below was read from a result file produced on this tree, not quoted
 | Check | Result (measured) | Where |
 |---|---|---|
 | JVM unit tests | 269 / 269, 0 failures, 0 errors, 0 skipped (43 suites) | `app/build/test-results/testDebugUnitTest/*.xml` |
-| Connected suite (Wear OS 37 AVD, destructive — not a CI gate) | **66 tests, 2 failing, 0 errors**, measured 2026-11-08 on `emulator-5554` (`NiroWear_Audit`, x86_64, 466×466) from `app/build/outputs/androidTest-results/connected/debug/*.xml`. Two earlier figures were **not** measured: "48 / 48" came from an older emulator run, and "14 failing" was arithmetic (18 minus four setup tests re-run in isolation) rather than a full-suite run — that run reported 18. Test-side fixes (fixture cleanup, stale mock queues, impossible geometry assertions, bidi-mojibake literals, a History offset that was thrown away on every close) brought it to the 2 below; two of those were real product fixes — History keeps its list offset, and the IME is handled. Table rows and code chunks are lazy items now, so the old 40-row cap and its "… N more rows" line are gone. Nothing else is claimed green | `app/build/outputs/androidTest-results/connected/debug/*.xml` |
+| Connected suite (Wear OS 37 AVD, destructive — not a CI gate) | **66 tests, 2 failing, 0 errors**, re-measured 2026-11-08 after the a11y + i18n pass on `emulator-5554` (`NiroWear_Audit`, x86_64, 466×466) from `app/build/outputs/androidTest-results/connected/debug/*.xml`. Two earlier figures were **not** measured: "48 / 48" came from an older emulator run, and "14 failing" was arithmetic (18 minus four setup tests re-run in isolation) rather than a full-suite run — that run reported 18. Test-side fixes (fixture cleanup, stale mock queues, impossible geometry assertions, bidi-mojibake literals, a History offset that was thrown away on every close) brought it to the 2 below; two of those were real product fixes — History keeps its list offset, and the IME is handled. Table rows and code chunks are lazy items now, so the old 40-row cap and its "… N more rows" line are gone. Nothing else is claimed green | `app/build/outputs/androidTest-results/connected/debug/*.xml` |
 | Host-gated instrumentation (6 `@HostDrivenGate` methods) | written, **never executed** (they need a host script to seed state) | `app/src/androidTest` (gitignored by policy) |
 | Lint | 0 errors, 0 warnings | `app/build/reports/lint-results-debug.xml` |
 | Release APK | Published `v0.1.1` asset: 3,621,253 B, SHA-256 `0BA7DDEF…B207`, `com.nirowear` v11 / `0.1.1`, minSdk 30, targetSdk 37 — built and signed by `.github/workflows/release.yml`. A local cut is **not** bit-identical (a local build of the same tree measured 3,619,181 B); the hash of the asset that ships is the one in that release's body. Signing is driven by the environment (`NIROWEAR_KEYSTORE`/`_PASSWORD`, `NIROWEAR_KEY_ALIAS`, `NIROWEAR_KEY_PASSWORD`); with no keystore present the build emits an unsigned `app-release-unsigned.apk` | `app/build/outputs/apk/release/`, `output-metadata.json` |
@@ -258,10 +262,12 @@ Stated plainly, because a README that hides these is useless:
 - **Voice transcription quality is unaccepted.** The intent launch/return path is tested; recognition accuracy is the platform's.
 - **Link taps** open via the system handler; destination completion on a real paired device is unverified.
 - **Live smoke tests** are documented against controlled endpoints and one third-party Responses endpoint — not against every official provider with production credentials.
-- **TalkBack audio** acceptance is incomplete. Two dead stops remain in the reader: a linked
-  paragraph's "Links" group node carries no action, and the composer's field relies on the visible
-  "Prompt" heading rather than a label of its own. A credential entry's label is also read twice, and
-  the provider header (`130 dp`, `maxLines = 1`) truncates at large font scales.
+- **TalkBack audio** acceptance is still incomplete — no one has listened to a real watch with
+  TalkBack enabled. The four structural dead stops that were measured are fixed: the "Links" group
+  node is actionable now (it announces the count and opens the first link), the composer field carries
+  its own label instead of relying on the visible heading above it, a credential entry's label is no
+  longer read twice, and the provider header grows to two lines instead of clipping at `130 dp` /
+  `maxLines = 1`. What remains is acceptance, not known defects.
 - **Releases are signed by the NiroWear release key, not the debug key.** `v0.1.1` uses
   `CN=NiroWear Release` (SHA-256 `0D:C5:0F:C0:19:…:86:54:3E`, valid to 2056), built and signed by
   `.github/workflows/release.yml` from the tag. `v0.1.0` used the Android debug lineage, so an in-place

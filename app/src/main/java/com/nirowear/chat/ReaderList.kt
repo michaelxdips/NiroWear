@@ -11,11 +11,13 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.wear.compose.material3.MaterialTheme
+import com.nirowear.R
 
 /**
  * The small round action the reader shows over the transcript: a retry arrow after a failure, or a
@@ -30,10 +32,15 @@ internal fun ReaderAction(
     onClick: () -> Unit,
 ) {
     val color = MaterialTheme.colorScheme.onSurfaceVariant
+    // Resolved here: the `semantics` lambda below is not a composable scope.
+    val description =
+        stringResource(
+            if (retry) R.string.reader_action_retry else R.string.reader_action_latest,
+        )
     Box(
         Modifier
             .size(48.dp)
-            .semantics { contentDescription = if (retry) "Retry response" else "Jump to latest" }
+            .semantics { contentDescription = description }
             .clickable(role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {

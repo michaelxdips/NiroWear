@@ -5,6 +5,9 @@
     <string name="renderer_math_description">Matematika: %1$s</string>
     <string name="renderer_quote">Kutipan</string>
     <string name="renderer_links">Tautan</string>
+    <plurals name="renderer_links_action">
+        <item quantity="other">Buka tautan pertama (%1$d tautan)</item>
+    </plurals>
     <string name="reader_streaming">Mengalir…</string>
     <string name="reader_stopped_partial">Dihentikan · jawaban sebagian disimpan</string>
     <string name="reader_stopped_before_start">Dihentikan sebelum jawaban dimulai</string>

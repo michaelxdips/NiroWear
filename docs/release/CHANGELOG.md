@@ -89,6 +89,42 @@ field and the Save button on a 466 px dial. The provider form's name, base URL a
 Activity recreation now; the API key deliberately does not, because a saved-instance bundle is
 plaintext on disk.
 
+### Accessibility: the four measured dead stops
+
+- The "Links" group node carried a `contentDescription` and **no action**, so TalkBack stopped on
+  something it could not activate. It now announces the link count and opens the first link, with a
+  localized plural action label.
+- The composer field relied on the visible "Prompt" heading as its label. A heading is a separate
+  node; it does not describe the field below it, so TalkBack reached an unlabelled edit box. The field
+  now carries its own label.
+- A credential entry announced its label twice — once for the decorative `Text` above the field, once
+  for the field's own `contentDescription`. The label node is decorative now.
+- The provider header was a fixed `130 dp` box with `maxLines = 1`, which clipped to "Add prov…" at a
+  2.0x font scale. It grows to two lines inside the dial's safe band.
+
+### Localization: the whole UI, not just the renderer
+
+89 user-visible strings moved out of `MainActivity`, `ProviderScreen` and `ReaderList` into
+`values/strings.xml`, with a complete Indonesian set in `values-in/strings.xml`; the renderer already
+had its own. Technical terms users expect in English (API key, model, provider, token) stay in
+English. Every English value is byte-identical to the literal it replaced, so nothing that matched on
+text — including the instrumented tests — changed behaviour.
+
+### Pairing and discovery off the UI thread
+
+`startPairing()` ran `SecureRandom`, a P-256 `KeyPairGenerator`, a self-signed certificate and a
+`ServerSocket` bind inside `onClick`, and `PairingServer.close()` joined its worker for up to five
+seconds on the caller. Both now run off the UI thread, so the Pairing button responds immediately and
+leaving the screen cannot freeze the dial. Model discovery gained a 30 s whole-operation budget: its
+pages were bounded only per-socket, so a slow endpoint could hold the screen in "Discovering…" for
+minutes.
+
+### History search measured at volume
+
+With 5,000 messages across 200 conversations seeded on the AVD, the worst query took **7 ms** and a
+common word 0–1 ms, against a 250 ms debounce. No index: it would cost a migration and buy nothing a
+user could feel.
+
 ## 0.1.1 — 2026-11-06
 
 `versionCode 11`, `versionName 0.1.1`. Everything below landed since the 0.1.0 stable cut.
