@@ -5,6 +5,27 @@ Notable changes to NiroWear. Versions follow the published APK releases at
 
 ## Unreleased
 
+### Failure text is chosen when it is read, not when it is stored
+
+The English cause used to be the payload of `ProviderError` and was written straight into
+`messages.error`, so a stored failure could never be shown in another language: the sentence was decided
+before the row existed. A failure is now stored as a **token** — `NETWORK_UNAVAILABLE`, or
+`TIMEOUT|partial` when the turn kept text — and resolved through resources at display time, in the
+reader's language. Fourteen `provider_error_*` strings, the `%1$s Partial answer kept.` suffix and the
+`Check URL, model and API key.` fallback exist in English and Indonesian.
+
+No migration was needed and that is deliberate: the column already held a string, so old rows keep their
+prose and render it unchanged. `ProviderError.parse` returns null for anything that is not one of its
+own names, which is exactly the pre-token rows — nothing renders blank, nothing is guessed, and a row
+written in English before this change is still readable after it. `LocalResources`/`LocalConfiguration`
+drive the render, not `LocalContext`, so a language switch re-renders existing rows instead of keeping
+the old one until the chat is reopened.
+
+`validationMessage(Throwable)` became `validationCause(Throwable)`: the classifier returns the cause and
+the screen resolves the sentence, which also makes it testable on the JVM. Credential-entry hints and
+provider causes are covered; storage-level messages ("History cannot be read…") and the truncation note
+are still English-only.
+
 ### A trailing Retry row can no longer sit below the fold
 
 The reader shows a `Retry response` action as the last item of the list. When an answer is taller than

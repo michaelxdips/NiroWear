@@ -65,13 +65,13 @@ internal fun enabledImePackages(context: android.content.Context): Set<String> =
 internal val REMOTE_INPUT_IMES = setOf("com.google.android.inputmethod.latin")
 
 /**
- * User-facing text for a failed Validate/Save.
+ * The cause behind a failed Validate/Save, or null when nothing classified it.
  *
- * `SafeProviderException` already carries a precise `ProviderError.userMessage`; anything else is an
- * unclassified failure (bad URL shape, a `require` in an adapter, an unexpected throw), where the
- * generic three-field string is still the honest answer. 401 therefore reads "API key rejected" and
- * 404 reads "Model unavailable" instead of one message that blames three fields at once.
+ * Returns the CAUSE, not a sentence: the sentence depends on the reader's language and is resolved at
+ * display time (`chat/ErrorText.kt`). Keeping this pure also means the classification is testable on the
+ * JVM, without Android resources. `SafeProviderException` carries a precise [ProviderError]; anything
+ * else is unclassified (bad URL shape, a `require` in an adapter, an unexpected throw), where the
+ * caller shows the generic three-field hint instead of inventing a cause.
  */
-internal fun validationMessage(failure: Throwable): String =
-    (failure as? com.nirowear.provider.SafeProviderException)?.error?.userMessage
-        ?: "Check URL, model and API key."
+internal fun validationCause(failure: Throwable): com.nirowear.provider.ProviderError? =
+    (failure as? com.nirowear.provider.SafeProviderException)?.error

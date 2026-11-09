@@ -61,8 +61,10 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -88,6 +90,7 @@ import com.nirowear.chat.ChatViewModel
 import com.nirowear.chat.ReaderAction
 import com.nirowear.chat.ReaderAnchor
 import com.nirowear.chat.coalesceDelayMs
+import com.nirowear.chat.errorText
 import com.nirowear.chat.evictStaleConversations
 import com.nirowear.chat.mergeParsed
 import com.nirowear.chat.needsParse
@@ -297,9 +300,26 @@ private fun ChatReader(
     val voiceUnavailable = stringResource(R.string.chat_voice_unavailable)
     val voiceBlocked = stringResource(R.string.chat_voice_blocked)
     val copiedNotice = stringResource(R.string.chat_unsaved_copied)
+    // Stored failures are ProviderError tokens, so the row text is resolved here — off-composition the
+    // effect cannot read resources. The language tag is also a key: a row rendered before a locale
+    // change would otherwise keep the old language until the chat was reopened.
+    // Resolved here: the LazyColumn content lambda is not @Composable, so `errorText` cannot be called
+    // where the rows are declared.
+    val transientErrorText = errorText(chatState.error)
+    val providerErrorText = errorText(providerState.error)
+    // LocalResources/LocalConfiguration, not LocalContext: a Configuration change does not invalidate
+    // a LocalContext read, so a language switch would keep rendering the old language.
+    val errorResources = LocalResources.current
+    val localeTag = LocalConfiguration.current.locales[0].toLanguageTag()
+    var lastLocaleTag by remember { mutableStateOf<String?>(null) }
     // Presentation includes status/error/provenance, not just Markdown. All fields invalidate it.
-    LaunchedEffect(storedMessages, chatState.conversationId) {
+    LaunchedEffect(storedMessages, chatState.conversationId, localeTag) {
         val id = chatState.conversationId
+        if (lastLocaleTag != localeTag) {
+            lastLocaleTag = localeTag
+            // Every memoised block carries resolved text, so they are all stale now.
+            parsedRows = emptyMap()
+        }
         val messages = storedMessages
         val previous = evictStaleConversations(parsedRows, recentConversations + listOfNotNull(id))
 
@@ -354,7 +374,7 @@ private fun ChatReader(
                                         ContentBlock.Paragraph(
                                             listOf(
                                                 InlineContent(
-                                                    message.error
+                                                    errorText(errorResources, message.error)
                                                         ?: if (message.rawContent.isBlank()) {
                                                             stoppedBeforeStart
                                                         } else {
@@ -1054,7 +1074,7 @@ private fun ChatReader(
                     // twice once the row exists. Cleared history (edit/retry/new chat) keeps the
                     // transient row as the only copy.
                     if (transientErrorShown) {
-                        chatState.error?.let { message -> item { Text(message, fontSize = 14.sp) } }
+                        transientErrorText?.let { message -> item { Text(message, fontSize = 14.sp) } }
                     }
                     if (unsavedRowShown) {
                         item {
@@ -1082,7 +1102,7 @@ private fun ChatReader(
                         }
                     }
                     if (providerErrorShown) {
-                        providerState.error?.let { message ->
+                        providerErrorText?.let { message ->
                             item { Text(message, fontSize = 14.sp) }
                         }
                     }
