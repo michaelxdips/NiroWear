@@ -83,41 +83,60 @@ class SecretValue(
     override fun toString() = "[REDACTED]"
 }
 
+/**
+ * Why a turn failed, as a STABLE TOKEN rather than a sentence.
+ *
+ * The English text used to be the enum's payload and was written straight into `messages.error`, so a
+ * stored failure could never be shown in another language: the sentence was already chosen before the
+ * row existed. Now the cause is stored as its own name (`NETWORK_UNAVAILABLE`), optionally with the
+ * `|partial` marker, and the UI resolves it to a string resource at display time. Rows written before
+ * this change hold prose; [parse] returns null for them and the renderer shows that prose unchanged,
+ * which is the whole migration.
+ */
 enum class ProviderError(
-    private val cause: String,
     /**
      * True when the cause is one that can leave text behind. "Partial answer kept." is a promise about
      * THIS turn, and it is false whenever no text arrived — a failed connection test, a dead socket
      * before the first token, a portal page. The property is cause-only on purpose (validation paths
-     * have no answer at all); [userMessage] is the form that knows whether text survived.
+     * have no answer at all); [code] is the form that knows whether text survived.
      */
     private val keepsPartial: Boolean = false,
 ) {
-    PROVIDER_REQUIRED("Add or select provider from menu."),
-    PROVIDER_UNSUPPORTED("Provider adapter not available yet."),
-    INVALID_CREDENTIAL("API key rejected. Check your key."),
-    PERMISSION_DENIED("Provider permission denied."),
-    RATE_LIMITED("Rate limited. Retry later."),
-    MODEL_UNAVAILABLE("Model unavailable. Choose another model."),
-    NETWORK_UNAVAILABLE("Cannot reach provider. Check connection."),
-    TIMEOUT("Provider timed out.", keepsPartial = true),
-    RESPONSE_TOO_LARGE("Response exceeded watch safety limit.", keepsPartial = true),
-    PROTOCOL("Stream interrupted or unsupported.", keepsPartial = true),
-    PROMPT_BLOCKED("Request blocked by the provider's safety filter. Rephrase it."),
-    SERVER("Provider server error. Retry later."),
-    HTTP("Provider rejected request. Check configuration."),
-    CREDENTIAL_REENTRY("Secure credential unavailable. Re-enter API key."),
+    PROVIDER_REQUIRED,
+    PROVIDER_UNSUPPORTED,
+    INVALID_CREDENTIAL,
+    PERMISSION_DENIED,
+    RATE_LIMITED,
+    MODEL_UNAVAILABLE,
+    NETWORK_UNAVAILABLE,
+    TIMEOUT(keepsPartial = true),
+    RESPONSE_TOO_LARGE(keepsPartial = true),
+    PROTOCOL(keepsPartial = true),
+    PROMPT_BLOCKED,
+    SERVER,
+    HTTP,
+    CREDENTIAL_REENTRY,
     ;
 
-    /** Cause only. Use [userMessage] where an answer may exist. */
-    val userMessage: String get() = cause
-
     /**
-     * The same cause, with the "partial answer kept" promise added only when text actually survived
-     * this turn. [hasText] must be measured, never assumed: an empty answer with that promise on
-     * screen is the app telling the user something false.
+     * What gets stored: the cause, and the "partial answer kept" promise only when text actually
+     * survived this turn. [hasText] must be measured, never assumed — an empty answer carrying that
+     * promise is the app telling the user something false.
      */
-    fun userMessage(hasText: Boolean): String = if (keepsPartial && hasText) "$cause Partial answer kept." else cause
+    fun code(hasText: Boolean): String = if (keepsPartial && hasText) "$name$PARTIAL_MARKER" else name
+
+    companion object {
+        private const val PARTIAL_MARKER = "|partial"
+
+        /** The cause in a stored value, or null when it is not one of these tokens (older prose rows). */
+        fun parse(stored: String?): ProviderError? =
+            stored
+                ?.substringBefore(PARTIAL_MARKER)
+                ?.let { token -> entries.firstOrNull { it.name == token } }
+
+        /** True when the stored value carries the "partial answer kept" promise. */
+        fun isPartial(stored: String?): Boolean = stored?.endsWith(PARTIAL_MARKER) == true
+    }
 }
 
 // ponytail: 1M UTF-16 units per answer; raise only after watch heap/renderer acceptance.

@@ -2998,8 +2998,8 @@ adb install -r app-release.apk</pre>
             </tr>
             <tr>
               <td>The whole interface is localized, not only the renderer</td>
-              <td><span class="pill pill-source">Source</span> 89 user-visible strings in <code>values/strings.xml</code> with a complete Indonesian set in <code>values-in/strings.xml</code>: 89 keys each, zero missing, zero undefined references. Every English value is byte-identical to the literal it replaced, so nothing that matched on text changed behaviour.</td>
-              <td>values/strings.xml, values-in/strings.xml</td>
+              <td><span class="pill pill-source">Source</span> 105 user-visible strings in <code>values/strings.xml</code> with a complete Indonesian set in <code>values-in/strings.xml</code>: 105 keys each, zero missing, zero undefined references. Failure text is included: a stored failure is a token (<code>NETWORK_UNAVAILABLE</code>, <code>TIMEOUT|partial</code>) resolved at display time, so a row written under English reads Indonesian after a language switch and a pre-token row keeps its original sentence.</td>
+              <td>values/strings.xml, values-in/strings.xml; ProviderErrorMessageTest; ErrorTextTest</td>
             </tr>
             <tr>
               <td>Accessibility dead stops are fixed, not just described</td>
@@ -3067,7 +3067,7 @@ adb install -r app-release.apk</pre>
           page describes <strong>0.2.0</strong>; the audit rounds that produced it changed chat
           lifecycle, Keystore, adapter and renderer code, so any claim here that cites an earlier
           emulator run is dated rather than current. The connected-test suite is now MEASURED, not
-          assumed: <strong>66 tests, 2 failing, 0 errors</strong> on a Wear OS 37 AVD (2026-11-08). An
+          assumed: <strong>71 tests, 2 failing, 0 errors</strong> on a Wear OS 37 AVD (2026-11-09). An
           earlier revision of this page said "14 failing": that figure was arithmetic from a partial
           run, not a measurement, and was wrong — the tests share one app process, so a class that
           passes on its own can still fail in suite order. A full-suite run at that point reported 18,

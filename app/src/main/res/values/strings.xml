@@ -94,4 +94,27 @@
     <!-- Reader action button in the chat overlay. -->
     <string name="reader_action_retry">Retry response</string>
     <string name="reader_action_latest">Jump to latest</string>
+
+    <!--
+      Failure text. Stored values are ProviderError token names (optionally suffixed "|partial"), so
+      these are resolved when the row is DISPLAYED, not when it is written. Keep each English value
+      byte-identical to the literal it replaced.
+    -->
+    <string name="provider_error_provider_required">Add or select provider from menu.</string>
+    <string name="provider_error_provider_unsupported">Provider adapter not available yet.</string>
+    <string name="provider_error_invalid_credential">API key rejected. Check your key.</string>
+    <string name="provider_error_permission_denied">Provider permission denied.</string>
+    <string name="provider_error_rate_limited">Rate limited. Retry later.</string>
+    <string name="provider_error_model_unavailable">Model unavailable. Choose another model.</string>
+    <string name="provider_error_network_unavailable">Cannot reach provider. Check connection.</string>
+    <string name="provider_error_timeout">Provider timed out.</string>
+    <string name="provider_error_response_too_large">Response exceeded watch safety limit.</string>
+    <string name="provider_error_protocol">Stream interrupted or unsupported.</string>
+    <string name="provider_error_prompt_blocked">Request blocked by the provider\'s safety filter. Rephrase it.</string>
+    <string name="provider_error_server">Provider server error. Retry later.</string>
+    <string name="provider_error_http">Provider rejected request. Check configuration.</string>
+    <string name="provider_error_credential_reentry">Secure credential unavailable. Re-enter API key.</string>
+    <string name="provider_error_partial">%1$s Partial answer kept.</string>
+    <!-- Unclassified Validate/Save failure: no ProviderError reached the screen. -->
+    <string name="provider_error_check_fields">Check URL, model and API key.</string>
 </resources>

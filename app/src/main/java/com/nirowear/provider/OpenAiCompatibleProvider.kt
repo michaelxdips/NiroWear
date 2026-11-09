@@ -134,7 +134,7 @@ class OpenAiCompatibleProvider(
 
 class SafeProviderException(
     val error: ProviderError,
-) : Exception(error.userMessage)
+) : Exception(error.name)
 
 fun httpError(code: Int): ProviderError =
     when (code) {

@@ -418,7 +418,7 @@ class ChatViewModel(
                                 }
 
                                 is StreamEvent.Failure -> {
-                                    failure = event.error.userMessage(hasText = text.isNotEmpty())
+                                    failure = event.error.code(hasText = text.isNotEmpty())
                                     terminal = "ERROR"
                                 }
 
@@ -467,7 +467,7 @@ class ChatViewModel(
                     // Exactly the same promise applies to a stream that ended without its terminal
                     // event: "partial answer kept" is only true if text actually arrived.
                     if (terminal != "SUCCESS" && failure == null) {
-                        failure = ProviderError.PROTOCOL.userMessage(hasText = text.isNotEmpty())
+                        failure = ProviderError.PROTOCOL.code(hasText = text.isNotEmpty())
                     }
                 } catch (cancelled: CancellationException) {
                     // A Stop must not downgrade a terminal event that already arrived. This branch
@@ -482,9 +482,9 @@ class ChatViewModel(
                 } catch (refused: TurnRefused) {
                     failure = refused.message
                 } catch (_: CredentialUnavailable) {
-                    failure = ProviderError.CREDENTIAL_REENTRY.userMessage
+                    failure = ProviderError.CREDENTIAL_REENTRY.code(hasText = false)
                 } catch (error: SafeProviderException) {
-                    failure = error.error.userMessage(hasText = text.isNotEmpty())
+                    failure = error.error.code(hasText = text.isNotEmpty())
                 } catch (_: Exception) {
                     failure = "Cannot send. Check provider setup or local storage."
                 } finally {

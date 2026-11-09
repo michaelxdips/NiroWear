@@ -180,7 +180,7 @@ Every number below came from a command run on this tree. Anything not measured i
 | Android Lint | **0 errors, 0 warnings** | `app/build/reports/lint-results-debug.xml` |
 | ktlint | **0 violations** | `:app:ktlintCheck` |
 | Assemblies | `assembleDebug` + `assembleRelease` pass | Gradle output |
-| Instrumented suite (Wear OS 37 AVD, 466×466) | **66 tests, 2 failing, 0 errors** | `app/build/outputs/androidTest-results/connected/debug/*.xml` |
+| Instrumented suite (Wear OS 37 AVD, 466×466) | **71 tests, 2 failing, 0 errors** | `app/build/outputs/androidTest-results/connected/debug/*.xml` |
 
 The two remaining failures, measured on the last full run (2026-11-08):
 
@@ -191,7 +191,7 @@ The two remaining failures, measured on the last full run (2026-11-08):
 
 `RotaryInputTest` both passes and fails across runs on this AVD. The emulator has no bezel or rotary source, so its result is not evidence either way; the real check is #27.
 
-Fixed and now passing, after failing on the previous cut: `ReaderNavigationTest#editAndRetryInvalidateRemovedContinuationThroughRealTouch` (a trailing `Retry response` row could sit below the fold) and `StoppedStatusUiTest#persistedStatusAndRetryRemainReachableAtBothScales`.
+Fixed and now passing, after failing on the previous cut: `ReaderNavigationTest#editAndRetryInvalidateRemovedContinuationThroughRealTouch` (a trailing `Retry response` row could sit below the fold), `StoppedStatusUiTest#persistedStatusAndRetryRemainReachableAtBothScales`, and five new `ErrorTextTest` methods that prove a stored failure renders in the reader's language.
 
 Three published figures have been wrong and are corrected rather than quietly dropped: `"48 / 48"` came from an older emulator run that no longer matched the suite, `"14 failing"` was arithmetic (18 minus four tests re-run in isolation) rather than a full-suite measurement, and `"66 / 2"` named the wrong two — re-measured, the same suite moves among a small known set run to run, which is why each is listed by name above instead of as a count alone.
 
@@ -213,7 +213,7 @@ Stated plainly, because a README that hides these is useless.
 - **TalkBack audio is unaccepted.** Semantics and target geometry are tested and four measured dead stops are fixed, but nobody has listened to a real watch.
 - **Voice transcription quality is the platform's.** The intent launch/return path is tested; recognition accuracy is not ours to claim.
 - **Link taps** open through the system handler; destination completion on a real paired device is unverified.
-- **Error text is still English-only.** UI chrome is fully localized; `ProviderError` messages and the credential-entry hints are not — tracked as issue #31.
+- **Some failure text is still English-only.** UI chrome and every `ProviderError` cause are localized (a stored failure is a token resolved at display time, so an English-written row reads in Indonesian after a language switch). Storage-level messages ("History cannot be read…") and the truncation note are not localized.
 - **The connected suite is a local gate, not a CI gate.** CI runs JVM tests, lint, ktlint and both assembles, because no emulator is available there. Run `connectedDebugAndroidTest` before a release; nothing will remind you.
 - **CI cannot compile the instrumented tests**, because `app/src/androidTest` is gitignored by policy. That is how several of them rotted for months before the first full run — tracked as issue #30.
 - **Math limits.** Rendering is cached in memory, so a formula does not flash its raw LaTeX when it scrolls back. A formula wider than the bitmap bound is typeset once at a smaller size — never below half — before falling back to readable source text. File-inclusion macros, macro definitions, unbalanced braces and oversized `\rule` dimensions are refused outright.
@@ -226,7 +226,7 @@ Remaining gaps are filed rather than described:
 - **#27** Physical watch acceptance: battery, thermals, rotary, real keyboard, TalkBack audio
 - **#28** Pairing: verify the self-signed certificate click-through on a real phone
 - **#30** CI never compiles the instrumented tests, so they rot invisibly
-- **#31** Localize error text: `ProviderError` causes and credential-entry hints
+
 
 ## Contributing
 

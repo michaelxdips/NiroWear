@@ -54,6 +54,7 @@ import androidx.wear.compose.material3.Text
 import com.nirowear.BuildConfig
 import com.nirowear.NiroApplication
 import com.nirowear.R
+import com.nirowear.chat.errorText
 import com.nirowear.data.ProviderSettingsState
 import com.nirowear.provider.DISCOVERY_BUDGET_MS
 import com.nirowear.provider.Endpoints
@@ -212,7 +213,10 @@ fun ProviderScreen(onBack: () -> Unit) {
         } catch (failure: Exception) {
             // A rejected replacement key arrives as SafeProviderException from the promotion probe.
             // Naming the cause beats "Secure save failed" when the real problem is a 401.
-            val specific = (failure as? SafeProviderException)?.error?.userMessage
+            val specific =
+                (failure as? SafeProviderException)
+                    ?.error
+                    ?.let { errorText(resources, it.code(hasText = false)) }
             // "Previous credential kept." is only true when there WAS one. On a brand-new provider the
             // failure is a plain require() ("API key required", "Selected model ID required"), and
             // claiming a credential was kept both lied and hid the reason.
@@ -602,13 +606,19 @@ fun ProviderScreen(onBack: () -> Unit) {
                                 return@launch
                             }
                             validated = error == null
-                            message = error?.userMessage ?: resources.getString(R.string.provider_connected)
+                            message =
+                                error
+                                    ?.let { errorText(resources, it.code(hasText = false)) }
+                                    ?: resources.getString(R.string.provider_connected)
                         } catch (cancelled: CancellationException) {
                             throw cancelled
                         } catch (failure: Exception) {
                             // Name the failing field: ProviderError already separates a rejected key from a
                             // missing model, and collapsing both into one string made the fix a guess.
-                            message = validationMessage(failure)
+                            message =
+                                validationCause(failure)
+                                    ?.let { errorText(resources, it.code(hasText = false)) }
+                                    ?: resources.getString(R.string.provider_error_check_fields)
                         } finally {
                             busy = false
                         }

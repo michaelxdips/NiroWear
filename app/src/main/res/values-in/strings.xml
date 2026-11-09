@@ -94,4 +94,22 @@
     <!-- Reader action button in the chat overlay. -->
     <string name="reader_action_retry">Ulangi jawaban</string>
     <string name="reader_action_latest">Ke yang terbaru</string>
+
+    <!-- Failure text, resolved at display time. Keep API key, provider, model and stream in English. -->
+    <string name="provider_error_provider_required">Tambahkan atau pilih provider dari menu.</string>
+    <string name="provider_error_provider_unsupported">Adapter provider belum tersedia.</string>
+    <string name="provider_error_invalid_credential">API key ditolak. Periksa key Anda.</string>
+    <string name="provider_error_permission_denied">Izin provider ditolak.</string>
+    <string name="provider_error_rate_limited">Kena batas laju. Coba lagi nanti.</string>
+    <string name="provider_error_model_unavailable">Model tidak tersedia. Pilih model lain.</string>
+    <string name="provider_error_network_unavailable">Tidak dapat menjangkau provider. Periksa koneksi.</string>
+    <string name="provider_error_timeout">Provider kehabisan waktu.</string>
+    <string name="provider_error_response_too_large">Jawaban melebihi batas aman jam.</string>
+    <string name="provider_error_protocol">Stream terputus atau tidak didukung.</string>
+    <string name="provider_error_prompt_blocked">Permintaan diblokir filter keamanan provider. Ubah kata-katanya.</string>
+    <string name="provider_error_server">Kesalahan server provider. Coba lagi nanti.</string>
+    <string name="provider_error_http">Provider menolak permintaan. Periksa konfigurasi.</string>
+    <string name="provider_error_credential_reentry">Kredensial aman tidak tersedia. Masukkan ulang API key.</string>
+    <string name="provider_error_partial">%1$s Jawaban sebagian disimpan.</string>
+    <string name="provider_error_check_fields">Periksa URL, model dan API key.</string>
 </resources>
