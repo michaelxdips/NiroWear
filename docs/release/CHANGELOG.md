@@ -3,7 +3,7 @@
 Notable changes to NiroWear. Versions follow the published APK releases at
 [NiroWear releases](https://github.com/michaelxdips/NiroWear/releases).
 
-## Unreleased
+## 0.2.1 — 2026-11-15
 
 ### Dependencies
 

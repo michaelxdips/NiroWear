@@ -127,15 +127,59 @@ p:last-child{margin-bottom:0}
       Every published build, in order, with the numbers that identify it. Each entry records what was
       actually executed for that release — not what was intended.
     </p>
-    <p class="meta">Generated from git history and the NiroWear release API · 2026-11-08</p>
+    <p class="meta">Generated from git history and the NiroWear release API · 2026-11-15</p>
   </div>
+
+  <!-- 0.2.1 -->
+  <article class="release">
+    <div class="rside">
+      <span class="rver">0.2.1</span>
+      <span class="rdate">2026-11-15</span>
+      <span class="rbadge latest">Latest</span>
+    </div>
+    <div class="rbody">
+      <h2>One peer can no longer deny the pairing session</h2>
+      <p>
+        The LAN listener accepted one connection, served it, and only then accepted the next. Over TLS
+        the first read is where the handshake happens, so a peer that connected and sent nothing held
+        the whole session for one read timeout — serially, once per connection.
+      </p>
+      <p>
+        Measured with a raw-socket probe: four idle preconnects delayed the real browser by
+        <strong>8,015 ms</strong>, and eight delayed it by <strong>16,018 ms</strong>. That is linear in
+        the attacker's connection count against a 120 s capability, so a burst of about sixty pushed the
+        phone's first request past the deadline — the page never loaded and the watch said nothing. The
+        same probe after the change: <strong>7 ms</strong> and <strong>2,033 ms</strong>.
+      </p>
+      <ul>
+        <li>Requests are dispatched to their own handler threads, capped at eight in flight; the overflow waits a queue slot instead of queueing the real browser behind every hostile connection.</li>
+        <li>Single use is a compare-and-set. Two concurrent requests could otherwise both save; the loser is refused exactly like a replay.</li>
+        <li>The accept queue is 32, not 8: with 8, a burst made the browser's own connect fail outright, because a full queue is answered with a reset.</li>
+        <li>The handshake is still unauthenticated by design, and the page still says so. No new trust assumption.</li>
+      </ul>
+      <p>
+        <strong>Dependencies.</strong> <code>androidx.datastore:datastore-preferences</code> 1.2.1 → 1.3.0.
+        No API this app uses changed. Lint's dependency detector makes a "0 warnings" claim expire on its
+        own when a library publishes, with no commit to this repository; it had already expired for 0.2.0.
+      </p>
+      <p>
+        <strong>Corrections.</strong> The published string count was 89; the resources hold 105 keys in
+        both languages, none missing. The CI comment said <code>compileSdk 36</code> while the build uses
+        37. Both re-derived from the files rather than carried forward.
+      </p>
+      <p class="meta">
+        Measured for this cut: JVM <strong>283 / 283</strong> across 44 suites, ktlint 0, Android Lint
+        "No issues found.", both assembles pass. <em>Not</em> measured for this cut: the connected suite —
+        no emulator was run, and instrumentation is destructive.
+      </p>
+    </div>
+  </article>
 
   <!-- 0.2.0 -->
   <article class="release">
     <div class="rside">
       <span class="rver">0.2.0</span>
       <span class="rdate">2026-11-08</span>
-      <span class="rbadge latest">Latest</span>
     </div>
     <div class="rbody">
       <h2>Nothing is withheld from a long answer</h2>
