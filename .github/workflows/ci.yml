@@ -49,7 +49,7 @@ jobs:
           if [ -n "${CMDLINE:-}" ]; then echo "$CMDLINE" >> "$GITHUB_PATH"; fi
           echo "platforms present:"; ls "$ANDROID_HOME/platforms" || true
 
-      # compileSdk 36 is not on the runner image by default. Gradle can install a
+      # compileSdk 37 is not on the runner image by default. Gradle can install a
       # missing platform itself when the licence is accepted, which avoids
       # depending on a sdkmanager that may not be on PATH at all.
       - name: Accept SDK licences
