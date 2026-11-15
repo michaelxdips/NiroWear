@@ -2978,7 +2978,7 @@ adb install -r app-release.apk</pre>
           <tbody>
             <tr>
               <td>The published APK is signed by the release identity</td>
-              <td><span class="pill pill-source">Source</span> <span class="pill pill-device">JVM</span> <code>apksigner verify --print-certs</code> on the downloaded <code>v0.2.0</code> asset reports <code>CN=NiroWear Release</code> / <code>0dc50fc0…86543e</code>, and <code>aapt2 dump badging</code> reports <code>versionCode='13' versionName='0.2.0'</code>; the release workflow asserts the same certificate before it publishes. 0.1.0 was signed with the Android debug lineage, so a 0.1.0 install must be uninstalled before updating.</td>
+              <td><span class="pill pill-source">Source</span> <span class="pill pill-device">JVM</span> <code>apksigner verify --print-certs</code> on the downloaded <code>v0.2.1</code> asset reports <code>CN=NiroWear Release</code> / <code>0dc50fc0…86543e</code>, and <code>aapt2 dump badging</code> reports <code>versionCode='14' versionName='0.2.1'</code>; the release workflow asserts the same certificate before it publishes. 0.1.0 was signed with the Android debug lineage, so a 0.1.0 install must be uninstalled before updating.</td>
               <td>.github/workflows/release.yml; release body</td>
             </tr>
             <tr>
