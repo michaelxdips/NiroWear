@@ -78,7 +78,8 @@ It exists because a watch is a bad screen for a good answer. Every other approac
 
 ### Interface
 
-- **Fully localized.** 89 user-visible strings in English and Indonesian (`values/` + `values-in/`), on top of the renderer's own resource set.
+- **Fully localized.** 105 user-visible strings in English and Indonesian (`values/` + `values-in/`, the
+  same 105 keys in both files, none missing), on top of the renderer's own resource set.
 - **Accessibility that is tested, not asserted.** The link group node is actionable, the composer field carries its own label, credential labels are announced once, and the provider header grows instead of clipping at large font scales. TalkBack *audio* acceptance still needs a real watch — see [Limitations](#known-limitations).
 
 ## Install
@@ -176,7 +177,7 @@ Every number below came from a command run on this tree. Anything not measured i
 
 | Check | Result | Source |
 |---|---|---|
-| JVM unit tests | **269 / 269**, 43 suites, 0 failures | `app/build/test-results/testDebugUnitTest/*.xml` |
+| JVM unit tests | **282 / 282**, 44 suites, 0 failures | `app/build/test-results/testDebugUnitTest/*.xml` |
 | Android Lint | **0 errors, 0 warnings** | `app/build/reports/lint-results-debug.xml` |
 | ktlint | **0 violations** | `:app:ktlintCheck` |
 | Assemblies | `assembleDebug` + `assembleRelease` pass | Gradle output |

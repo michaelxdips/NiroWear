@@ -19,6 +19,9 @@ import java.security.spec.ECGenParameterSpec
 import java.security.spec.ECPoint
 import java.security.spec.ECPublicKeySpec
 import java.util.Base64
+import java.util.Collections
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import javax.crypto.Cipher
 import javax.crypto.KeyAgreement
 import javax.crypto.spec.GCMParameterSpec
@@ -80,19 +83,25 @@ internal class PairingServer(
             .serverSocketFactory
             // Backlog 1 refused the real browser whenever a hostile peer had already filled the
             // single queue slot while serve() was joining it: measured as ConnectException in
-            // PairingServerTest.aDribblingClientCannotHoldTheSession. The queue only has to outlast
-            // one join, so a handful of slots is enough.
-            // Backlog 1 refused the real browser whenever a hostile peer had already filled the
-            // single queue slot while serve() was joining it: measured as ConnectException in
-            // PairingServerTest.aDribblingClientCannotHoldTheSession. The queue only has to outlast
-            // one join, so a handful of slots is enough.
-            .createServerSocket(0, 8, hostAddress)
+            // PairingServerTest.aDribblingClientCannotHoldTheSession.
+            //
+            // 8 was still too tight once requests were dispatched concurrently: measured with the
+            // audit probe, an 8-socket preconnect burst plus the real browser made the browser's
+            // connect fail outright — Windows answers a full accept queue with RST, so the user got
+            // ERR_CONNECTION_RESET and nothing on the watch explained it. The queue is not what
+            // bounds the session (MAX_IN_FLIGHT is), so it can be generous.
+            .createServerSocket(0, ACCEPT_BACKLOG, hostAddress)
 
-    @Volatile private var consumed = false
+    private val consumed = AtomicBoolean(false)
 
     @Volatile private var closed = false
 
-    @Volatile private var active: Socket? = null
+    /** Requests currently owned by a handler thread, capped by [MAX_IN_FLIGHT]. */
+    private val inFlight = AtomicInteger(0)
+
+    /** Every accepted client, so close() can unblock all of them, not just the newest. */
+    private val liveClients: MutableSet<Socket> = Collections.synchronizedSet(mutableSetOf())
+
     private var worker: Thread? = null
 
     val port: Int get() = socket.localPort
@@ -116,29 +125,21 @@ internal class PairingServer(
                     // Accepts for a short grace past the deadline so an expired attempt still gets the
                     // explicit 410 instead of a bare connection reset, then self-closes.
                     while (!socket.isClosed && clock() < deadline + GRACE_MILLIS) {
+                        // Only accept while a slot is free: accept() is what dequeues a client, so
+                        // staying under the cap leaves the overflow in the kernel backlog, where the
+                        // real browser waits a slot (bounded by one soTimeout) instead of being held
+                        // behind every hostile connection in turn.
+                        if (inFlight.get() >= MAX_IN_FLIGHT) {
+                            Thread.sleep(ACCEPT_BACKOFF_MILLIS)
+                            continue
+                        }
                         val client =
                             try {
                                 socket.accept()
                             } catch (_: java.net.SocketTimeoutException) {
                                 continue
                             }
-                        active = client
-                        try {
-                            serve(client)
-                        } catch (_: java.io.IOException) {
-                            // A single bad client must not kill the listener. Before this catch,
-                            // an idle connection (port scan, browser preconnect, `nc -z`) hit the
-                            // 2s read timeout, threw SocketTimeoutException, unwound past this
-                            // try/finally into the outer `catch (_: Throwable)`, and that catch's
-                            // finally closed the socket — so any scanner could end pairing with no
-                            // token. Keep accepting; only the loop condition ends the session.
-                        } finally {
-                            // `client.use` in serve closes every normal path; this is the only
-                            // path that can leave it open (Thread.start throwing before the
-                            // handler ran). close() is idempotent, so double-closing is safe.
-                            runCatching { client.close() }
-                            active = null
-                        }
+                        dispatch(client)
                     }
                 } catch (_: Throwable) {
                     // Close, timeout and the UI stopping the screen all land here. Nothing to report.
@@ -154,12 +155,13 @@ internal class PairingServer(
     override fun close() {
         if (closed) return
         closed = true
-        // Both closes are what actually stop the listener and unblock the worker; they are fast and
+        // Both closes are what actually stop the listener and unblock the workers; they are fast and
         // stay on the caller so `close()` returns with the port already shut.
         runCatching { socket.close() }
-        // Closing the listener alone leaves the worker blocked in read() on an accepted client, so
-        // the socket would outlive the screen. Closing the active client unblocks it.
-        runCatching { active?.close() }
+        // Closing the listener alone leaves handlers blocked in read() on accepted clients, so those
+        // sockets would outlive the screen. Every live client is closed, not just the newest.
+        val stalled = synchronized(liveClients) { liveClients.toList() }
+        stalled.forEach { runCatching { it.close() } }
         // The join used to run on the CALLER, which is the Compose UI thread on the two paths that
         // matter (the Pairing button and the screen's onDispose): a session ending while a peer sat
         // in read() froze the dial for up to five seconds. It now happens on a short-lived daemon
@@ -175,25 +177,33 @@ internal class PairingServer(
     }
 
     /**
-     * Runs one request on its own short-lived thread and joins it with a hard bound.
+     * Runs one request on its own thread and returns IMMEDIATELY.
      *
-     * Over TLS the first `read()` is where JSSE performs the whole handshake, and the per-read
-     * deadline inside [readHead] cannot run until it returns: a client that dribbles a partial
-     * ClientHello with gaps shorter than `soTimeout` keeps that read alive, holding the single
-     * worker, so the phone's real request is never accepted (and the user sees a page that never
-     * loads, with nothing on the watch explaining it). `soTimeout` bounds one read, not a handshake;
-     * this join is the only bound that survives it, and it caps a trickled request body the same way.
+     * This used to join the request thread before accepting the next client, so any peer that
+     * connected and said nothing held the listener for one `soTimeout` (2 s) per connection. Measured
+     * with the audit probe: 4 idle preconnects delayed the real browser by 8,015 ms and 8 delayed it
+     * by 16,018 ms — linear in the attacker's connection count, against a 120 s session. A burst of
+     * about sixty was therefore enough to push the phone's first request past the deadline, and the
+     * user saw a page that never loaded with nothing on the watch explaining it.
+     *
+     * Concurrency removes the queueing; [MAX_IN_FLIGHT] is what keeps it bounded, and each handler
+     * still owns its own wall clock inside [readHead]/[readBounded], so no handler depends on another
+     * finishing.
      */
-    private fun serve(client: Socket) {
-        val handler =
-            Thread({ client.use { runCatching { handle(it) } } }, "nirowear-pairing-request").apply {
-                isDaemon = true
-                start()
+    private fun dispatch(client: Socket) {
+        inFlight.incrementAndGet()
+        liveClients += client
+        Thread({
+            try {
+                client.use { runCatching { handle(it) } }
+            } finally {
+                liveClients -= client
+                runCatching { client.close() }
+                inFlight.decrementAndGet()
             }
-        runCatching { handler.join(REQUEST_MILLIS + HANDSHAKE_GRACE_MILLIS) }
-        if (handler.isAlive) {
-            runCatching { client.close() }
-            runCatching { handler.join(1_000) }
+        }, "nirowear-pairing-request").apply {
+            isDaemon = true
+            start()
         }
     }
 
@@ -264,7 +274,7 @@ internal class PairingServer(
         // drives a ttl of 0 got a 200 instead of a 410 whenever the clock had not ticked yet.
         if (clock() >= deadline) return respond(client, 410, JSON, """{"ok":false}""")
         if (closed) return
-        if (consumed) return respond(client, 401, JSON, """{"ok":false}""")
+        if (consumed.get()) return respond(client, 401, JSON, """{"ok":false}""")
         val root =
             runCatching { Json.parseToJsonElement(String(body, Charsets.UTF_8)).jsonObject }.getOrNull()
                 ?: return respond(client, 400, JSON, """{"ok":false}""")
@@ -284,7 +294,9 @@ internal class PairingServer(
         // One generic 400 for every failure: a decrypt error must not tell an attacker which byte was
         // wrong, and a rejected payload must never leave a half-written profile behind.
         if (payload == null) return respond(client, 400, JSON, """{"ok":false}""")
-        consumed = true
+        // Two clients can be served at once, so "check then assign" would let both of them save. Only
+        // the winner of this CAS consumes the capability; the loser is refused exactly like a replay.
+        if (!consumed.compareAndSet(false, true)) return respond(client, 401, JSON, """{"ok":false}""")
         // Answer before handing the payload on: the consumer may close the listener from the
         // callback, and the browser must not lose the confirmation to that race.
         respond(client, 200, JSON, """{"ok":true}""")
@@ -432,8 +444,26 @@ internal class PairingServer(
         const val GRACE_MILLIS = 5_000L
         const val REQUEST_MILLIS = 5_000L
 
-        /** Grace on top of [REQUEST_MILLIS] for the TLS handshake, which happens inside one read. */
-        const val HANDSHAKE_GRACE_MILLIS = 2_000L
+        /**
+         * Handler threads allowed at once.
+         *
+         * Eight matches the old queue depth, so a burst is absorbed without queueing the real
+         * browser behind each connection in turn. Beyond that the overflow stays in the kernel
+         * backlog, which costs a slot wait (at most one `soTimeout`) rather than a refusal.
+         */
+        const val MAX_IN_FLIGHT = 8
+
+        /**
+         * Kernel accept queue.
+         *
+         * Wider than [MAX_IN_FLIGHT] on purpose: the queue is not the thread bound, and a queue that
+         * exactly matches the burst size turns a preconnect burst into a connection reset for the
+         * real browser (measured: ConnectException with backlog 8 at an 8-socket burst).
+         */
+        const val ACCEPT_BACKLOG = 32
+
+        /** Poll interval while every slot is busy; below the 2 s read timeout, far above a frame. */
+        const val ACCEPT_BACKOFF_MILLIS = 20L
         const val HTML = "text/html; charset=utf-8"
         const val JSON = "application/json"
         const val TEXT = "text/plain; charset=utf-8"

@@ -2993,7 +2993,7 @@ adb install -r app-release.apk</pre>
             </tr>
             <tr>
               <td>Renderer emits semantic blocks, never one text node — and a big table or code fence expands into per-row / per-chunk lazy items, so nothing is withheld</td>
-              <td><span class="pill pill-source">Source</span> <span class="pill pill-device">JVM</span> 269 tests / 43 suites, 0 failures, 0 errors, 0 skipped. <span class="pill pill-emu">Emulator</span> A 120-row table reaches row 119 and a 200-line fence keeps every line.</td>
+              <td><span class="pill pill-source">Source</span> <span class="pill pill-device">JVM</span> 282 tests / 44 suites, 0 failures, 0 errors, 0 skipped. <span class="pill pill-emu">Emulator</span> A 120-row table reaches row 119 and a 200-line fence keeps every line.</td>
               <td>ContentBlock.kt, RenderUnit.kt; RenderUnitTest; app/build/test-results/testDebugUnitTest/</td>
             </tr>
             <tr>
@@ -3063,7 +3063,7 @@ adb install -r app-release.apk</pre>
 
         <p class="status-note">
           The JVM and lint figures above were read from the result XML produced by a forced re-run on
-          2026-11-08 (<code>269 tests / 43 suites</code>, lint 0 warnings), not quoted from memory. This
+          2026-11-15 (<code>282 tests / 44 suites</code>, lint 0 warnings), not quoted from memory. This
           page describes <strong>0.2.0</strong>; the audit rounds that produced it changed chat
           lifecycle, Keystore, adapter and renderer code, so any claim here that cites an earlier
           emulator run is dated rather than current. The connected-test suite is now MEASURED, not

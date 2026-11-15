@@ -5,6 +5,36 @@ Notable changes to NiroWear. Versions follow the published APK releases at
 
 ## Unreleased
 
+### Dependencies
+
+`androidx.datastore:datastore-preferences` **1.2.1 → 1.3.0**. Lint's `GradleDependency` detector flagged
+it during a forced re-analysis on 2026-11-15 — which also means the "0 warnings" figure published for
+0.2.0 had quietly expired on its own: that check compares against what Maven publishes, not against
+this tree, so a clean tree can stop being clean with no commit. Nothing this app uses changed
+(`preferencesDataStore`, `DataStore.data`, `edit`, `stringPreferencesKey`); the full gate passes on
+1.3.0, and 1.3.0 was already in the local dependency cache, so the bump added no new download.
+
+### Pairing no longer queues the real browser behind every hostile connection
+
+The listener accepted one connection, served it, and only then accepted the next. Over TLS the first
+`read()` is where the handshake happens, so a peer that connected and sent nothing occupied the whole
+session for one `soTimeout` (2 s) — serially, once per connection. Measured with a raw-socket probe on
+this tree: **4** idle preconnects delayed the real browser by **8,015 ms**, and **8** delayed it by
+**16,018 ms**. Linear in the attacker's connection count, against a 120 s session: a burst of about
+sixty pushed the phone's first request past the deadline, and the user saw a page that never loaded with
+nothing on the watch explaining it.
+
+Requests are dispatched to their own handler threads now, bounded at eight in flight, so a peer costs
+its own thread instead of the session. The same probe on the fixed tree: **7 ms** with 4 idle peers and
+**2,033 ms** with an 8-socket burst (one `soTimeout`, waiting for a free slot). Single use moved to a
+compare-and-set for the same reason — "check `consumed`, then set it" would have let two concurrent
+requests both save —, and `close()` now closes every live client, not just the newest.
+
+The accept queue was also too small for the burst it was meant to survive. With backlog 8, an 8-socket
+preconnect burst plus the real browser made the browser's connect fail outright (`ConnectException`):
+Windows answers a full accept queue with RST, so the phone got a connection reset. The queue is 32 now.
+It is not what bounds the session — the in-flight cap is — so it can be generous.
+
 ### Failure text is chosen when it is read, not when it is stored
 
 The English cause used to be the payload of `ProviderError` and was written straight into
