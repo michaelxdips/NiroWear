@@ -18,7 +18,7 @@ Read from the result XML, not from memory:
 
 - JVM unit tests **283 / 283, 0 failures, 0 errors, 44 suites**.
 - `ktlintCheck` **0 errors**; Android Lint **0 issues** (`No issues found.`).
-- `assembleDebug` and `assembleRelease` **pass** on this tree (`app-debug.apk` 34,693,551 B,
+- `assembleDebug` and `assembleRelease` **pass** on this tree (`app-debug.apk` 34,693,547 B,
   `app-release-unsigned.apk` 3,689,873 B locally). The published artifact is the one the workflow signs
   from the tag; a local cut of the same tree is not bit-identical.
 - **NOT TESTED for this cut: the connected suite.** No emulator was started, and instrumentation is

@@ -199,7 +199,7 @@ Three published figures have been wrong and are corrected rather than quietly dr
 **Other measured facts**
 
 - **History search at volume.** 5,000 messages across 200 conversations seeded on the AVD: worst query **7 ms**, common word 0–1 ms, against a 250 ms debounce. It stays a plain `LIKE` scan with no index — FTS5 is unavailable on this platform (`no such module: fts5`), and an index would buy nothing a user could feel.
-- **Published artifact.** `v0.2.0` `app-release.apk`, 3,696,101 B, SHA-256 `ec77e27c…5e02b2e3` (from the release API, 2026-11-08). A local build of the same tree is **not** bit-identical; trust the hash in the release body, not a local cut.
+- **Published artifact.** `v0.2.1` `app-release.apk`, 3,702,157 B, SHA-256 `56974449…749cb6d9` (from the release API, 2026-11-15; re-hashed locally after download). A local build of the same tree is **not** bit-identical; trust the hash in the release body, not a local cut.
 - **Signing identity.** `CN=NiroWear Release`, SHA-256 `0D:C5:0F:C0:19:…:86:54:3E`, valid to 2056.
 
 **Explicitly unverified.** A physical watch has never run this build: battery, thermals, real touch and bezel input, and TalkBack *audio* are unmeasured. The pairing certificate click-through on a real phone is unmeasured. All are tracked as issues below.
