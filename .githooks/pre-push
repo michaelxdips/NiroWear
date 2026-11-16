@@ -1,0 +1,37 @@
+#!/bin/sh
+# NiroWear pre-push gate (#30).
+#
+# The instrumented sources are gitignored by policy (.gitignore:82-83), so CI cannot compile them
+# and nothing catches their rot: measured 2026-11-15, the private suite did not compile against
+# b02ddfd for a day and no gate failed. This hook is the narrowest fix that needs no policy change
+# and no token — it runs the compile on the only machine that holds the sources.
+#
+# Enable once per clone:  git config core.hooksPath .githooks
+# Cost on this tree: about ten seconds warm. It compiles; it installs nothing and drives no device.
+
+set -u
+cd "$(git rev-parse --show-toplevel)" || exit 1
+
+# A clone without the private suite would run a NO-SOURCE task and print BUILD SUCCESSFUL, which is
+# not evidence of anything. Say so instead of pretending to have checked.
+if ! find app/src/androidTest -name '*.kt' -print -quit 2>/dev/null | grep -q .; then
+  echo "pre-push: no app/src/androidTest sources on this clone; skipping the instrumented compile."
+  exit 0
+fi
+
+# A hook inherits the environment of whatever ran git, which on Windows often has no JAVA_HOME.
+if [ -z "${JAVA_HOME:-}" ] && [ -d "/c/Program Files/Android/Android Studio/jbr" ]; then
+  JAVA_HOME="/c/Program Files/Android/Android Studio/jbr"
+  export JAVA_HOME
+fi
+
+case "$(uname -s)" in
+  MINGW* | MSYS* | CYGWIN*) GRADLE=./gradlew.bat ;;
+  *) GRADLE=./gradlew ;;
+esac
+
+echo "pre-push: :app:compileDebugAndroidTestKotlin"
+if ! "$GRADLE" --offline :app:compileDebugAndroidTestKotlin --console=plain; then
+  echo "pre-push: the instrumented sources do not compile; fix them, or push with --no-verify." >&2
+  exit 1
+fi

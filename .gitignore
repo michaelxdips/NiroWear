@@ -33,6 +33,11 @@
 !.github/PULL_REQUEST_TEMPLATE.md
 !SECURITY.md
 !CODEOWNERS
+# The pre-push gate (#30) is published on purpose: the instrumented sources are gitignored, so this
+# hook is the only compile check they get, and a guard nobody can read is not a guard. Wire it with
+# `git config core.hooksPath .githooks` (CONTRIBUTING.md).
+!.githooks/
+!.githooks/pre-push
 
 # 3. Application source (main/debug/release only; never test sets).
 !app/build.gradle.kts
