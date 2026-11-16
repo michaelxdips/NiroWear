@@ -57,6 +57,19 @@ seed state, so `connectedDebugAndroidTest` alone will not run them and will not 
 them. Run them explicitly via `scripts/disposable-instrumentation.ps1` or
 `scripts/test-clean-wear.py` when you touch lifecycle, credential promotion, or acceptance seeding.
 
+**No CI job can compile those sources, so this machine is the only place their compile is checked.**
+The repository ships a pre-push hook for exactly that. Enable it once per clone:
+
+```powershell
+git config core.hooksPath .githooks
+```
+
+Every push then runs `:app:compileDebugAndroidTestKotlin` first — compile only, no install and no
+emulator, 21 s cold and about 10 s warm on the reference machine. If the instrumented sources do not
+compile, the push stops with a message naming the task. On a clone without the private sources the
+hook prints a skip line and exits 0, because a `NO-SOURCE` compile proves nothing. It is a local
+guard, not a CI gate: `--no-verify` skips it, and CI still cannot see those files (#30).
+
 Reference device for layout work is **466 × 466 @ 320 dpi, round**. If a change looks fine at
 another size, check it there before claiming it works.
 
