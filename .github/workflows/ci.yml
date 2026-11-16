@@ -144,10 +144,14 @@ jobs:
           echo "$CMDLINE" >> "$GITHUB_PATH"
           echo "emulator: $ANDROID_HOME/emulator/emulator"
 
-      - name: Require KVM
+      - name: Enable KVM
         run: |
           set -euo pipefail
+          # The runner user is not in the `kvm` group, so the device node is crw-rw---- root:kvm and
+          # a plain `test -w` fails before the emulator is ever started. Sudo is passwordless here.
           ls -l /dev/kvm || true
+          sudo chmod 666 /dev/kvm 2>/dev/null || true
+          ls -l /dev/kvm
           test -w /dev/kvm || { echo "::error::/dev/kvm is not writable; the x86_64 emulator cannot boot"; exit 1; }
 
       - name: Cache Gradle

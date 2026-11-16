@@ -36,6 +36,25 @@ class InputResultUiTest {
         error("Missing $label")
     }
 
+    /**
+     * The compose field is editable, but on API 34 the IME window can be the active root, so a single
+     * `rootInActiveWindow` snapshot finds nothing and `first { it.isEditable }` throws. Scan every
+     * window and wait, exactly as a screen reader would.
+     */
+    private fun awaitEditable(): AccessibilityNodeInfo {
+        repeat(100) {
+            i.uiAutomation.clearCache()
+            val roots =
+                i.uiAutomation.windows.mapNotNull { it.root } +
+                    listOfNotNull(i.uiAutomation.rootInActiveWindow)
+            roots.asSequence().flatMap { nodes(it).asSequence() }
+                .firstOrNull { it.isEditable }
+                ?.let { return it }
+            SystemClock.sleep(100)
+        }
+        error("No editable field appeared in any window")
+    }
+
     /** Coordinate tap: the icon boxes are clickable Compose boxes whose semantics node exposes no
      *  ACTION_CLICK, so the accessibility action is not a valid trigger here. */
     private fun click(label: String) {
@@ -58,7 +77,7 @@ class InputResultUiTest {
         val activity = launch()
         try {
             click("Keyboard input")
-            val editor = nodes().first { it.isEditable }
+            val editor = awaitEditable()
             assertTrue(
                 editor.performAction(
                     AccessibilityNodeInfo.ACTION_SET_TEXT,
