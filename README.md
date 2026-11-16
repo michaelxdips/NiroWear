@@ -204,7 +204,7 @@ Three published figures have been wrong and are corrected rather than quietly dr
 
 **Explicitly unverified.** A physical watch has never run this build: battery, thermals, real touch and bezel input, and TalkBack *audio* are unmeasured. The pairing certificate click-through on a real phone is unmeasured. All are tracked as issues below.
 
-**Host-driven gates.** Six instrumentation methods are excluded from the default run because they need real process death between phases (`@HostDrivenGate`, `notAnnotation` in `app/build.gradle.kts`). They are executed by `scripts/check-wear-acceptance-seed.ps1`, `scripts/check-native-restart.ps1`, `scripts/check-combined-lifecycle.ps1` and `scripts/check-credential-promotion.ps1`, each of which refuses a device whose `adb emu avd name` is not the AVD it was told to expect. Last run on a Wear OS 37 AVD: **all six pass**.
+**Host-driven gates.** Six instrumentation methods are excluded from the default run because they need real process death between phases (`@HostDrivenGate`, `notAnnotation` in `app/build.gradle.kts`). They are executed by four host scripts that are deliberately outside the published tree — `.gitignore` ignores `scripts/*` and re-includes only `disposable-instrumentation.ps1` and `test-clean-wear.py`, so `check-wear-acceptance-seed.ps1`, `check-native-restart.ps1`, `check-combined-lifecycle.ps1` and `check-credential-promotion.ps1` stay on the maintainer's machine and a clone cannot run them. Each refuses a device whose `adb emu avd name` is not the AVD it was told to expect. Last run on a Wear OS 37 AVD: **all six pass**.
 
 ## Known limitations
 
