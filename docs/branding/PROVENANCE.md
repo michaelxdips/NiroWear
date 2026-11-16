@@ -48,6 +48,12 @@ Refined 2026-10-22 (owner-selected scope: fix measured defects, do not redesign)
   That is still only 0.22 px at 24 px, which is the point: the previous margin was 0.11 px.
 - `svg_audit.py` now reports **100/100, no issues** (was 98/100 with two INFO findings).
 
+Both scripts named here (`scripts/verify-outline.py` above and `scripts/export-brand.py` in the table)
+run outside the published tree: `.gitignore` ignores `scripts/*`, so only
+`disposable-instrumentation.ps1` and `test-clean-wear.py` ship. The measurements they produced stand;
+a clone cannot re-run them. Verify the assets against the numbers above instead of trusting them, and
+ask the owner for the scripts if a regeneration is needed.
+
 | Asset | Path | Notes |
 | --- | --- | --- |
 | Master | `docs/branding/nirowear-mark.svg` | filled outline, plate + mint glyph |
