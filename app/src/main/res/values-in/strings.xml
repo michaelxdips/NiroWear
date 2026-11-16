@@ -15,7 +15,7 @@
     <string name="chat_voice_unavailable">Pengenalan suara tidak tersedia. Pakai keyboard.</string>
     <string name="chat_voice_blocked">Pengenalan suara diblokir. Pakai keyboard.</string>
     <string name="chat_ask_anything">Tanya apa saja</string>
-    <string name="chat_empty_add_provider">Tambahkan provider dari menu, lalu pakai keyboard atau suara.</string>
+    <string name="chat_empty_add_provider">Tambahkan provider dari menu.</string>
     <string name="chat_empty_start">Pakai keyboard atau suara untuk mulai.</string>
     <string name="chat_copy_unsaved">Salin jawaban belum tersimpan</string>
     <string name="chat_retry_saving">Coba simpan lagi</string>

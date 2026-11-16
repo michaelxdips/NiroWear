@@ -311,6 +311,10 @@ private fun ChatReader(
     // a LocalContext read, so a language switch would keep rendering the old language.
     val errorResources = LocalResources.current
     val localeTag = LocalConfiguration.current.locales[0].toLanguageTag()
+    // A 384 px dial is 192 dp: the 48 dp menu strip, 48 dp input targets and their padding left only
+    // 62 dp for the reader, so the empty-state sentence was cut mid-line (measured [48,170][336,220]
+    // on a 384x384 wm override). Chrome shrinks on short screens; touch targets stay 48 dp.
+    val compactChrome = LocalConfiguration.current.screenHeightDp < 220
     var lastLocaleTag by remember { mutableStateOf<String?>(null) }
     // Presentation includes status/error/provenance, not just Markdown. All fields invalidate it.
     LaunchedEffect(storedMessages, chatState.conversationId, localeTag) {
@@ -579,7 +583,7 @@ private fun ChatReader(
                 // it is edge-to-edge by default and the IME arrives as an INSET the window no
                 // longer shrinks for. Without consuming it, the keyboard covered the field and the
                 // Send button on the 466 px dial.
-                Modifier.fillMaxSize().imePadding().padding(horizontal = 32.dp, vertical = 28.dp),
+                Modifier.fillMaxSize().imePadding().padding(horizontal = if (compactChrome) 20.dp else 32.dp, vertical = if (compactChrome) 12.dp else 28.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Text(stringResource(R.string.chat_prompt), modifier = Modifier.align(Alignment.CenterHorizontally))
@@ -1109,7 +1113,7 @@ private fun ChatReader(
                     if (emptyPromptShown) {
                         item {
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text(stringResource(R.string.chat_ask_anything), fontSize = 18.sp)
+                                Text(stringResource(R.string.chat_ask_anything), fontSize = if (compactChrome) 16.sp else 18.sp)
                                 Text(
                                     if (providerState.selected ==
                                         null
@@ -1118,8 +1122,8 @@ private fun ChatReader(
                                     } else {
                                         stringResource(R.string.chat_empty_start)
                                     },
-                                    fontSize = 14.sp,
-                                    lineHeight = 20.sp,
+                                    fontSize = if (compactChrome) 13.sp else 14.sp,
+                                    lineHeight = if (compactChrome) 17.sp else 20.sp,
                                     color = Color(0xFFB8BDC6),
                                 )
                             }
@@ -1192,7 +1196,7 @@ private fun ChatReader(
                         .align(Alignment.BottomCenter)
                         .onSizeChanged {
                             footerHeight = it.height
-                        }.padding(bottom = if (idleLatest) 48.dp else 28.dp),
+                        }.padding(bottom = if (idleLatest) 48.dp else if (compactChrome) 12.dp else 28.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {

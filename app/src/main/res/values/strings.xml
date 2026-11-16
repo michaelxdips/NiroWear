@@ -15,7 +15,7 @@
     <string name="chat_voice_unavailable">Voice recognition unavailable. Use keyboard.</string>
     <string name="chat_voice_blocked">Voice recognition blocked. Use keyboard.</string>
     <string name="chat_ask_anything">Ask anything</string>
-    <string name="chat_empty_add_provider">Add provider from menu, then use keyboard or voice.</string>
+    <string name="chat_empty_add_provider">Add provider from menu.</string>
     <string name="chat_empty_start">Use keyboard or voice to start.</string>
     <string name="chat_copy_unsaved">Copy unsaved answer</string>
     <string name="chat_retry_saving">Retry saving</string>
