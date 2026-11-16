@@ -72,14 +72,9 @@ jobs:
           key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle.kts', 'gradle.properties', 'gradle/wrapper/gradle-wrapper.properties', 'gradle/gradle-daemon-jvm.properties', 'gradle/libs.versions.toml') }}
           restore-keys: gradle-${{ runner.os }}-
 
-      # Test sources are gitignored by policy, so on a fresh clone this task is
-      # NO-SOURCE: it exits 0 having run nothing. It is kept because it is the
-      # correct command the moment tests are published, but it is NOT the gate.
-      # The gate is assemble + lint, which compile every published source file.
-      # Test sources are gitignored by policy, so on a fresh clone this task is NO-SOURCE and exits
-      # 0 having run nothing. That is stated rather than hidden: a green run must not be
-      # indistinguishable from a run that executed zero tests.
-      - name: Unit tests (NO-SOURCE on the published tree, by policy)
+      # The 286-test JVM suite is published as of 2026-11-16, so this step is the gate it always
+      # claimed to be. The check below still refuses to let a run that produced no results pass.
+      - name: Unit tests
         run: ./gradlew :app:testDebugUnitTest --console=plain
 
       # The assertion is CONDITIONAL on purpose. If test sources are present, results are required
@@ -103,7 +98,7 @@ jobs:
             exit 1
           fi
           if [ "$sources" -eq 0 ]; then
-            echo "::warning::No test sources are published (app/src/test is gitignored by policy), so this job ran no tests. Build, lint and style are the real gate."
+            echo "::warning::No test sources are published, so this job ran no tests. Build, lint and style are the real gate."
           fi
           exit 0
 
@@ -122,4 +117,105 @@ jobs:
         with:
           name: test-results
           path: app/build/test-results/testDebugUnitTest/*.xml
+          if-no-files-found: ignore
+
+  # Runs the instrumented suite on a Wear OS 5 (API 34) emulator — the same API level as the physical
+  # Xiaomi Watch 2, at the reference 466x466 @320 viewport. This job exists because a green `jvm` job
+  # used to mean "the app compiled": nothing instrumented was even published, so no CI run had ever
+  # executed one. First run is the evidence; no number here is quoted from a local machine.
+  instrumented:
+    name: instrumented (Wear OS 5, API 34, 466x466)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - name: Put the Android SDK tools on PATH
+        run: |
+          set -euo pipefail
+          CMDLINE=$(find "$ANDROID_HOME/cmdline-tools" -maxdepth 2 -name bin -type d 2>/dev/null | head -1)
+          test -n "${CMDLINE:-}" || { echo "::error::no cmdline-tools under $ANDROID_HOME"; exit 1; }
+          echo "$CMDLINE" >> "$GITHUB_PATH"
+          echo "emulator: $ANDROID_HOME/emulator/emulator"
+
+      - name: Require KVM
+        run: |
+          set -euo pipefail
+          ls -l /dev/kvm || true
+          test -w /dev/kvm || { echo "::error::/dev/kvm is not writable; the x86_64 emulator cannot boot"; exit 1; }
+
+      - name: Cache Gradle
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-instrumented-${{ hashFiles('**/*.gradle.kts', 'gradle.properties', 'gradle/wrapper/gradle-wrapper.properties', 'gradle/gradle-daemon-jvm.properties') }}
+          restore-keys: gradle-${{ runner.os }}-
+
+      - name: Install the Wear OS system image
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses > /dev/null 2>&1 || true
+          sdkmanager "platforms;android-37" "system-images;android-34;android-wear;x86_64"
+
+      # The AVD profile is patched instead of trusted: hw.lcd.circular=false and 384x384 are the
+      # defaults, and geometry assertions (48 dp targets, round safe area) are written against
+      # 466x466 @320.
+      - name: Create a 466x466 round AVD
+        run: |
+          set -euo pipefail
+          echo no | avdmanager create avd -n wear34 -k "system-images;android-34;android-wear;x86_64" -d wearos_small_round --force
+          CFG="$HOME/.android/avd/wear34.avd/config.ini"
+          sed -i '/hw.lcd.width/d;/hw.lcd.height/d;/hw.lcd.density/d;/hw.lcd.circular/d' "$CFG"
+          {
+            echo "hw.lcd.width=466"
+            echo "hw.lcd.height=466"
+            echo "hw.lcd.density=320"
+            echo "hw.lcd.circular=yes"
+          } >> "$CFG"
+          grep -E 'hw.lcd|image.sysdir' "$CFG"
+
+      - name: Boot the emulator
+        run: |
+          set -euo pipefail
+          nohup "$ANDROID_HOME/emulator/emulator" -avd wear34 -no-window -no-audio -no-boot-anim \
+            -no-snapshot -gpu swiftshader_indirect -camera-back none -camera-front none \
+            > /tmp/emulator.log 2>&1 &
+          adb wait-for-device
+          for i in $(seq 1 120); do
+            BOOTED=$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
+            if [ "$BOOTED" = "1" ]; then break; fi
+            sleep 2
+          done
+          test "$BOOTED" = "1" || { echo "::error::emulator did not boot"; tail -50 /tmp/emulator.log; exit 1; }
+          adb shell input keyevent KEYCODE_WAKEUP || true
+          adb shell wm size
+          adb shell wm density
+
+      - name: Instrumented tests
+        run: |
+          set -euo pipefail
+          ANDROID_SERIAL=emulator-5554 ./gradlew :app:connectedDebugAndroidTest --console=plain
+
+      - name: Collect logcat
+        if: always()
+        run: adb logcat -d > /tmp/logcat.txt || true
+
+      - name: Publish instrumented results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: instrumented-results
+          path: |
+            app/build/outputs/androidTest-results/connected/**
+            app/build/reports/androidTests/connected/**
+            /tmp/emulator.log
+            /tmp/logcat.txt
           if-no-files-found: ignore

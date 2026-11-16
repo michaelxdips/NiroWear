@@ -112,4 +112,17 @@
     <string name="provider_error_credential_reentry">Kredensial aman tidak tersedia. Masukkan ulang API key.</string>
     <string name="provider_error_partial">%1$s Jawaban sebagian disimpan.</string>
     <string name="provider_error_check_fields">Periksa URL, model dan API key.</string>
+
+    <!-- Failure text that is not a provider cause, resolved at display time. -->
+    <string name="failure_history_unreadable">Riwayat tidak dapat dibaca. Tidak ada pesan yang dihapus.</string>
+    <string name="failure_history_retrying">Riwayat tidak dapat dibaca. Mencoba lagi.</string>
+    <string name="failure_history_unavailable">Riwayat tidak tersedia. Tidak ada pesan yang berubah.</string>
+    <string name="failure_key_cleanup_pending">Pembersihan kunci terenkripsi tertunda. Riwayat dipertahankan; buka ulang aplikasi untuk mencoba lagi.</string>
+    <string name="failure_truncated">Jawaban berhenti lebih awal dan mungkin tidak lengkap.</string>
+    <string name="failure_message_gone">Pesan itu sudah tidak ada di chat ini. Kirim ulang.</string>
+    <string name="failure_nothing_to_retry">Tidak ada yang bisa diulang di chat ini.</string>
+    <string name="failure_send_failed">Tidak dapat mengirim. Periksa penyiapan provider atau penyimpanan lokal.</string>
+    <string name="failure_save_still_failing">Masih tidak dapat menyimpan. Biarkan aplikasi terbuka dan salin jawaban yang belum tersimpan.</string>
+    <string name="failure_settings_unreadable">Pengaturan provider tidak dapat dibaca. Riwayat dan key tersimpan dipertahankan; perubahan penyiapan diblokir.</string>
+    <string name="failure_settings_unavailable">Pengaturan provider tidak tersedia. Riwayat dan key tersimpan dipertahankan; perubahan penyiapan diblokir.</string>
 </resources>
