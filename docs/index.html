@@ -1977,9 +1977,11 @@ html[data-theme="dark"] .chip-table .chip-t{color:#9BE8D5}
 .pill-emu{color:var(--brass)}
 .pill-source{color:var(--cobalt)}
 .pill-none{color:#A03A2A}
+.pill-hw{color:#7A4BB5}
 
 html[data-theme="dark"] .pill-device{color:#7FD3B4}
 html[data-theme="dark"] .pill-none{color:#FF9C86}
+html[data-theme="dark"] .pill-hw{color:#C79BFF}
 
 .status-legend{
   display:flex;
@@ -3028,8 +3030,8 @@ adb install -r app-release.apk</pre>
             </tr>
             <tr>
               <td>Touch reach, battery and thermals on a real watch</td>
-              <td><span class="pill pill-none">Unverified</span> No physical Xiaomi Watch 2 is attached to the build machine.</td>
-              <td>—</td>
+              <td><span class="pill pill-hw">Watch</span> v0.2.1 installed on a Xiaomi Watch 2 (API 34, 466x466, armeabi-v7a): versionCode 14, signer verified, cold start <strong>1,174 ms</strong>. Battery and thermals are still unmeasured; the rotary crown does not move the reader (#47).</td>
+              <td>adb; issue #47</td>
             </tr>
             <tr>
               <td>Voice transcription accuracy</td>
@@ -3058,6 +3060,7 @@ adb install -r app-release.apk</pre>
           <span><span class="pill pill-source">Source</span> read from the shipping code</span>
           <span><span class="pill pill-device">JVM</span> executed on this machine</span>
           <span><span class="pill pill-emu">Emulator</span> executed on a 466 px AVD</span>
+          <span><span class="pill pill-hw">Watch</span> executed on the physical Xiaomi Watch 2</span>
           <span><span class="pill pill-none">Unverified</span> no evidence exists</span>
         </div>
 
@@ -3071,20 +3074,34 @@ adb install -r app-release.apk</pre>
           earlier revision of this page said "14 failing": that figure was arithmetic from a partial
           run, not a measurement, and was wrong — the tests share one app process, so a class that
           passes on its own can still fail in suite order. A full-suite run at that point reported 18,
-          and the test-side fixes that followed brought it to 2. The two that remain are named rather
-          than counted: <code>PairingUiTest#keyArrivesFromPhoneWithoutTypingOnWatch</code> needs a real
-          phone browser for the certificate click-through, and
-          <code>RendererTapAndPanTest#wideCodeHasAccessibleHorizontalScrollInLtrAndRtl</code> fails in
-          suite order while passing in isolation on the same build. <code>RotaryInputTest</code> has
-          both passed and failed across runs here, and an emulator has no bezel source, so its result is
-          not evidence either way. Fixed and now passing:
-          <code>ReaderNavigationTest#editAndRetry…</code> (a trailing <code>Retry response</code> row
-          could sit below the fold) and
-          <code>StoppedStatusUiTest#persistedStatusAndRetryRemainReachableAtBothScales</code>. Also
-          measured on this tree: with 5,000 messages seeded
-          across 200 conversations, the history search's worst query took <strong>7 ms</strong>
-          against a 250 ms debounce, so it stays a plain <code>LIKE</code> scan with no index. Test sources are not published in this
-          repository by policy, so the result XML is not linkable from here.
+          and the test-side fixes that followed brought it to 2. The two in that run's XML are named
+          rather than counted: <code>PairingUiTest#keyArrivesFromPhoneWithoutTypingOnWatch</code> needs a
+          real phone browser for the certificate click-through, and
+          <code>RotaryInputTest#rotarySourceMovesReaderAndLeavesTouchNavigationAvailable</code> fails
+          because the AVD has no rotary source. <code>RendererTapAndPanTest</code> passed in that run;
+          its order-dependence was seen in an earlier one and is no longer claimed as current.
+        </p>
+        <p class="status-note">
+          <strong>Physical watch, 2026-11-16.</strong> v0.2.1 was installed on a Xiaomi Watch 2: Android
+          14 / API 34, 466x466 @ 320 dpi, <code>armeabi-v7a</code>, versionCode 14, signer
+          <code>0dc50f…86543e</code>, cold start <strong>1,174 ms</strong>. The suite was then run per
+          class with <code>am instrument</code> and <code>pm clear</code> between classes. 25 of 43
+          classes passed first pass; eleven of the eighteen failures were <code>adb: device offline</code>,
+          not test results, because this watch drops the ADB transport when it sleeps. Real defects found
+          on hardware and filed: the rotary crown does not move the reader (#47), table rows are absent
+          from the semantics tree on API 34 (#48), Arabic-Indic digits appear inside an English plural
+          sentence (#49), and two classes do not finish on hardware (#50). A 384x384 layout override cut
+          the empty-state sentence mid-line; the chrome now shrinks below 220 dp of screen height, touch
+          targets stay 48 dp, and measured screenshots at 384 and node bounds at 466 confirm the fix.
+        </p>
+        <p class="status-note">
+          Test sources are published as of 2026-11-16. Until then <code>app/src/test</code> and
+          <code>app/src/androidTest</code> were ignored by the repository's allowlist, so every CI run
+          executed <strong>zero</strong> tests and still reported success. The <code>jvm</code> job now
+          runs 286 tests in 45 suites and refuses a run that produced no result XML; a new
+          <code>instrumented</code> job boots a Wear OS 5 (API 34) AVD patched to 466x466 @ 320 on every
+          pull request. That job is new: its first green run is its evidence, and this page will cite the
+          run id when it exists.
         </p>
 
       </div>

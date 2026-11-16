@@ -583,7 +583,10 @@ private fun ChatReader(
                 // it is edge-to-edge by default and the IME arrives as an INSET the window no
                 // longer shrinks for. Without consuming it, the keyboard covered the field and the
                 // Send button on the 466 px dial.
-                Modifier.fillMaxSize().imePadding().padding(horizontal = if (compactChrome) 20.dp else 32.dp, vertical = if (compactChrome) 12.dp else 28.dp),
+                Modifier.fillMaxSize().imePadding().padding(
+                    horizontal = if (compactChrome) 20.dp else 32.dp,
+                    vertical = if (compactChrome) 12.dp else 28.dp,
+                ),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Text(stringResource(R.string.chat_prompt), modifier = Modifier.align(Alignment.CenterHorizontally))
@@ -1113,7 +1116,10 @@ private fun ChatReader(
                     if (emptyPromptShown) {
                         item {
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text(stringResource(R.string.chat_ask_anything), fontSize = if (compactChrome) 16.sp else 18.sp)
+                                Text(
+                                    stringResource(R.string.chat_ask_anything),
+                                    fontSize = if (compactChrome) 16.sp else 18.sp,
+                                )
                                 Text(
                                     if (providerState.selected ==
                                         null
@@ -1196,7 +1202,16 @@ private fun ChatReader(
                         .align(Alignment.BottomCenter)
                         .onSizeChanged {
                             footerHeight = it.height
-                        }.padding(bottom = if (idleLatest) 48.dp else if (compactChrome) 12.dp else 28.dp),
+                        }.padding(
+                            bottom =
+                                if (idleLatest) {
+                                    48.dp
+                                } else if (compactChrome) {
+                                    12.dp
+                                } else {
+                                    28.dp
+                                },
+                        ),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
