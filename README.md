@@ -177,7 +177,7 @@ Every number below came from a command run on this tree. Anything not measured i
 
 | Check | Result | Source |
 |---|---|---|
-| JVM unit tests | **283 / 283**, 44 suites, 0 failures | `app/build/test-results/testDebugUnitTest/*.xml` |
+| JVM unit tests | **286 / 286**, 45 suites, 0 failures | `app/build/test-results/testDebugUnitTest/*.xml` |
 | Android Lint | **0 errors, 0 warnings** | `app/build/reports/lint-results-debug.xml` |
 | ktlint | **0 violations** | `:app:ktlintCheck` |
 | Assemblies | `assembleDebug` + `assembleRelease` pass | Gradle output |
