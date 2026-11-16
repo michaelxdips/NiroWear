@@ -100,6 +100,10 @@ scripts/*
 # tell contributors to use; they contain no credentials or local paths.
 !scripts/disposable-instrumentation.ps1
 !scripts/test-clean-wear.py
+# test-clean-wear.py calls this helper to turn a literal runner log into JUnit XML. Measured: it is
+# stdlib-only (re, sys, xml.etree, pathlib), holds no paths and no credentials, and without it the
+# published gate runner fails on any clone. The rest of scripts/ stays local on purpose.
+!scripts/instrumentation-xml.py
 .private/
 build/
 .gradle/
