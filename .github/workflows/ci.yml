@@ -165,14 +165,14 @@ jobs:
           key: gradle-${{ runner.os }}-instrumented-${{ hashFiles('**/*.gradle.kts', 'gradle.properties', 'gradle/wrapper/gradle-wrapper.properties', 'gradle/gradle-daemon-jvm.properties') }}
           restore-keys: gradle-${{ runner.os }}-
 
-      - name: Install the Wear OS system image
+      - name: Install the emulator and the Wear OS system image
         run: |
           set -euo pipefail
           yes | sdkmanager --licenses > /dev/null 2>&1 || true
-          # compileSdk 37 is not published as a stable SDK package on the runner, and the jvm job
-          # proves Gradle installs whatever it needs once the licences are accepted. Only the
-          # emulator image is requested here.
-          sdkmanager "system-images;android-34;android-wear;x86_64"
+          # `avdmanager create` refuses to run without the emulator package ("emulator" package must be
+          # installed!), which is not on the runner image even though $ANDROID_HOME/emulator exists in
+          # some images. compileSdk 37 is left to Gradle: it is not a published SDK package here.
+          sdkmanager "emulator" "platform-tools" "system-images;android-34;android-wear;x86_64"
 
       # The AVD profile is patched instead of trusted: hw.lcd.circular=false and 384x384 are the
       # defaults, and geometry assertions (48 dp targets, round safe area) are written against

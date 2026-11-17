@@ -21,6 +21,13 @@ refusals, send failure, save-still-failing, and two provider-settings failures. 
 strings exist for each; rows written before the tokens still render their original sentence.
 `TRUNCATION_NOTE` was removed from `ProviderContract`.
 
+### Arabic-Indic digits no longer leak into an English sentence
+
+`getQuantityString` formats with the reader's locale, so an Arabic watch rendered "٢ more cells were
+dropped" inside an English sentence. The hidden-cell note formats its count with `Locale.ENGLISH`, and
+`RendererArPluralTest` now calls that helper — it used to call the platform formatter and could never
+see the UI. Verified on the physical watch: `OK (1 test)`.
+
 ### The empty state adapts to smaller dials
 
 A 384x384 `wm size` override cut the empty-state sentence mid-line: a 48 dp menu strip, 48 dp input
