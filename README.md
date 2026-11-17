@@ -78,8 +78,8 @@ It exists because a watch is a bad screen for a good answer. Every other approac
 
 ### Interface
 
-- **Fully localized.** 105 user-visible strings in English and Indonesian (`values/` + `values-in/`, the
-  same 105 keys in both files, none missing), on top of the renderer's own resource set.
+- **Fully localized.** 117 user-visible strings in English and Indonesian (`values/` + `values-in/`, the
+  same 117 keys in both files, none missing), on top of the renderer's own resource set.
 - **Accessibility that is tested, not asserted.** The link group node is actionable, the composer field carries its own label, credential labels are announced once, and the provider header grows instead of clipping at large font scales. TalkBack *audio* acceptance still needs a real watch — see [Limitations](#known-limitations).
 
 ## Install
