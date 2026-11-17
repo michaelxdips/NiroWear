@@ -2,6 +2,7 @@ package com.nirowear.settings
 
 import android.nfc.cardemulation.HostApduService
 import android.os.Bundle
+import android.os.SystemClock
 
 /**
  * Makes the watch look like an NDEF tag carrying the current pairing URL, so a phone tap opens the
@@ -24,7 +25,7 @@ class NfcPairingService : HostApduService() {
         commandApdu: ByteArray?,
         extras: Bundle?,
     ): ByteArray {
-        val url = NfcPairing.bridge.url() ?: return NdefTag.NOT_FOUND
+        val url = NfcPairing.bridge.url(SystemClock.elapsedRealtime()) ?: return NdefTag.NOT_FOUND
         if (commandApdu == null) return NdefTag.WRONG_LENGTH
         // Rebuilt only when the armed URL changes; the selected file has to survive between the
         // reader's SELECT and its READs, so a per-command responder would answer 6A82 forever.

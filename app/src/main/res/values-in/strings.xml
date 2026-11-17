@@ -35,7 +35,6 @@
     <string name="chat_hit_label">%1$s: %2$s</string>
 
     <!-- Provider settings and pairing. -->
-    <string name="provider_pairing_warning">Hanya Wi-Fi yang sama. Ponsel Anda memperingatkan bahwa sertifikat jam tangan tidak tepercaya — terima untuk memuat halaman. Terenkripsi dengan ECDH P-256 + AES-GCM, tetapi handshake tidak terautentikasi — pastikan URL di jam tangan cocok. Lebih baik masukkan manual di jaringan yang tidak tepercaya.</string>
     <string name="provider_add_compatible">Tambah kompatibel</string>
     <string name="provider_add_openai">Tambah OpenAI</string>
     <string name="provider_add_gemini">Tambah Gemini</string>

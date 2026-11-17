@@ -57,15 +57,19 @@ internal object NdefTag {
         val payload =
             byteArrayOf(URI_PREFIX_HTTPS.toByte()) +
                 (url.removePrefix("https://")).toByteArray(Charsets.US_ASCII)
-        // A short record holds at most 255 payload bytes; the container advertises 256 bytes of
-        // file capacity, so this is the tighter limit and the only one that can ever fire.
+        // A short record holds at most 255 payload bytes, and the message must also fit the file
+        // size the capability container advertises (MAX_NDEF_BYTES minus the two NLEN bytes);
+        // otherwise a reader stops at the advertised size and sees a truncated record.
         require(payload.size <= 255) { "NDEF payload does not fit a short record" }
-        return byteArrayOf(
-            0xD1.toByte(), // MB | ME | SR, TNF = 0x01
-            0x01, // type length
-            payload.size.toByte(),
-            RTD_URI.toByte(),
-        ) + payload
+        val record =
+            byteArrayOf(
+                0xD1.toByte(), // MB | ME | SR, TNF = 0x01
+                0x01, // type length
+                payload.size.toByte(),
+                RTD_URI.toByte(),
+            ) + payload
+        require(record.size <= MAX_NDEF_BYTES - 2) { "NDEF message does not fit the advertised file" }
+        return record
     }
 
     /** The 15-byte capability container a reader parses before it will read [ndefFile]. */
@@ -85,7 +89,9 @@ internal object NdefTag {
             (MAX_NDEF_BYTES shr 8).toByte(),
             (MAX_NDEF_BYTES and 0xFF).toByte(),
             0x00, // read access: free
-            0x00, // write access: free (the message itself is read-only in practice)
+            // Write access 0xFF = read-only. The file answers 6D00 to UPDATE BINARY, so advertising
+            // it as writable only invites a writer app to try and fail.
+            0xFF.toByte(),
         )
 
     /**
@@ -124,9 +130,19 @@ internal class NdefApduResponder(
 
     /** File identity comes from the last two data bytes, so SELECT by AID and by EF share this. */
     private fun select(apdu: ByteArray): ByteArray {
-        val length = apdu[4].toInt() and 0xFF
-        if (apdu.size < 5 + length) return NdefTag.WRONG_LENGTH
-        val data = apdu.copyOfRange(5, 5 + length)
+        // A case-1 SELECT (`00 A4 04 00`) has no Lc byte at all. Indexing apdu[4] behind a size<4
+        // guard threw ArrayIndexOutOfBoundsException out of the exported HCE service, which is an
+        // app kill any reader in range could trigger.
+        if (apdu.size < 5) return NdefTag.WRONG_LENGTH
+        var length = apdu[4].toInt() and 0xFF
+        var start = 5
+        // Lc 0x00 in a short APDU means "extended length follows": two more bytes carry it.
+        if (length == 0 && apdu.size >= 7) {
+            length = ((apdu[5].toInt() and 0xFF) shl 8) or (apdu[6].toInt() and 0xFF)
+            start = 7
+        }
+        if (length == 0 || apdu.size < start + length) return NdefTag.WRONG_LENGTH
+        val data = apdu.copyOfRange(start, start + length)
         // P1 0x04 = select by AID, P1 0x00 = select by file id. Anything else is not a SELECT a tag
         // answers, and pretending otherwise would hide a reader we do not actually support.
         if ((apdu[2].toInt() and 0xFF) == SELECT_BY_AID) {
@@ -171,24 +187,27 @@ internal class NdefApduResponder(
  * The service is manifest-declared, so the system can bind it at any time — including long after the
  * pairing screen closed. Arming is therefore time-boxed here as well as in the screen: an expired
  * session answers 6A82 to every reader, so a stale tap can never reopen a page that no longer exists.
+ *
+ * The caller supplies the clock reading, deliberately: the pairing server runs on
+ * `SystemClock.elapsedRealtime()` (monotonic) and comparing that against a wall clock would let a
+ * time sync open or close the tag at the wrong moment.
  */
-internal class NfcPairingBridge(
-    private val clock: () -> Long = System::currentTimeMillis,
-) {
+internal class NfcPairingBridge {
     @Volatile private var armed: Pair<String, Long>? = null
 
     fun arm(
         url: String,
+        nowMillis: Long,
         ttlMillis: Long = 120_000,
     ) {
-        armed = url to clock() + ttlMillis
+        armed = url to (nowMillis + ttlMillis)
     }
 
     fun disarm() {
         armed = null
     }
 
-    fun url(): String? = armed?.takeIf { clock() < it.second }?.first
+    fun url(nowMillis: Long): String? = armed?.takeIf { nowMillis < it.second }?.first
 }
 
 /** Process-wide bridge the HCE service reads; the pairing screen arms and disarms it. */
