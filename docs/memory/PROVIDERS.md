@@ -75,3 +75,14 @@ Adapters receive a `SecretValue` and must only use it to build an auth header or
 ## Testing an adapter
 
 Controlled tests use a local mock server and assert on the bytes actually sent — method, path, headers, body shape — plus the events produced for a given SSE script. Mock-server coverage is protocol proof; it is not proof that the real provider behaves identically. Say which one you have.
+## Live smoke (opt-in, never in CI)
+
+`LiveProviderSmokeTest` runs against a real endpoint only when `NIROWEAR_LIVE_BASE` and
+`NIROWEAR_LIVE_KEY` are exported in the environment; without them it is skipped by `Assume`, so CI and
+a plain `testDebugUnitTest` stay offline. The key never enters the repository, a command line, or a
+log line. Optional `NIROWEAR_LIVE_MODEL` pins the model; otherwise the first id containing `luna` is
+used.
+
+Measured 2026-11-17 against a compatible endpoint: **18 models discovered**, model `gpt-5.6-luna`,
+stream produced 4 characters ("pong") and terminated with `Completed`. Mock-server tests still prove
+the wire shapes; this proves the adapter reaches a real service, which no mock can.
