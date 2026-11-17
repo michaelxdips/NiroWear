@@ -524,7 +524,7 @@ class ReaderNavigationTest {
                                 "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n",
                         ),
                     )
-                    tap("Send")
+                    assertTrue("Send is not clickable through semantics", clickNode("Send"))
                     await("Wear IME response verified.")
                     conversation =
                         app.database
@@ -825,7 +825,7 @@ class ReaderNavigationTest {
                             },
                         ),
                     )
-                    tap("Send")
+                    assertTrue("Send is not clickable through semantics", clickNode("Send"))
                     await("Stop")
                     await("History stream paragraph 25. Preserve detached reading while opening History.")
                     conversation =
@@ -1070,7 +1070,7 @@ class ReaderNavigationTest {
                                 "data: {\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n",
                         ),
                     )
-                    tap("Send")
+                    assertTrue("Send is not clickable through semantics", clickNode("Send"))
                     await("Reader follow-up answer.")
                     val request = server.takeRequest(5, TimeUnit.SECONDS)!!
                     assertTrue(request.body.readUtf8().contains("Reader A prompt"))
@@ -1350,7 +1350,7 @@ class ReaderNavigationTest {
                             .setBody(frames)
                             .throttleBody(256, 1, TimeUnit.SECONDS),
                     )
-                    tap("Send")
+                    assertTrue("Send is not clickable through semantics", clickNode("Send"))
                     await("Stop")
                     SystemClock.sleep(6000)
                     // Swipe until the control appears rather than assuming three swipes reach a
