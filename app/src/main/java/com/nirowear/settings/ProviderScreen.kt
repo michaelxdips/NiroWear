@@ -324,11 +324,15 @@ fun ProviderScreen(onBack: () -> Unit) {
             started
                 .onSuccess { created ->
                     pairing = created
-                    // Same capability URL, now also an emulated NDEF tag for the session's life.
-                    NfcPairing.bridge.arm(created.url)
+                    // The same capability URL, now also an emulated NDEF tag for the session's life.
+                    NfcPairing.bridge.arm(created.url, SystemClock.elapsedRealtime())
+                    // No long explanation here: the dial has 466 px and the QR needs them. The
+                    // certificate warning, the ECDH note and "same Wi-Fi" all live on the page the
+                    // phone loads, where they are read at the moment they matter. Only the
+                    // short, actionable warning stays on the watch.
                     pairingNote =
                         if (isPrivateAddress(host)) {
-                            resources.getString(R.string.provider_pairing_warning)
+                            ""
                         } else {
                             resources.getString(R.string.provider_not_home_network)
                         }
@@ -483,8 +487,8 @@ fun ProviderScreen(onBack: () -> Unit) {
                             val side = QrCode.sidePx(qr, minOf(size.width, size.height).toInt())
                             if (side <= 0) return@Canvas
                             val module = side.toFloat() / qr.size
-                            val left = (size.width - side) / 2f
-                            val top = (size.height - side) / 2f
+                            val left = ((size.width.toInt() - side) / 2).toFloat()
+                            val top = ((size.height.toInt() - side) / 2).toFloat()
                             drawRect(Color.White, Offset(left, top), Size(side.toFloat(), side.toFloat()))
                             for (y in 0 until qr.size) {
                                 for (x in 0 until qr.size) {

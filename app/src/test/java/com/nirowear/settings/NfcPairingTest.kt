@@ -4,6 +4,7 @@ import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -122,24 +123,57 @@ class NfcPairingTest {
     }
 
     @Test
+    fun selectWithoutALengthByteIsRejectedInsteadOfCrashing() {
+        val responder = NdefApduResponder(NdefTag.message(url))
+        // `00 A4 04 00` (case 1) has no Lc at all. This used to index apdu[4] and throw out of the
+        // exported HCE service, which is an app kill any reader in range could trigger.
+        assertArrayEquals(
+            "case-1 SELECT",
+            NdefTag.WRONG_LENGTH,
+            responder.respond(byteArrayOf(0x00, 0xA4.toByte(), 0x04, 0x00)),
+        )
+        assertArrayEquals(
+            "Lc 0 without an extended length",
+            NdefTag.WRONG_LENGTH,
+            responder.respond(byteArrayOf(0x00, 0xA4.toByte(), 0x04, 0x00, 0x00)),
+        )
+    }
+
+    @Test
+    fun extendedLengthSelectIsUnderstood() {
+        val responder = NdefApduResponder(NdefTag.message(url))
+        val aid = NdefTag.NDEF_AID
+        val extended =
+            byteArrayOf(0x00, 0xA4.toByte(), 0x04, 0x00, 0x00, 0x00, aid.size.toByte()) + aid + byteArrayOf(0x00)
+        assertArrayEquals(NdefTag.OK, responder.respond(extended))
+    }
+
+    @Test
+    fun anOversizeMessageIsRefusedRatherThanTruncatedByTheReader() {
+        val huge = "https://" + "a".repeat(NdefTag.MAX_NDEF_BYTES)
+        val failure = runCatching { NdefTag.message(huge) }.exceptionOrNull()
+        assertTrue("expected a refusal, got $failure", failure is IllegalArgumentException)
+    }
+
+    @Test
     fun sessionGateExpiresAtTheDeadline() {
+        val bridge = NfcPairingBridge()
         var now = 1_000L
-        val bridge = NfcPairingBridge { now }
-        bridge.arm(url, 120_000)
-        assertEquals(url, bridge.url())
+        bridge.arm(url, now, 120_000)
+        assertEquals(url, bridge.url(now))
 
         now += 119_999
-        assertNotNull("still armed one millisecond before the deadline", bridge.url())
+        assertNotNull("still armed one millisecond before the deadline", bridge.url(now))
 
         now += 1
-        assertNull("a stale tap must not reopen a dead session", bridge.url())
+        assertNull("a stale tap must not reopen a dead session", bridge.url(now))
     }
 
     @Test
     fun disarmIsImmediate() {
-        val bridge = NfcPairingBridge { 5_000L }
-        bridge.arm(url, 120_000)
+        val bridge = NfcPairingBridge()
+        bridge.arm(url, 5_000L, 120_000)
         bridge.disarm()
-        assertNull(bridge.url())
+        assertNull(bridge.url(5_000L))
     }
 }

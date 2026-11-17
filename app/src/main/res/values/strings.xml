@@ -35,7 +35,6 @@
     <string name="chat_hit_label">%1$s: %2$s</string>
 
     <!-- Provider settings and pairing. -->
-    <string name="provider_pairing_warning">Same Wi-Fi only. Your phone warns that the watch\'s certificate is not trusted — accept it to load the page. Encrypted with ECDH P-256 + AES-GCM, but the handshake is unauthenticated — confirm the URL on the watch matches. Prefer manual entry on untrusted networks.</string>
     <string name="provider_add_compatible">Add compatible</string>
     <string name="provider_add_openai">Add OpenAI</string>
     <string name="provider_add_gemini">Add Gemini</string>
