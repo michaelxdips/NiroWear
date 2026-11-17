@@ -3,6 +3,46 @@
 Notable changes to NiroWear. Versions follow the published APK releases at
 [NiroWear releases](https://github.com/michaelxdips/NiroWear/releases).
 
+## Unreleased
+
+### Tests actually run in CI
+
+`app/src/test` and `app/src/androidTest` were ignored by the repository's allowlist until 2026-11-16,
+so `testDebugUnitTest` was NO-SOURCE on every CI run: a green badge proved only that the app compiled.
+Both suites are published now (97 files), and a new `instrumented` job boots a Wear OS 5 (API 34) AVD
+patched to 466x466 @ 320 dpi on every pull request. The `jvm` job still refuses a run that produced no
+result XML, so this cannot silently regress.
+
+### Every stored failure resolves at display time
+
+Eleven hardcoded English sentences became `FailureToken` values resolved by the same resolver as
+`ProviderError`: three history-read variants, encrypted-key cleanup, the truncation note, two turn
+refusals, send failure, save-still-failing, and two provider-settings failures. English and Indonesian
+strings exist for each; rows written before the tokens still render their original sentence.
+`TRUNCATION_NOTE` was removed from `ProviderContract`.
+
+### Arabic-Indic digits no longer leak into an English sentence
+
+`getQuantityString` formats with the reader's locale, so an Arabic watch rendered "٢ more cells were
+dropped" inside an English sentence. The hidden-cell note formats its count with `Locale.ENGLISH`, and
+`RendererArPluralTest` now calls that helper — it used to call the platform formatter and could never
+see the UI. Verified on the physical watch: `OK (1 test)`.
+
+### The empty state adapts to smaller dials
+
+A 384x384 `wm size` override cut the empty-state sentence mid-line: a 48 dp menu strip, 48 dp input
+targets and their padding left 62 dp for the reader. Chrome now shrinks below 220 dp of screen height,
+touch targets stay 48 dp, and the sentence is "Add provider from menu." because the icons already say
+keyboard and voice. Verified with screenshots at 384x384 and node bounds at 466x466.
+
+### Physical watch, first run
+
+v0.2.1 on a Xiaomi Watch 2 (API 34, 466x466, armeabi-v7a): versionCode 14, signer verified, cold start
+**median 723 ms** over five runs (range 720–1,105 ms; the first observed launch was 1,174 ms). Per-class instrumented run: 25/43 classes passed first pass; eleven failures were
+`adb: device offline`, not results. Filed from that run: #47 rotary crown does not move the reader,
+#48 table rows absent from the semantics tree on API 34, #49 Arabic-Indic digits inside an English
+plural sentence, #50 two classes that do not finish on hardware.
+
 ## 0.2.1 — 2026-11-15
 
 ### Dependencies

@@ -3,6 +3,7 @@ package com.nirowear.chat
 import android.content.res.Resources
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalResources
+import com.nirowear.FailureToken
 import com.nirowear.R
 import com.nirowear.provider.ProviderError
 
@@ -32,12 +33,29 @@ internal fun ProviderError.labelRes(): Int =
         ProviderError.CREDENTIAL_REENTRY -> R.string.provider_error_credential_reentry
     }
 
+/** Non-provider tokens ([FailureToken]); resolved by the same display-time rule as a provider cause. */
+private val localLabels =
+    mapOf(
+        FailureToken.HISTORY_UNREADABLE to R.string.failure_history_unreadable,
+        FailureToken.HISTORY_RETRYING to R.string.failure_history_retrying,
+        FailureToken.HISTORY_UNAVAILABLE to R.string.failure_history_unavailable,
+        FailureToken.KEY_CLEANUP_PENDING to R.string.failure_key_cleanup_pending,
+        FailureToken.TRUNCATED to R.string.failure_truncated,
+        FailureToken.MESSAGE_GONE to R.string.failure_message_gone,
+        FailureToken.NOTHING_TO_RETRY to R.string.failure_nothing_to_retry,
+        FailureToken.SEND_FAILED to R.string.failure_send_failed,
+        FailureToken.SAVE_STILL_FAILING to R.string.failure_save_still_failing,
+        FailureToken.SETTINGS_UNREADABLE to R.string.failure_settings_unreadable,
+        FailureToken.SETTINGS_UNAVAILABLE to R.string.failure_settings_unavailable,
+    )
+
 /** Renders a stored failure value: a known token becomes localization, anything else is shown as-is. */
 internal fun errorText(
     resources: Resources,
     stored: String?,
 ): String? {
     if (stored == null) return null
+    localLabels[stored]?.let { return resources.getString(it) }
     val cause = ProviderError.parse(stored) ?: return stored
     val text = resources.getString(cause.labelRes())
     return if (ProviderError.isPartial(stored)) {

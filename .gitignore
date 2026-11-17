@@ -39,13 +39,17 @@
 !.githooks/
 !.githooks/pre-push
 
-# 3. Application source (main/debug/release only; never test sets).
+# 3. Application source (main/debug/release plus the test sets that now gate CI).
 !app/build.gradle.kts
 !app/proguard-rules.pro
 !app/schemas/**
 !app/src/main/**
 !app/src/debug/**
 !app/src/release/**
+# Published on 2026-11-16: with these ignored, every CI run executed zero tests and a green badge
+# proved only that the app compiled. Both suites are part of the gate now.
+!app/src/test/**
+!app/src/androidTest/**
 
 # 4. Published documentation.
 !README.md
@@ -78,14 +82,13 @@
 !fixtures/RENDER_TORTURE_FIXTURE.md
 
 # 5. Hard exclusions that outrank every re-include above.
-#    Test sources, prompts, handoffs, evidence and private material are never published.
+#    Prompts, handoffs, evidence and private material are never published. Test sources USED to be
+#    listed here; they are published now (section 3) because CI cannot prove anything it never runs.
 #
 #    The allowlist used to carry one exclusion line per historical session log (MEGA_*, HANDOFF*,
 #    TEST_MATRIX, BETA3_*, ...). Those files were deleted on 2026-11-08 because nothing referenced
 #    them; the blanket `*` above already excludes anything that reappears, so only the living
 #    documents still on disk are named here.
-app/src/test/
-app/src/androidTest/
 fixtures/.gitignore
 docs/memory/DECISIONS.md
 docs/memory/MATH_LICENSE_REVIEW.md

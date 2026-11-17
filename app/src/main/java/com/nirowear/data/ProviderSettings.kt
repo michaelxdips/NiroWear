@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.nirowear.FailureToken
 import com.nirowear.provider.ProviderError
 import com.nirowear.provider.ProviderProfile
 import com.nirowear.provider.ProviderType
@@ -76,14 +77,14 @@ class ProviderSettings(
                     _: Exception,
                 ) {
                     ProviderSettingsState(
-                        error = "Provider settings unreadable. History and saved keys kept; setup changes blocked.",
+                        error = FailureToken.SETTINGS_UNREADABLE,
                     )
                 }
             }.catch { error ->
                 if (error is CancellationException) throw error
                 emit(
                     ProviderSettingsState(
-                        error = "Provider settings unavailable. History and saved keys kept; setup changes blocked.",
+                        error = FailureToken.SETTINGS_UNAVAILABLE,
                     ),
                 )
             }

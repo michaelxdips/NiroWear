@@ -15,7 +15,7 @@
     <string name="chat_voice_unavailable">Voice recognition unavailable. Use keyboard.</string>
     <string name="chat_voice_blocked">Voice recognition blocked. Use keyboard.</string>
     <string name="chat_ask_anything">Ask anything</string>
-    <string name="chat_empty_add_provider">Add provider from menu, then use keyboard or voice.</string>
+    <string name="chat_empty_add_provider">Add provider from menu.</string>
     <string name="chat_empty_start">Use keyboard or voice to start.</string>
     <string name="chat_copy_unsaved">Copy unsaved answer</string>
     <string name="chat_retry_saving">Retry saving</string>
@@ -117,4 +117,21 @@
     <string name="provider_error_partial">%1$s Partial answer kept.</string>
     <!-- Unclassified Validate/Save failure: no ProviderError reached the screen. -->
     <string name="provider_error_check_fields">Check URL, model and API key.</string>
+
+    <!--
+      Failures that are not a provider cause (FailureToken). Same rule: the stored value is a token and
+      the sentence is resolved when the row is DISPLAYED. Keep each English value byte-identical to the
+      literal it replaced.
+    -->
+    <string name="failure_history_unreadable">History cannot be read. No messages deleted.</string>
+    <string name="failure_history_retrying">History cannot be read. Retrying.</string>
+    <string name="failure_history_unavailable">History unavailable. No messages changed.</string>
+    <string name="failure_key_cleanup_pending">Encrypted-key cleanup pending. History kept; reopen app to retry.</string>
+    <string name="failure_truncated">Answer ended early and may be incomplete.</string>
+    <string name="failure_message_gone">That message is no longer in this chat. Send it again.</string>
+    <string name="failure_nothing_to_retry">Nothing to retry in this chat.</string>
+    <string name="failure_send_failed">Cannot send. Check provider setup or local storage.</string>
+    <string name="failure_save_still_failing">Still cannot save. Keep app open and copy unsaved answer.</string>
+    <string name="failure_settings_unreadable">Provider settings unreadable. History and saved keys kept; setup changes blocked.</string>
+    <string name="failure_settings_unavailable">Provider settings unavailable. History and saved keys kept; setup changes blocked.</string>
 </resources>

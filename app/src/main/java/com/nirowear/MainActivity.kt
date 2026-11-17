@@ -41,6 +41,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -74,6 +76,7 @@ import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -311,6 +314,10 @@ private fun ChatReader(
     // a LocalContext read, so a language switch would keep rendering the old language.
     val errorResources = LocalResources.current
     val localeTag = LocalConfiguration.current.locales[0].toLanguageTag()
+    // A 384 px dial is 192 dp: the 48 dp menu strip, 48 dp input targets and their padding left only
+    // 62 dp for the reader, so the empty-state sentence was cut mid-line (measured [48,170][336,220]
+    // on a 384x384 wm override). Chrome shrinks on short screens; touch targets stay 48 dp.
+    val compactChrome = LocalConfiguration.current.screenHeightDp < 220
     var lastLocaleTag by remember { mutableStateOf<String?>(null) }
     // Presentation includes status/error/provenance, not just Markdown. All fields invalidate it.
     LaunchedEffect(storedMessages, chatState.conversationId, localeTag) {
@@ -574,17 +581,57 @@ private fun ChatReader(
                 },
             )
         } else if (editing) {
+            val composing = editedId != null
+            val editorText = if (composing) editText else draft
+
+            // The button and the IME's own Send key share this. On the watch the slow path was: type,
+            // wait for the keyboard to go away, find the app's Send, tap it. `ImeAction.Send` submits
+            // from the keyboard itself, so the field never has to be abandoned first.
+            fun submitEditor() {
+                if (editorText.isBlank()) return
+                val editTarget = editedId
+                val started =
+                    if (editTarget != null) {
+                        anchors.remove(chatState.conversationId)
+                        chat.edit(editTarget, editorText)
+                    } else {
+                        chat.send(editorText)
+                    }
+                // Only clear when the ViewModel ACCEPTED the turn. Clearing
+                // unconditionally (before it could report refusal) threw away the
+                // user's typed question whenever a send was refused — a failed init,
+                // an unsaved answer — and closed the editor over it.
+                if (started) {
+                    editing = false
+                    renderLab = false
+                    sectionMenu = false
+                    following = true
+                    followNewConversation = chatState.conversationId == null
+                    // The text now lives in the conversation. Clearing the slot that was
+                    // actually used leaves the OTHER one untouched, so an edit never eats
+                    // the user's unsent prompt and a send never eats the other way round.
+                    if (editTarget != null) {
+                        lastEditAttempt = editTarget to editorText
+                        editText = ""
+                    } else {
+                        draft = ""
+                    }
+                    notice = ""
+                    editedId = null
+                }
+            }
             Column(
                 // imePadding, not just adjustResize: this app targets SDK 37, so on Android 15+
                 // it is edge-to-edge by default and the IME arrives as an INSET the window no
                 // longer shrinks for. Without consuming it, the keyboard covered the field and the
                 // Send button on the 466 px dial.
-                Modifier.fillMaxSize().imePadding().padding(horizontal = 32.dp, vertical = 28.dp),
+                Modifier.fillMaxSize().imePadding().padding(
+                    horizontal = if (compactChrome) 20.dp else 32.dp,
+                    vertical = if (compactChrome) 12.dp else 28.dp,
+                ),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Text(stringResource(R.string.chat_prompt), modifier = Modifier.align(Alignment.CenterHorizontally))
-                val composing = editedId != null
-                val editorText = if (composing) editText else draft
                 // The `semantics` lambda is not a composable scope.
                 val promptEditorLabel = stringResource(R.string.chat_prompt_editor)
                 BasicTextField(
@@ -605,45 +652,12 @@ private fun ChatReader(
                     cursorBrush =
                         androidx.compose.ui.graphics
                             .SolidColor(Color.White),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                    keyboardActions = KeyboardActions(onSend = { submitEditor() }),
                 )
                 Button(
-                    onClick = {
-                        if (editorText.isNotBlank()) {
-                            val editTarget = editedId
-                            val started =
-                                if (editTarget != null) {
-                                    anchors.remove(chatState.conversationId)
-                                    chat.edit(editTarget, editorText)
-                                } else {
-                                    chat.send(editorText)
-                                }
-                            // Only clear when the ViewModel ACCEPTED the turn. Clearing
-                            // unconditionally (before it could report refusal) threw away the
-                            // user's typed question whenever a send was refused — a failed init,
-                            // an unsaved answer — and closed the editor over it.
-                            if (started) {
-                                editing = false
-                                renderLab = false
-                                sectionMenu = false
-                                following = true
-                                followNewConversation = chatState.conversationId == null
-                                // The text now lives in the conversation. Clearing the slot that was
-                                // actually used leaves the OTHER one untouched, so an edit never eats
-                                // the user's unsent prompt and a send never eats the other way round.
-                                if (editTarget != null) {
-                                    lastEditAttempt = editTarget to editorText
-                                    editText = ""
-                                } else {
-                                    draft = ""
-                                }
-                                notice = ""
-                                editedId = null
-                            }
-                        }
-                    },
-                    enabled =
-                        (if (editedId != null) editText else draft).isNotBlank() &&
-                            !chatState.generating && !chatState.unsaved,
+                    onClick = { submitEditor() },
+                    enabled = editorText.isNotBlank() && !chatState.generating && !chatState.unsaved,
                     modifier = Modifier.align(Alignment.CenterHorizontally),
                 ) {
                     Text(
@@ -1109,7 +1123,10 @@ private fun ChatReader(
                     if (emptyPromptShown) {
                         item {
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text(stringResource(R.string.chat_ask_anything), fontSize = 18.sp)
+                                Text(
+                                    stringResource(R.string.chat_ask_anything),
+                                    fontSize = if (compactChrome) 16.sp else 18.sp,
+                                )
                                 Text(
                                     if (providerState.selected ==
                                         null
@@ -1118,8 +1135,8 @@ private fun ChatReader(
                                     } else {
                                         stringResource(R.string.chat_empty_start)
                                     },
-                                    fontSize = 14.sp,
-                                    lineHeight = 20.sp,
+                                    fontSize = if (compactChrome) 13.sp else 14.sp,
+                                    lineHeight = if (compactChrome) 17.sp else 20.sp,
                                     color = Color(0xFFB8BDC6),
                                 )
                             }
@@ -1192,7 +1209,16 @@ private fun ChatReader(
                         .align(Alignment.BottomCenter)
                         .onSizeChanged {
                             footerHeight = it.height
-                        }.padding(bottom = if (idleLatest) 48.dp else 28.dp),
+                        }.padding(
+                            bottom =
+                                if (idleLatest) {
+                                    48.dp
+                                } else if (compactChrome) {
+                                    12.dp
+                                } else {
+                                    28.dp
+                                },
+                        ),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {

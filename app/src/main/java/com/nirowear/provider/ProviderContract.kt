@@ -217,17 +217,6 @@ sealed interface StreamEvent {
     data object Truncated : StreamEvent
 }
 
-/**
- * Shown under an answer that ended before it finished.
- *
- * Deliberately CAUSE-NEUTRAL. The first wording said "reached the model's output limit", which was
- * untrue for Gemini's CONTINUATION: that finishReason returns a `continuationToken` to resume the
- * generation, and this client never reads it, so the answer is genuinely incomplete but was NOT cut at
- * a length limit. A wrong cause is worse than a general one — the reader only needs to know the answer
- * is not the whole answer.
- */
-const val TRUNCATION_NOTE = "Answer ended early and may be incomplete."
-
 sealed interface ModelDiscoveryResult {
     data class Models(
         val ids: List<String>,

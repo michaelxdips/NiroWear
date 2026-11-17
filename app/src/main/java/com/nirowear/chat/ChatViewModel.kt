@@ -3,6 +3,7 @@ package com.nirowear.chat
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.nirowear.FailureToken
 import com.nirowear.NiroApplication
 import com.nirowear.data.Conversation
 import com.nirowear.data.StoredMessage
@@ -17,7 +18,6 @@ import com.nirowear.provider.ProviderError
 import com.nirowear.provider.ProviderType
 import com.nirowear.provider.SafeProviderException
 import com.nirowear.provider.StreamEvent
-import com.nirowear.provider.TRUNCATION_NOTE
 import com.nirowear.security.CredentialUnavailable
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -115,10 +115,10 @@ class ChatViewModel(
                     // on a watch when the database is genuinely broken. The error stays on screen,
                     // and reopening the app starts a fresh subscription.
                     mutableState.value =
-                        mutableState.value.copy(error = "History cannot be read. No messages deleted.")
+                        mutableState.value.copy(error = FailureToken.HISTORY_UNREADABLE)
                     false
                 } else {
-                    mutableState.value = mutableState.value.copy(error = "History cannot be read. Retrying.")
+                    mutableState.value = mutableState.value.copy(error = FailureToken.HISTORY_RETRYING)
                     delay((1000L shl attempt.coerceAtMost(2L).toInt()).coerceAtMost(4000L))
                     true
                 }
@@ -148,7 +148,7 @@ class ChatViewModel(
                 } catch (_: Exception) {
                     mutableState.value =
                         mutableState.value.copy(
-                            error = "Encrypted-key cleanup pending. History kept; reopen app to retry.",
+                            error = FailureToken.KEY_CLEANUP_PENDING,
                         )
                 }
                 dao.recoverInterrupted()
@@ -159,7 +159,7 @@ class ChatViewModel(
                 ready.complete(Unit)
             } catch (_: Exception) {
                 initFailed = true
-                mutableState.value = mutableState.value.copy(error = "History unavailable. No messages changed.")
+                mutableState.value = mutableState.value.copy(error = FailureToken.HISTORY_UNAVAILABLE)
                 ready.completeExceptionally(IllegalStateException("History unavailable"))
             }
         }
@@ -195,11 +195,11 @@ class ChatViewModel(
                         if (error is CancellationException) throw error
                         if (attempt >= MAX_HISTORY_RETRIES) {
                             mutableState.value =
-                                mutableState.value.copy(error = "History cannot be read. No messages deleted.")
+                                mutableState.value.copy(error = FailureToken.HISTORY_UNREADABLE)
                             false
                         } else {
                             mutableState.value =
-                                mutableState.value.copy(error = "History cannot be read. Retrying.")
+                                mutableState.value.copy(error = FailureToken.HISTORY_RETRYING)
                             delay((1000L shl attempt.coerceAtMost(2L).toInt()).coerceAtMost(4000L))
                             true
                         }
@@ -208,7 +208,7 @@ class ChatViewModel(
                     throw cancelled
                 } catch (_: Exception) {
                     mutableState.value =
-                        mutableState.value.copy(error = "History cannot be read. No messages deleted.")
+                        mutableState.value.copy(error = FailureToken.HISTORY_UNREADABLE)
                 }
             }
     }
@@ -240,7 +240,7 @@ class ChatViewModel(
         // saw a provider-setup error over a "History unavailable. No messages changed." state — and
         // a conversation row had in fact been written.
         if (initFailed || !ready.isCompleted) {
-            mutableState.value = mutableState.value.copy(error = "History unavailable. No messages changed.")
+            mutableState.value = mutableState.value.copy(error = FailureToken.HISTORY_UNAVAILABLE)
             return false
         }
         liveAnswer.value = null
@@ -315,7 +315,7 @@ class ChatViewModel(
                             // conversation the user never touched. The reason still reaches the UI
                             // through chatState.error.
                             nothingSent = true
-                            throw TurnRefused("That message is no longer in this chat. Send it again.")
+                            throw TurnRefused(FailureToken.MESSAGE_GONE)
                         }
                         val renamesChat = rows.firstOrNull { it.role == "USER" }?.id == editId
                         dao.edit(conversationId, editId, requireNotNull(editedText))
@@ -335,7 +335,7 @@ class ChatViewModel(
                         // refusal records no row either (`wrote` stays false).
                         val user =
                             dao.snapshot(conversationId).lastOrNull { it.role == "USER" }
-                                ?: throw TurnRefused("Nothing to retry in this chat.")
+                                ?: throw TurnRefused(FailureToken.NOTHING_TO_RETRY)
                         dao.truncate(conversationId, user.id)
                         wrote = true
                     }
@@ -459,7 +459,7 @@ class ChatViewModel(
                                     // no longer silent.
                                     if (failure == null) {
                                         terminal = "SUCCESS"
-                                        failure = TRUNCATION_NOTE
+                                        failure = FailureToken.TRUNCATED
                                     }
                                 }
                             }
@@ -486,7 +486,7 @@ class ChatViewModel(
                 } catch (error: SafeProviderException) {
                     failure = error.error.code(hasText = text.isNotEmpty())
                 } catch (_: Exception) {
-                    failure = "Cannot send. Check provider setup or local storage."
+                    failure = FailureToken.SEND_FAILED
                 } finally {
                     val streamJob = currentCoroutineContext()[Job]!!
                     withContext(NonCancellable) {
@@ -634,7 +634,7 @@ class ChatViewModel(
                     throw cancelled
                 } catch (_: Exception) {
                     mutableState.value =
-                        mutableState.value.copy(error = "Still cannot save. Keep app open and copy unsaved answer.")
+                        mutableState.value.copy(error = FailureToken.SAVE_STILL_FAILING)
                 } finally {
                     mutableState.value = mutableState.value.copy(generating = false)
                 }

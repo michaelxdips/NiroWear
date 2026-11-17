@@ -183,14 +183,19 @@ Every number below came from a command run on this tree. Anything not measured i
 | Assemblies | `assembleDebug` + `assembleRelease` pass | Gradle output |
 | Instrumented suite (Wear OS 37 AVD, 466×466) | **71 tests, 2 failing, 0 errors** | `app/build/outputs/androidTest-results/connected/debug/*.xml` |
 
-The two remaining failures, measured on the last full run (2026-11-08):
+The two remaining failures, read from the result XML of the last recorded AVD run (2026-11-09):
 
 | Test | Why it fails there |
 |---|---|
 | `PairingUiTest#keyArrivesFromPhoneWithoutTypingOnWatch` | Needs a real LAN and a phone browser to click through a self-signed certificate warning. |
-| `RendererTapAndPanTest#wideCodeHasAccessibleHorizontalScrollInLtrAndRtl` | Fails in suite order and **passes in isolation** on the same build; the pan assertion depends on state a preceding test leaves behind. |
+| `RotaryInputTest#rotarySourceMovesReaderAndLeavesTouchNavigationAvailable` | The AVD has no rotary source. `RendererTapAndPanTest` passed in that run; its order-dependence was observed earlier and is not claimed as a current failure. |
 
-`RotaryInputTest` both passes and fails across runs on this AVD. The emulator has no bezel or rotary source, so its result is not evidence either way; the real check is #27.
+**Physical watch, 2026-11-16.** The published `v0.2.1` was installed on a Xiaomi Watch 2 (`axolotlaxie`): Android 14 / API 34, 466 × 466 @ 320 dpi, `armeabi-v7a` only, `versionCode 14`, signer `0dc50f…86543e`, cold start **median 723 ms** over five runs (720–1,105 ms; first observed launch 1,174 ms). The instrumented suite was then run per class through `am instrument` with `pm clear` between classes:
+
+- **25 of 43 classes passed on the first pass.** Eleven of the eighteen failures were `adb: device offline`, not test results: this watch drops the ADB transport when it sleeps, and a wake keepalive is required.
+- Real defects found on hardware: the rotary crown does not move the reader at all (#47), table rows are absent from the semantics tree on API 34 (#48), and Arabic-Indic digits appear inside an English plural sentence (#49).
+- `ReaderNavigationTest` exceeded a 600 s timeout and `ProviderSetupUiTest` produced no output across three attempts (#50).
+- After `pm clear`, 11 of 17 rerun classes passed; the remaining three are #47, #48 and #49.
 
 Fixed and now passing, after failing on the previous cut: `ReaderNavigationTest#editAndRetryInvalidateRemovedContinuationThroughRealTouch` (a trailing `Retry response` row could sit below the fold), `StoppedStatusUiTest#persistedStatusAndRetryRemainReachableAtBothScales`, and five new `ErrorTextTest` methods that prove a stored failure renders in the reader's language.
 
@@ -214,9 +219,12 @@ Stated plainly, because a README that hides these is useless.
 - **TalkBack audio is unaccepted.** Semantics and target geometry are tested and four measured dead stops are fixed, but nobody has listened to a real watch.
 - **Voice transcription quality is the platform's.** The intent launch/return path is tested; recognition accuracy is not ours to claim.
 - **Link taps** open through the system handler; destination completion on a real paired device is unverified.
-- **Some failure text is still English-only.** UI chrome and every `ProviderError` cause are localized (a stored failure is a token resolved at display time, so an English-written row reads in Indonesian after a language switch). Storage-level messages ("History cannot be read…") and the truncation note are not localized.
-- **The connected suite is a local gate, not a CI gate.** CI runs JVM tests, lint, ktlint and both assembles, because no emulator is available there. Run `connectedDebugAndroidTest` before a release; nothing will remind you.
-- **CI cannot compile the instrumented tests**, because `app/src/androidTest` is gitignored by policy. That is how several of them rotted for months before the first full run — tracked as issue #30.
+- **Model switching is per conversation; the crown is not proven.** The rotary crown does not move the reader on the physical watch today (#47).
+- **Every stored failure is a token now.** The eleven sentences that were hardcoded English — history read failures, key cleanup, truncation, refusals, send/save failures and provider-settings failures — resolve at display time in English and Indonesian. Rows written before the tokens keep their original sentence, by design.
+- **Test sources are published.** `app/src/test` and `app/src/androidTest` were ignored by the allowlist until 2026-11-16, which meant every CI run executed **zero** tests while reporting success. Both suites are in git now and the `jvm` job's result check refuses a run that produced no result XML.
+- **The connected suite has a CI job, new and still settling.** It boots a Wear OS 5 (API 34) AVD patched to 466 × 466 @ 320 on every pull request. Until its first green run is linked here, treat the local hardware numbers above as the evidence and the job as in progress.
+- **Hardware-only defects are filed, not hidden:** #47 rotary, #48 table semantics on API 34, #50 two classes that do not finish on hardware. #49 (Arabic-Indic digits inside an English sentence) is fixed and verified on the watch: the hidden-cell note formats its count with `Locale.ENGLISH`, and `RendererArPluralTest` now asserts that helper instead of the platform formatter.
+- **A reported Send-tap layout shift is not reproduced yet (#52).** With the composer open and the IME shown, the measured bounds are `Prompter [177,56][289,94]`, editor `[80,126][386,274]`, Send `[197,340][270,376]` on a 466 px screen — no double inset at that moment. A real provider key (or a debug fixture) is needed to admit a turn and compare the list anchor before and after the tap.
 - **Math limits.** Rendering is cached in memory, so a formula does not flash its raw LaTeX when it scrolls back. A formula wider than the bitmap bound is typeset once at a smaller size — never below half — before falling back to readable source text. File-inclusion macros, macro definitions, unbalanced braces and oversized `\rule` dimensions are refused outright.
 - **Renderer limits, still true.** A fence opened inside a quote can be closed by a `> ``` ` line inside its own sample. A table row wider than its header has extra cells dropped by the Markdown parser; the count is announced, but only for the block shapes the overflow scan has tests for.
 
@@ -226,6 +234,11 @@ Remaining gaps are filed rather than described:
 
 - **#27** Physical watch acceptance: battery, thermals, rotary, real keyboard, TalkBack audio
 - **#28** Pairing: verify the self-signed certificate click-through on a real phone
+- **#47** Rotary crown does not move the reader on the physical watch
+- **#48** Table rows are absent from the semantics tree on API 34 hardware
+- **#49** Arabic digits appear inside the English plural fallback sentence
+- **#50** Two instrumented classes do not complete on hardware
+- **#51** Pairing UX: tap-to-pair with NFC HCE (QR cannot be verified on this machine)
 - **#30** CI never compiles the instrumented tests, so they rot invisibly
 
 
