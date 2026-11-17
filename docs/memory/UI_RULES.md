@@ -104,3 +104,22 @@ provisionally approved by user; streaming/scaled layouts still require acceptanc
 Start around readable smartwatch sizes and tune visually. Avoid tiny text just to reduce scrolling.
 
 Provide Small / Medium / Large later.
+
+## 2026-11-17 — the Wear IME is full screen; the composer rule
+
+Measured on the physical Xiaomi Watch 2 (API 34, 466x466 @320): opening the composer raises Gboard
+as a `466x466` window with `adjust=pan`. The app window also stays `466x466`, so `imePadding()`
+cannot expose the editor — the keyboard overlays it completely (audit artifacts `p6_ime_evidence.png`,
+`p6_ime_hierarchy.xml`, composer bounds unchanged with and without the IME).
+
+Consequences that are rules, not suggestions:
+
+- Never promise "you can see your draft while typing" on this platform; there is no visible app area.
+- The send path must live inside the IME: `KeyboardOptions(imeAction = ImeAction.Send)` with
+  `KeyboardActions(onSend = submit)` is what removes the old "wait for the keyboard to disappear"
+  step. Verified: one tap on Keyboard input raises the IME (auto-focus) and `mIsInputViewShown=true`;
+  the IME action itself still needs a human tap to prove end-to-end.
+- uiautomator reports the Compose field as `android.widget.EditText` and `rootInActiveWindow` can be
+  the IME window. Scan every `uiAutomation.windows` root (see `InputResultUiTest.awaitEditable`).
+- ADB over Wi-Fi drops when the watch sleeps. Wake with `KEYCODE_WAKEUP`, retry, and expect the
+  serial to change (39049 → 5555 was observed mid-session).
