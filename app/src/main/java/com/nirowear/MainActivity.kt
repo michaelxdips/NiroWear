@@ -99,6 +99,7 @@ import com.nirowear.chat.errorText
 import com.nirowear.chat.evictStaleConversations
 import com.nirowear.chat.mergeParsed
 import com.nirowear.chat.needsParse
+import com.nirowear.chat.voiceLanguageTag
 import com.nirowear.data.Conversation
 import com.nirowear.data.ProviderSettingsState
 import com.nirowear.data.SearchHit
@@ -304,6 +305,9 @@ private fun ChatReader(
     val voicePrompt = stringResource(R.string.chat_voice_prompt)
     val voiceUnavailable = stringResource(R.string.chat_voice_unavailable)
     val voiceBlocked = stringResource(R.string.chat_voice_blocked)
+    // Both languages the app ships, resolved from the live configuration so a locale switch is
+    // picked up without a restart. See voiceLanguageTag.
+    val voiceLanguage = voiceLanguageTag(LocalConfiguration.current.locales[0])
     val copiedNotice = stringResource(R.string.chat_unsaved_copied)
     // Stored failures are ProviderError tokens, so the row text is resolved here — off-composition the
     // effect cannot read resources. The language tag is also a key: a row rendered before a locale
@@ -1308,6 +1312,10 @@ private fun ChatReader(
                                                         RecognizerIntent.LANGUAGE_MODEL_FREE_FORM,
                                                     )
                                                     putExtra(RecognizerIntent.EXTRA_PROMPT, voicePrompt)
+                                                    // The UI is bilingual, so the recognizer is told
+                                                    // which of the two languages the screen is in
+                                                    // instead of inheriting the phone's default.
+                                                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, voiceLanguage)
                                                 },
                                             )
                                         } catch (_: ActivityNotFoundException) {
