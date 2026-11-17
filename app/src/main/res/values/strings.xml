@@ -14,6 +14,7 @@
     <string name="chat_voice_prompt">Ask NiroWear</string>
     <string name="chat_voice_unavailable">Voice recognition unavailable. Use keyboard.</string>
     <string name="chat_voice_blocked">Voice recognition blocked. Use keyboard.</string>
+    <string name="chat_header_add_provider">Add provider · Menu</string>
     <string name="chat_ask_anything">Ask anything</string>
     <string name="chat_empty_add_provider">Add provider from menu.</string>
     <string name="chat_empty_start">Use keyboard or voice to start.</string>

@@ -1197,7 +1197,7 @@ private fun ChatReader(
                         "RenderLab · $section"
                     } else {
                         providerState.selected?.let { "${it.displayName} · ${it.selectedModelId}" }
-                            ?: "Add provider · Menu"
+                            ?: stringResource(R.string.chat_header_add_provider)
                     },
                     modifier =
                         Modifier
