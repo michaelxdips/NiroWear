@@ -57,8 +57,8 @@ seed state, so `connectedDebugAndroidTest` alone will not run them and will not 
 them. Run them explicitly via `scripts/disposable-instrumentation.ps1` or
 `scripts/test-clean-wear.py` when you touch lifecycle, credential promotion, or acceptance seeding.
 
-**No CI job can compile those sources, so this machine is the only place their compile is checked.**
-The repository ships a pre-push hook for exactly that. Enable it once per clone:
+**Instrumented sources are published as of 2026-11-16**, so CI compiles and runs them. The pre-push
+hook is still useful: it catches a broken instrumented compile before the push leaves this machine.
 
 ```powershell
 git config core.hooksPath .githooks
@@ -66,12 +66,12 @@ git config core.hooksPath .githooks
 
 Every push then runs `:app:compileDebugAndroidTestKotlin` first — compile only, no install and no
 emulator, 21 s cold and about 10 s warm on the reference machine. If the instrumented sources do not
-compile, the push stops with a message naming the task. On a clone without the private sources the
-hook prints a skip line and exits 0, because a `NO-SOURCE` compile proves nothing. It is a local
-guard, not a CI gate: `--no-verify` skips it, and CI still cannot see those files (#30).
+compile, the push stops with a message naming the task. It is a local guard, not the gate:
+`--no-verify` skips it, and the `instrumented` CI job is what actually executes the suite.
 
-Reference device for layout work is **466 × 466 @ 320 dpi, round**. If a change looks fine at
-another size, check it there before claiming it works.
+Reference device for layout work is **466 × 466 @ 320 dpi, round**. The app is expected to run on any
+Wear OS watch, so also check a smaller dial: a 384 × 384 `wm size` override caught an empty state that
+was clipped mid-sentence. Touch targets stay 48 dp at every size.
 
 ## Pull requests
 
