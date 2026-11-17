@@ -324,11 +324,15 @@ fun ProviderScreen(onBack: () -> Unit) {
             started
                 .onSuccess { created ->
                     pairing = created
-                    // Same capability URL, now also an emulated NDEF tag for the session's life.
+                    // The same capability URL, now also an emulated NDEF tag for the session's life.
                     NfcPairing.bridge.arm(created.url)
+                    // No long explanation here: the dial has 466 px and the QR needs them. The
+                    // certificate warning, the ECDH note and "same Wi-Fi" all live on the page the
+                    // phone loads, where they are read at the moment they matter. Only the
+                    // short, actionable warning stays on the watch.
                     pairingNote =
                         if (isPrivateAddress(host)) {
-                            resources.getString(R.string.provider_pairing_warning)
+                            ""
                         } else {
                             resources.getString(R.string.provider_not_home_network)
                         }
