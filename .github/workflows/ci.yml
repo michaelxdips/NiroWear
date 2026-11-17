@@ -180,7 +180,9 @@ jobs:
       - name: Create a 466x466 round AVD
         run: |
           set -euo pipefail
-          echo no | avdmanager create avd -n wear34 -k "system-images;android-34;android-wear;x86_64" -d wearos_small_round --force
+          # No -d profile: `wearos_small_round` is absent from the runner's device list, and the lcd
+          # keys are patched below anyway. The image alone is enough to boot headless.
+          echo no | avdmanager create avd -n wear34 -k "system-images;android-34;android-wear;x86_64" --force
           CFG="$HOME/.android/avd/wear34.avd/config.ini"
           sed -i '/hw.lcd.width/d;/hw.lcd.height/d;/hw.lcd.density/d;/hw.lcd.circular/d' "$CFG"
           {
@@ -215,7 +217,11 @@ jobs:
 
       - name: Collect logcat
         if: always()
-        run: adb logcat -d > /tmp/logcat.txt || true
+        run: |
+          # `adb logcat` with no device waits forever. The guard and the timeout both exist because
+          # the first version of this step outlived the emulator it was meant to report on.
+          timeout 30 adb devices || true
+          if timeout 30 adb devices | grep -q "device$"; then timeout 60 adb logcat -d > /tmp/logcat.txt || true; fi
 
       - name: Publish instrumented results
         if: always()

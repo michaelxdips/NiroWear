@@ -2,6 +2,7 @@ package com.nirowear.renderer
 
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.content.res.Resources
 import android.graphics.drawable.Drawable
 import android.net.Uri
 import android.widget.Toast
@@ -57,6 +58,7 @@ import androidx.core.net.toUri
 import androidx.wear.compose.material3.Button
 import androidx.wear.compose.material3.Text
 import com.nirowear.R
+import java.util.Locale
 
 // FSI (U+2068) / PDI (U+2069) isolate mixed-direction inline spans.
 private const val BIDI_ISOLATE_OPEN = "\u2068"
@@ -261,11 +263,7 @@ fun DocumentBlock(
                     RichText(
                         listOf(
                             InlineContent(
-                                resources.getQuantityString(
-                                    R.plurals.renderer_hidden_cells,
-                                    block.droppedCells,
-                                    block.droppedCells,
-                                ),
+                                hiddenCellsText(resources, block.droppedCells),
                             ),
                         ),
                         heading = null,
@@ -346,11 +344,7 @@ internal fun RenderUnitView(
                     RichText(
                         listOf(
                             InlineContent(
-                                resources.getQuantityString(
-                                    R.plurals.renderer_hidden_cells,
-                                    unit.droppedCells,
-                                    unit.droppedCells,
-                                ),
+                                hiddenCellsText(resources, unit.droppedCells),
                             ),
                         ),
                         heading = null,
@@ -656,3 +650,18 @@ private fun InlineRichText(
         )
     }
 }
+
+/**
+ * The hidden-cell note falls back to English when no translation exists, so the count uses ASCII
+ * digits. `getQuantityString` formats with the READER's locale, which produced
+ * "٢ more cells were dropped" inside an English sentence on an Arabic watch (#49).
+ */
+private fun hiddenCellsText(
+    resources: Resources,
+    count: Int,
+): String =
+    String.format(
+        Locale.ENGLISH,
+        resources.getQuantityText(R.plurals.renderer_hidden_cells, count).toString(),
+        count,
+    )
