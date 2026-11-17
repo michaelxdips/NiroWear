@@ -51,12 +51,26 @@ class RendererRowLocalizationTest {
             units.none { it is RenderUnit.Whole && it.block is ContentBlock.Table },
         )
 
+        // Wake the display from INSIDE the test. The host can wake the watch before Gradle starts, but
+        // install/uninstall phases take ~20 s and a discharging watch sleeps again in that window; a
+        // sleeping display makes `rootInActiveWindow` null, which is the measured `saw=[]`.
+        i.uiAutomation.executeShellCommand("input keyevent KEYCODE_WAKEUP").close()
+        SystemClock.sleep(300)
+        // A system screen can own the foreground on a real watch (measured: Settings/Bluetooth,
+        // "Paired devices, Michael@DESKTOP-…"), and startActivitySync then never becomes the active
+        // window. HOME first, so the tree this test reads belongs to the activity it launched.
+        i.uiAutomation.executeShellCommand("input keyevent KEYCODE_HOME").close()
+        SystemClock.sleep(500)
         val activity =
             i.startActivitySync(
                 Intent(i.targetContext, MainActivity::class.java)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK),
             ) as MainActivity
         try {
+            i.runOnMainSync {
+                activity.setTurnScreenOn(true)
+                activity.window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            }
             i.runOnMainSync {
                 activity.setContent {
                     LazyColumn(Modifier.fillMaxSize()) {
