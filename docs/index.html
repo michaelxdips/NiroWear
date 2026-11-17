@@ -3105,7 +3105,10 @@ adb install -r app-release.apk</pre>
           <code>am start -W</code> runs after <code>am force-stop</code>), six times the 2026-11-16 figure — filed as
           #65 rather than overwriting it. Scroll cost: <strong>761 frames, 9 janky (1.18 %)</strong>, 50th percentile
           8 ms, 90th 13 ms, 95th 25 ms, 99th 44 ms. A <code>454x454</code> override kept every control at 96 px
-          (48 dp) and the reader at <code>[0,96][454,250]</code>. The <strong>Stop</strong> label was measured 17 px left
+          (48 dp) and the reader at <code>[0,96][454,250]</code>. A <strong>20-minute session</strong> of 149
+          swipe/tap cycles moved PSS from <code>73,642</code> to <code>76,949 KB</code> (+3.2 MB) with
+          <code>Thermal Status</code> still <code>0</code> before and after — no thermal level above nominal was
+          reached, so none is claimed. The <strong>Stop</strong> label was measured 17 px left
           of centre (<code>Rect(189,344,243,380)</code> inside <code>Rect(161,314,305,410)</code>) and is now
           <strong>dx = 0, dy = 0</strong> with a full-width, centre-aligned label. The second send through the app
           button was measured with real key taps and one BACK press to dismiss the keyboard (ESCAPE and swipe-down do

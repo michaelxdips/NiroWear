@@ -45,6 +45,9 @@ Read from result files and command output, not from memory:
 - Other measured numbers on that watch: cold start **median 4373 ms** over four valid runs (#65,
   versus 723 ms on 2026-11-16); scroll **761 frames, 1.18 % janky**, 50th 8 ms / 90th 13 ms / 99th 44
   ms; a `454x454` override keeps every control at 96 px (48 dp).
-- **NOT TESTED for this cut: battery drain, thermal throttling, TalkBack audio, the pairing
-  certificate click-through on a phone, NFC tap and QR scan.** No phone was available on the LAN and
-  no audio was listened to; those stay open as #28, #27 and #47.
+- **20-minute session** (149 swipe/tap cycles over the stored answers): `TOTAL PSS 73,642 → 76,949 KB`
+  (+3.2 MB), `RSS 151,936 → 158,352 KB`, and `dumpsys thermalservice` reported `Thermal Status: 0`
+  before and after — the device never left the nominal thermal level, so throttling was not reached.
+- **NOT TESTED for this cut: battery drain in percent, TalkBack audio, the pairing certificate
+  click-through on a phone, NFC tap and QR scan, voice input.** No phone was available on the LAN, no
+  sentence was dictated and no audio was listened to; those stay open as #28, #27 and #47.
