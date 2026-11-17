@@ -77,8 +77,10 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -120,6 +122,9 @@ import kotlinx.coroutines.launch
 // ponytail: single-activity app; the reader publishes its crown handler here. Move to a
 // CompositionLocal if a second activity or split-screen reader ever exists.
 private var rotary: ((Float) -> Boolean)? = null
+
+/** A filled field value with the caret after the text — what a programmatic fill must look like. */
+private fun fieldOf(text: String) = TextFieldValue(text, TextRange(text.length))
 
 class MainActivity : ComponentActivity() {
     override fun onGenericMotionEvent(event: MotionEvent): Boolean {
@@ -178,7 +183,12 @@ private fun ChatReader(
     // wrong conversation, threw, and the composer had already cleared itself.
     var editedId by remember { mutableStateOf<Long?>(null) }
     var editing by remember { mutableStateOf(false) }
-    var draft by rememberSaveable { mutableStateOf("") }
+    // The composer holds the whole TextFieldValue, not just its text (#62). With only a String the
+    // field's selection and composing region had nowhere to live, so every onValueChange handed the
+    // field back a value with no composition. Measured on the reference watch: the editor reported
+    // text='hi' composition=(0,2), the app stored 'hi', and the value it returned to the field
+    // carried composition=null. Text + selection + composition must round-trip unchanged.
+    var draftField by rememberSaveable(stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue()) }
     // The EDIT BODY lives in its own slot, not in `draft`.
     //
     // Sharing one slot meant an edit had to overwrite the user's typed prompt and then "restore" it on
@@ -187,7 +197,7 @@ private fun ChatReader(
     // question instead of editing it). Separate slots make the two independent: abandoning an edit
     // cannot touch the draft, and a restored draft is always a draft. `editText` is not saveable, like
     // `editedId`, so the two always agree.
-    var editText by remember { mutableStateOf("") }
+    var editField by remember { mutableStateOf(TextFieldValue()) }
     // The body an edit turn was started with, kept until the write is confirmed. `edit()` returns true
     // when the JOB LAUNCHES, not when the turn succeeds, so an edit refused before it wrote (no
     // profile, a credential that will not decrypt, a target that left the chat) closed the editor and
@@ -215,7 +225,7 @@ private fun ChatReader(
             return@LaunchedEffect
         }
         if (chatState.error != null && stored != null) {
-            editText = attempt.second
+            editField = fieldOf(attempt.second)
             editedId = attempt.first
             editing = true
             lastEditAttempt = null
@@ -524,9 +534,16 @@ private fun ChatReader(
                     ?.let { spoken ->
                         // Voice ADDS to the draft. The draft deliberately survives backing out of the
                         // editor, so replacing it here destroyed a typed prompt with no undo.
-                        draft = if (draft.isBlank()) spoken else draft.trimEnd() + " " + spoken
+                        draftField =
+                            fieldOf(
+                                if (draftField.text.isBlank()) {
+                                    spoken
+                                } else {
+                                    draftField.text.trimEnd() + " " + spoken
+                                },
+                            )
                         // Voice is a fresh compose, never a resumed edit.
-                        editText = ""
+                        editField = TextFieldValue()
                         editedId = null
                         editing = true
                     }
@@ -536,7 +553,7 @@ private fun ChatReader(
         editing = false
         // Backing out abandons the edit body and NOTHING else: the user's unsent draft lives in its own
         // slot, so it is neither restored nor destroyed here. A plain compose keeps what was typed.
-        editText = ""
+        editField = TextFieldValue()
         editedId = null
     }
     BackHandler(providerScreen) { providerScreen = false }
@@ -588,7 +605,8 @@ private fun ChatReader(
             )
         } else if (editing) {
             val composing = editedId != null
-            val editorText = if (composing) editText else draft
+            val editorField = if (composing) editField else draftField
+            val editorText = editorField.text
 
             // The button and the IME's own Send key share this. On the watch the slow path was: type,
             // wait for the keyboard to go away, find the app's Send, tap it. `ImeAction.Send` submits
@@ -618,9 +636,9 @@ private fun ChatReader(
                     // the user's unsent prompt and a send never eats the other way round.
                     if (editTarget != null) {
                         lastEditAttempt = editTarget to editorText
-                        editText = ""
+                        editField = TextFieldValue()
                     } else {
-                        draft = ""
+                        draftField = TextFieldValue()
                     }
                     notice = ""
                     editedId = null
@@ -646,8 +664,8 @@ private fun ChatReader(
                 // The `semantics` lambda is not a composable scope.
                 val promptEditorLabel = stringResource(R.string.chat_prompt_editor)
                 BasicTextField(
-                    value = editorText,
-                    onValueChange = { if (composing) editText = it else draft = it },
+                    value = editorField,
+                    onValueChange = { if (composing) editField = it else draftField = it },
                     modifier =
                         Modifier
                             .weight(1f)
@@ -1064,7 +1082,7 @@ private fun ChatReader(
                                     // The edit body goes to its OWN slot: the unsent draft is
                                     // left exactly as it was, so abandoning the edit cannot
                                     // destroy it and cannot resurrect it later either.
-                                    editText = target.rawContent
+                                    editField = fieldOf(target.rawContent)
                                     editedId = target.id
                                     editing = true
                                 }
@@ -1284,7 +1302,7 @@ private fun ChatReader(
                                         // The keyboard always composes the DRAFT. `editText` and
                                         // `editedId` are cleared together, so a stale edit body can
                                         // never reappear as a fresh message.
-                                        editText = ""
+                                        editField = TextFieldValue()
                                         editedId = null
                                         editing = true
                                     }),
