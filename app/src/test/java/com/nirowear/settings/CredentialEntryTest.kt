@@ -2,6 +2,7 @@ package com.nirowear.settings
 
 import com.nirowear.provider.ProviderType
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -46,44 +47,33 @@ class CredentialEntryTest {
     }
 
     @Test
-    fun mismatchHintNamesTheLikelyProvider() {
-        assertEquals(
-            "Key looks like Anthropic. Check provider.",
-            keyMismatchHint("sk-ant-api03-abc", ProviderType.OPENAI),
-        )
-        assertEquals(
-            "Key looks like Gemini. Check provider.",
-            keyMismatchHint("AIzaSyABC", ProviderType.OPENAI),
-        )
-        assertEquals(
-            "Key looks like OpenAI. Check provider.",
-            keyMismatchHint("sk-proj-abc", ProviderType.ANTHROPIC),
-        )
+    fun mismatchNamesTheLikelyProviderAsACauseNotASentence() {
+        // Returns the CAUSE so the screen can render it in the reader's language (#66). The sentence
+        // itself now lives in R.string.provider_key_mismatch.
+        assertEquals(ProviderType.ANTHROPIC, impliedProviderMismatch("sk-ant-api03-abc", ProviderType.OPENAI))
+        assertEquals(ProviderType.GEMINI, impliedProviderMismatch("AIzaSyABC", ProviderType.OPENAI))
+        assertEquals(ProviderType.OPENAI, impliedProviderMismatch("sk-proj-abc", ProviderType.ANTHROPIC))
     }
 
     @Test
-    fun mismatchHintIsSilentWhenItAgreesOrCannotTell() {
-        assertNull(keyMismatchHint("sk-ant-api03-abc", ProviderType.ANTHROPIC))
-        assertNull(keyMismatchHint("AIzaSyABC", ProviderType.GEMINI))
-        assertNull(keyMismatchHint("sk-proj-abc", ProviderType.OPENAI))
-        assertNull(keyMismatchHint("some-other-format", ProviderType.OPENAI))
-        assertNull(keyMismatchHint("", ProviderType.OPENAI))
+    fun mismatchIsSilentWhenItAgreesOrCannotTell() {
+        assertNull(impliedProviderMismatch("sk-ant-api03-abc", ProviderType.ANTHROPIC))
+        assertNull(impliedProviderMismatch("AIzaSyABC", ProviderType.GEMINI))
+        assertNull(impliedProviderMismatch("sk-proj-abc", ProviderType.OPENAI))
+        assertNull(impliedProviderMismatch("some-other-format", ProviderType.OPENAI))
+        assertNull(impliedProviderMismatch("", ProviderType.OPENAI))
     }
 
     @Test
-    fun mismatchHintNeverBlocksCompatibleProfiles() {
+    fun mismatchNeverBlocksCompatibleProfiles() {
         // A compatible endpoint may legitimately accept a key that resembles a first-party format.
-        assertNull(keyMismatchHint("sk-ant-api03-abc", ProviderType.OPENAI_COMPATIBLE))
-        assertNull(keyMismatchHint("AIzaSyABC", ProviderType.OPENAI_COMPATIBLE))
+        assertNull(impliedProviderMismatch("sk-ant-api03-abc", ProviderType.OPENAI_COMPATIBLE))
+        assertNull(impliedProviderMismatch("AIzaSyABC", ProviderType.OPENAI_COMPATIBLE))
     }
 
     @Test
-    fun remoteTypingHintFollowsEnabledImeList() {
-        assertEquals(
-            "Tip: type on your paired phone.",
-            remoteTypingHint(setOf("com.google.android.inputmethod.latin")),
-        )
-        assertNull(remoteTypingHint(setOf("com.example.otherkeyboard")))
-        assertNull(remoteTypingHint(emptySet()))
-    }
-}
+    fun remoteTypingFollowsEnabledImeList() {
+        assertTrue(remoteTypingAvailable(setOf("com.google.android.inputmethod.latin")))
+        assertFalse(remoteTypingAvailable(setOf("com.example.otherkeyboard")))
+        assertFalse(remoteTypingAvailable(emptySet()))
+    }}
