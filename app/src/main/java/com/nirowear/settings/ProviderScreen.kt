@@ -3,11 +3,13 @@ package com.nirowear.settings
 import android.os.SystemClock
 import android.view.WindowManager
 import androidx.annotation.StringRes
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -34,6 +36,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
@@ -162,6 +166,9 @@ fun ProviderScreen(onBack: () -> Unit) {
             // Leaving the screen kills the listener even if the coroutine never resumes.
             pairing?.close()
             pairing = null
+            // The HCE service is bindable at any time, so the emulated tag has to be turned off
+            // here as well as by its own deadline.
+            NfcPairing.bridge.disarm()
             window?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
         }
     }
@@ -255,6 +262,7 @@ fun ProviderScreen(onBack: () -> Unit) {
         // on its own daemon thread, so this no longer freezes the dial while a peer sits in read().
         pairing?.close()
         pairing = null
+        NfcPairing.bridge.disarm()
         pairingNote = note
     }
 
@@ -316,6 +324,8 @@ fun ProviderScreen(onBack: () -> Unit) {
             started
                 .onSuccess { created ->
                     pairing = created
+                    // Same capability URL, now also an emulated NDEF tag for the session's life.
+                    NfcPairing.bridge.arm(created.url)
                     pairingNote =
                         if (isPrivateAddress(host)) {
                             resources.getString(R.string.provider_pairing_warning)
@@ -449,7 +459,49 @@ fun ProviderScreen(onBack: () -> Unit) {
                             fontSize = 14.sp,
                         )
                     }
-                    pairing?.let { server -> Text(server.url, fontSize = 14.sp, color = Color(0xFFA8C7FA)) }
+                    pairing?.let { server ->
+                        Text(
+                            stringResource(R.string.provider_pairing_nfc),
+                            fontSize = 13.sp,
+                            color = Color(0xFFB8BDC6),
+                        )
+                        // Drawn from the SAME capability URL the phone page is served from, so a
+                        // scan and a tap are the same session; the token is not duplicated.
+                        val qr = remember(server.url) { QrCode.matrix(server.url) }
+                        val qrLabel = stringResource(R.string.provider_pairing_qr)
+                        // White plate, black modules: a code scanner needs dark-on-light, so the
+                        // plate is the code's background rather than the screen's.
+                        Canvas(
+                            Modifier
+                                .fillMaxWidth()
+                                .aspectRatio(1f)
+                                .padding(4.dp)
+                                .semantics { contentDescription = qrLabel },
+                        ) {
+                            // Integer module size from the SAME function the JVM test decodes, so
+                            // the pixels proven scannable are the pixels the watch draws.
+                            val side = QrCode.sidePx(qr, minOf(size.width, size.height).toInt())
+                            if (side <= 0) return@Canvas
+                            val module = side.toFloat() / qr.size
+                            val left = (size.width - side) / 2f
+                            val top = (size.height - side) / 2f
+                            drawRect(Color.White, Offset(left, top), Size(side.toFloat(), side.toFloat()))
+                            for (y in 0 until qr.size) {
+                                for (x in 0 until qr.size) {
+                                    if (qr.isDark(x, y)) {
+                                        drawRect(
+                                            Color.Black,
+                                            Offset(left + x * module, top + y * module),
+                                            Size(module, module),
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        // Kept as the last resort: a phone without a camera or NFC still needs a
+                        // way in, and the token comparison the warning above asks for needs the URL.
+                        Text(server.url, fontSize = 14.sp, color = Color(0xFFA8C7FA))
+                    }
                     if (pairingNote.isNotBlank()) Text(pairingNote, fontSize = 13.sp, color = Color(0xFFB8BDC6))
                 }
             }

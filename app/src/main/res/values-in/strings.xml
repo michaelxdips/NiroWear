@@ -70,6 +70,9 @@
     <string name="provider_pairing_starting">Memulai…</string>
     <string name="provider_not_home_network">Bukan jaringan rumah. Batalkan jika ragu.</string>
     <string name="provider_pairing_unavailable">Pemasangan tidak tersedia. Masukkan key di bawah.</string>
+    <string name="provider_pairing_nfc">Tempelkan ponsel ke jam, atau pindai kode.</string>
+    <string name="provider_pairing_qr">Kode QR pemasangan</string>
+    <string name="provider_pairing_nfc_service">Pemasangan NiroWear</string>
     <string name="provider_label_name">Nama</string>
     <string name="provider_label_base_url">Base URL</string>
     <string name="provider_label_manual_model">ID model manual</string>

@@ -1,6 +1,8 @@
 # Pairing UX — plan
 
-Status: proposal, not implemented. Owner-visible behavior today is unchanged.
+Status: **shipped** — NFC HCE emulation and the on-watch QR are in the app; see
+[What shipped and what was measured](#what-shipped-and-what-was-measured) for the literal evidence
+and for the two steps that still need a phone.
 
 ## The problem, measured
 
@@ -32,9 +34,10 @@ pairing.
 | QR on the dial | typing the URL | camera + a QR decoder | **no decoder installed** (`qrcode`, `segno`, `cv2`, `pyzbar` all absent), so an encoder would prove only self-consistency |
 | Manual URL (today) | nothing | nothing | yes |
 
-QR is therefore designed but not shipped: shipping an encoder nobody can scan-test violates the
-repository's verification discipline. If a decoder is added to the verifying machine, QR becomes the
-second path — it is the only one that works when the phone has no NFC.
+QR is shipped too, and the verification gap was closed rather than dodged: `com.google.zxing:core:3.5.3`
+is a dependency now (Apache-2.0, pure JVM, ~340 KB) and `PairingQrTest` **decodes the pixels the canvas
+would paint** at every width the watch actually uses, so the decode is evidence about the render, not
+about the encoder's own matrix.
 
 ## Proposed flow
 
@@ -73,3 +76,33 @@ log or filename.
 Pairing is a watch UI like any other: touch targets stay 48 dp, the screen must fit a 384x384 dial
 (192 dp) without clipping, and nothing may assume a 466 px width. The QR path, if ever shipped, must
 render legibly at 384 px with the lowest error-correction level that still scans.
+
+## What shipped and what was measured
+
+Measured on the reference watch (Xiaomi Watch 2, API 34, 466x466 @320 dpi), 2026-11-17:
+
+- **NFC files** `NdefTag.kt` (NDEF message, Type 2 Tag capability container, APDU responder) and
+  `NfcPairingService.kt` (`HostApduService`), gated by `NfcPairingBridge`, which is armed by the pairing
+  screen for exactly the session TTL. `NfcPairingTest`: 7 tests, 0 failures — exact URI record bytes,
+  the full SELECT/READ exchange a reader performs, `Le=0x00` meaning 256 bytes, refusals (`6A82`,
+  `6D00`, `6B00`), and expiry at the deadline.
+- **`dumpsys nfc`** while pairing is armed: `*DEFAULT* ApduService: ComponentInfo{com.nirowear/
+  com.nirowear.settings.NfcPairingService}, UID: 10110, description: NiroWear pairing, Static AID
+  Groups: Category: other, AIDs:D2760000850101, F001020304050607`. The service is registered and the
+  default for the `other` category, so the AIDs are routed to it.
+- **QR** `QrCode.kt` + the canvas in `ProviderScreen.kt`. The QR node's accessibility bounds measured
+  346x346 px at 466 and 264x264 px at 384, i.e. a 330 px and a 248 px canvas after the 4 dp inner
+  padding. `PairingQrTest` decodes the planner's own pixels at 362, 330, 280 and 248 px: 3 tests,
+  0 failures, with the smallest dial keeping >= 4 px per module.
+- **End-to-end payload** with a non-browser client (Python `cryptography`: ECDH P-256 + AES-GCM, the
+  token as AAD) against the watch's own TLS listener: `PAIR status=200 body={"ok":true}`, and the
+  screen then showed `Saved securely.` The paired profile appeared in the header as `Zyr · gpt-6-luna`.
+- **Adaptive**: at `wm size 384x384` the same pairing screen renders both options with no clipped text
+  node; the QR needs one scroll, which the LazyColumn provides. Reset to 466 afterwards.
+
+Still unverified, and deliberately not claimed:
+
+- **A physical tap.** No handset with an NFC reader took part; the NDEF bytes and the APDU exchange are
+  proven in JVM, the tap is not.
+- **A camera scan.** The provider screen carries `FLAG_SECURE`, so its screenshots are black by design;
+  the raster decode in `PairingQrTest` is the substitute, and a human scan is still owed (#28).
