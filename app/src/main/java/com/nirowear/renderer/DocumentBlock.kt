@@ -656,7 +656,7 @@ private fun InlineRichText(
  * digits. `getQuantityString` formats with the READER's locale, which produced
  * "٢ more cells were dropped" inside an English sentence on an Arabic watch (#49).
  */
-private fun hiddenCellsText(
+internal fun hiddenCellsText(
     resources: Resources,
     count: Int,
 ): String =
