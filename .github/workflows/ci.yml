@@ -182,8 +182,16 @@ jobs:
           set -euo pipefail
           # No -d profile: `wearos_small_round` is absent from the runner's device list, and the lcd
           # keys are patched below anyway. The image alone is enough to boot headless.
-          echo no | avdmanager create avd -n wear34 -k "system-images;android-34;android-wear;x86_64" --force
-          CFG="$HOME/.android/avd/wear34.avd/config.ini"
+          #
+          # `avdmanager` writes under ANDROID_AVD_HOME, which the runner does not set, and its
+          # "custom hardware profile?" prompt consumed stdin and exited 2 with no config.ini in the
+          # first two attempts. The home is explicit now and the file is FOUND, never assumed.
+          export ANDROID_AVD_HOME="$HOME/.android/avd"
+          mkdir -p "$ANDROID_AVD_HOME"
+          printf 'no\n' | avdmanager create avd -n wear34 -k "system-images;android-34;android-wear;x86_64" --force
+          CFG=$(find "$ANDROID_AVD_HOME" -maxdepth 2 -name config.ini | head -1)
+          test -n "$CFG" || { echo "::error::avdmanager created no config.ini"; ls -la "$ANDROID_AVD_HOME"; exit 1; }
+          echo "patching $CFG"
           sed -i '/hw.lcd.width/d;/hw.lcd.height/d;/hw.lcd.density/d;/hw.lcd.circular/d' "$CFG"
           {
             echo "hw.lcd.width=466"

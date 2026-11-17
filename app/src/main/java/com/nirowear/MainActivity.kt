@@ -41,6 +41,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -74,6 +76,7 @@ import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -578,6 +581,45 @@ private fun ChatReader(
                 },
             )
         } else if (editing) {
+            val composing = editedId != null
+            val editorText = if (composing) editText else draft
+
+            // The button and the IME's own Send key share this. On the watch the slow path was: type,
+            // wait for the keyboard to go away, find the app's Send, tap it. `ImeAction.Send` submits
+            // from the keyboard itself, so the field never has to be abandoned first.
+            fun submitEditor() {
+                if (editorText.isBlank()) return
+                val editTarget = editedId
+                val started =
+                    if (editTarget != null) {
+                        anchors.remove(chatState.conversationId)
+                        chat.edit(editTarget, editorText)
+                    } else {
+                        chat.send(editorText)
+                    }
+                // Only clear when the ViewModel ACCEPTED the turn. Clearing
+                // unconditionally (before it could report refusal) threw away the
+                // user's typed question whenever a send was refused — a failed init,
+                // an unsaved answer — and closed the editor over it.
+                if (started) {
+                    editing = false
+                    renderLab = false
+                    sectionMenu = false
+                    following = true
+                    followNewConversation = chatState.conversationId == null
+                    // The text now lives in the conversation. Clearing the slot that was
+                    // actually used leaves the OTHER one untouched, so an edit never eats
+                    // the user's unsent prompt and a send never eats the other way round.
+                    if (editTarget != null) {
+                        lastEditAttempt = editTarget to editorText
+                        editText = ""
+                    } else {
+                        draft = ""
+                    }
+                    notice = ""
+                    editedId = null
+                }
+            }
             Column(
                 // imePadding, not just adjustResize: this app targets SDK 37, so on Android 15+
                 // it is edge-to-edge by default and the IME arrives as an INSET the window no
@@ -590,8 +632,6 @@ private fun ChatReader(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Text(stringResource(R.string.chat_prompt), modifier = Modifier.align(Alignment.CenterHorizontally))
-                val composing = editedId != null
-                val editorText = if (composing) editText else draft
                 // The `semantics` lambda is not a composable scope.
                 val promptEditorLabel = stringResource(R.string.chat_prompt_editor)
                 BasicTextField(
@@ -612,45 +652,12 @@ private fun ChatReader(
                     cursorBrush =
                         androidx.compose.ui.graphics
                             .SolidColor(Color.White),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                    keyboardActions = KeyboardActions(onSend = { submitEditor() }),
                 )
                 Button(
-                    onClick = {
-                        if (editorText.isNotBlank()) {
-                            val editTarget = editedId
-                            val started =
-                                if (editTarget != null) {
-                                    anchors.remove(chatState.conversationId)
-                                    chat.edit(editTarget, editorText)
-                                } else {
-                                    chat.send(editorText)
-                                }
-                            // Only clear when the ViewModel ACCEPTED the turn. Clearing
-                            // unconditionally (before it could report refusal) threw away the
-                            // user's typed question whenever a send was refused — a failed init,
-                            // an unsaved answer — and closed the editor over it.
-                            if (started) {
-                                editing = false
-                                renderLab = false
-                                sectionMenu = false
-                                following = true
-                                followNewConversation = chatState.conversationId == null
-                                // The text now lives in the conversation. Clearing the slot that was
-                                // actually used leaves the OTHER one untouched, so an edit never eats
-                                // the user's unsent prompt and a send never eats the other way round.
-                                if (editTarget != null) {
-                                    lastEditAttempt = editTarget to editorText
-                                    editText = ""
-                                } else {
-                                    draft = ""
-                                }
-                                notice = ""
-                                editedId = null
-                            }
-                        }
-                    },
-                    enabled =
-                        (if (editedId != null) editText else draft).isNotBlank() &&
-                            !chatState.generating && !chatState.unsaved,
+                    onClick = { submitEditor() },
+                    enabled = editorText.isNotBlank() && !chatState.generating && !chatState.unsaved,
                     modifier = Modifier.align(Alignment.CenterHorizontally),
                 ) {
                     Text(
