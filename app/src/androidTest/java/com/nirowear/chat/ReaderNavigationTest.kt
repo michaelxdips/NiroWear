@@ -101,6 +101,23 @@ class ReaderNavigationTest {
         SystemClock.sleep(300)
     }
 
+    /**
+     * Accessibility click on the label's clickable ancestor. A coordinate tap cannot reach a control
+     * that the full-screen IME covers, but the semantics node is still in the app tree, so
+     * ACTION_CLICK is the only host-side path that stays valid with the keyboard up.
+     */
+    private fun clickNode(label: String): Boolean {
+        repeat(20) {
+            var n = find(label)
+            while (n != null) {
+                if (n.isClickable) return n.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                n = n.parent
+            }
+            SystemClock.sleep(150)
+        }
+        return false
+    }
+
     private fun tap(
         label: String,
         scroll: Boolean = false,
@@ -507,7 +524,7 @@ class ReaderNavigationTest {
                                 "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n",
                         ),
                     )
-                    tap("Send")
+                    assertTrue("Send is not clickable through semantics", clickNode("Send"))
                     await("Wear IME response verified.")
                     conversation =
                         app.database
@@ -661,7 +678,7 @@ class ReaderNavigationTest {
                             "\n\n",
                         ) { "Edited continuation $it. New content remains readable." }
                     server.enqueue(response(replacement))
-                    tap("Edit & resend")
+                    assertTrue("Edit & resend is not clickable through semantics", clickNode("Edit & resend"))
                     await("Retry response")
                     val finish = SystemClock.uptimeMillis() + 10000
                     while (dao.snapshot(id).last().status == "STREAMING" &&
@@ -808,7 +825,7 @@ class ReaderNavigationTest {
                             },
                         ),
                     )
-                    tap("Send")
+                    assertTrue("Send is not clickable through semantics", clickNode("Send"))
                     await("Stop")
                     await("History stream paragraph 25. Preserve detached reading while opening History.")
                     conversation =
@@ -1053,7 +1070,7 @@ class ReaderNavigationTest {
                                 "data: {\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n",
                         ),
                     )
-                    tap("Send")
+                    assertTrue("Send is not clickable through semantics", clickNode("Send"))
                     await("Reader follow-up answer.")
                     val request = server.takeRequest(5, TimeUnit.SECONDS)!!
                     assertTrue(request.body.readUtf8().contains("Reader A prompt"))
@@ -1333,7 +1350,7 @@ class ReaderNavigationTest {
                             .setBody(frames)
                             .throttleBody(256, 1, TimeUnit.SECONDS),
                     )
-                    tap("Send")
+                    assertTrue("Send is not clickable through semantics", clickNode("Send"))
                     await("Stop")
                     SystemClock.sleep(6000)
                     // Swipe until the control appears rather than assuming three swipes reach a
