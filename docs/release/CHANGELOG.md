@@ -31,7 +31,7 @@ keyboard and voice. Verified with screenshots at 384x384 and node bounds at 466x
 ### Physical watch, first run
 
 v0.2.1 on a Xiaomi Watch 2 (API 34, 466x466, armeabi-v7a): versionCode 14, signer verified, cold start
-1,174 ms. Per-class instrumented run: 25/43 classes passed first pass; eleven failures were
+**median 723 ms** over five runs (range 720–1,105 ms; the first observed launch was 1,174 ms). Per-class instrumented run: 25/43 classes passed first pass; eleven failures were
 `adb: device offline`, not results. Filed from that run: #47 rotary crown does not move the reader,
 #48 table rows absent from the semantics tree on API 34, #49 Arabic-Indic digits inside an English
 plural sentence, #50 two classes that do not finish on hardware.

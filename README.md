@@ -190,7 +190,7 @@ The two remaining failures, read from the result XML of the last recorded AVD ru
 | `PairingUiTest#keyArrivesFromPhoneWithoutTypingOnWatch` | Needs a real LAN and a phone browser to click through a self-signed certificate warning. |
 | `RotaryInputTest#rotarySourceMovesReaderAndLeavesTouchNavigationAvailable` | The AVD has no rotary source. `RendererTapAndPanTest` passed in that run; its order-dependence was observed earlier and is not claimed as a current failure. |
 
-**Physical watch, 2026-11-16.** The published `v0.2.1` was installed on a Xiaomi Watch 2 (`axolotlaxie`): Android 14 / API 34, 466 × 466 @ 320 dpi, `armeabi-v7a` only, `versionCode 14`, signer `0dc50f…86543e`, cold start **1,174 ms**. The instrumented suite was then run per class through `am instrument` with `pm clear` between classes:
+**Physical watch, 2026-11-16.** The published `v0.2.1` was installed on a Xiaomi Watch 2 (`axolotlaxie`): Android 14 / API 34, 466 × 466 @ 320 dpi, `armeabi-v7a` only, `versionCode 14`, signer `0dc50f…86543e`, cold start **median 723 ms** over five runs (720–1,105 ms; first observed launch 1,174 ms). The instrumented suite was then run per class through `am instrument` with `pm clear` between classes:
 
 - **25 of 43 classes passed on the first pass.** Eleven of the eighteen failures were `adb: device offline`, not test results: this watch drops the ADB transport when it sleeps, and a wake keepalive is required.
 - Real defects found on hardware: the rotary crown does not move the reader at all (#47), table rows are absent from the semantics tree on API 34 (#48), and Arabic-Indic digits appear inside an English plural sentence (#49).
