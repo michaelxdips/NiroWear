@@ -3098,10 +3098,10 @@ adb install -r app-release.apk</pre>
           Test sources are published as of 2026-11-16. Until then <code>app/src/test</code> and
           <code>app/src/androidTest</code> were ignored by the repository's allowlist, so every CI run
           executed <strong>zero</strong> tests and still reported success. The <code>jvm</code> job now
-          runs 286 tests in 45 suites and refuses a run that produced no result XML; a new
-          <code>instrumented</code> job boots a Wear OS 5 (API 34) AVD patched to 466x466 @ 320 on every
-          pull request. That job is new: its first green run is its evidence, and this page will cite the
-          run id when it exists.
+          runs 286 tests in 45 suites and refuses a run that produced no result XML; the
+          <code>instrumented</code> job boots a Wear OS 5 (API 34) AVD patched to 466x466 @ 320 and runs a
+          named smoke subset of ten classes that passed on the physical watch. The full suite stays a
+          hardware gate while #50 (two classes that never finish) is open.
         </p>
 
       </div>
