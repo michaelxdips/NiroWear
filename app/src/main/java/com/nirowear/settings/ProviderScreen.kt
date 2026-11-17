@@ -68,7 +68,6 @@ import com.nirowear.provider.ProviderProfile
 import com.nirowear.provider.ProviderType
 import com.nirowear.provider.SafeProviderException
 import com.nirowear.provider.SecretValue
-import com.nirowear.provider.label
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -117,6 +116,15 @@ private val PRESETS =
         ),
     )
 
+/** Localized provider type name: the brand name stays, the compatible adapter's name is translated. */
+private fun ProviderType.nameRes(): Int =
+    when (this) {
+        ProviderType.OPENAI_COMPATIBLE -> R.string.provider_type_compatible
+        ProviderType.OPENAI -> R.string.provider_type_openai
+        ProviderType.GEMINI -> R.string.provider_type_gemini
+        ProviderType.ANTHROPIC -> R.string.provider_type_anthropic
+    }
+
 @Composable
 fun ProviderScreen(onBack: () -> Unit) {
     val context = LocalContext.current
@@ -154,7 +162,7 @@ fun ProviderScreen(onBack: () -> Unit) {
     var pairingNote by remember { mutableStateOf("") }
     // Remote input is what makes typing on a watch tolerable, so advertise it only when the enabled
     // IME list actually contains a provider that supports it.
-    val remoteTyping = remember { remoteTypingHint(enabledImePackages(context)) }
+    val remoteTyping = remember { remoteTypingAvailable(enabledImePackages(context)) }
     val listState = rememberLazyListState()
     LaunchedEffect(adding, edit?.id) { listState.scrollToItem(0) }
     LaunchedEffect(type, base, key, edit?.id) { models = emptyList() }
@@ -301,7 +309,7 @@ fun ProviderScreen(onBack: () -> Unit) {
                                 validated = false
                                 models = emptyList()
                                 type = payload.type
-                                name = payload.name.ifBlank { payload.type.label }
+                                name = payload.name.ifBlank { resources.getString(payload.type.nameRes()) }
                                 base = payload.baseUrl
                                 model = payload.modelId
                                 // The key arrived encrypted and is handed straight to storage. Putting
@@ -354,7 +362,7 @@ fun ProviderScreen(onBack: () -> Unit) {
                 if (adding || edit != null) {
                     stringResource(
                         if (edit != null) R.string.provider_title_edit else R.string.provider_title_add,
-                        type.label,
+                        stringResource(type.nameRes()),
                     )
                 } else {
                     stringResource(R.string.provider_title)
@@ -553,11 +561,19 @@ fun ProviderScreen(onBack: () -> Unit) {
                             color = Color(0xFFB8BDC6),
                         )
                     }
-                    keyMismatchHint(key, type)?.let { Text(it, fontSize = 14.sp, color = Color(0xFFFFD28A)) }
-                    if (key.isBlank() &&
-                        remoteTyping != null
-                    ) {
-                        Text(remoteTyping, fontSize = 14.sp, color = Color(0xFFB8BDC6))
+                    impliedProviderMismatch(key, type)?.let {
+                        Text(
+                            stringResource(R.string.provider_key_mismatch, stringResource(it.nameRes())),
+                            fontSize = 14.sp,
+                            color = Color(0xFFFFD28A),
+                        )
+                    }
+                    if (key.isBlank() && remoteTyping) {
+                        Text(
+                            stringResource(R.string.provider_remote_typing),
+                            fontSize = 14.sp,
+                            color = Color(0xFFB8BDC6),
+                        )
                     }
                     OutlinedButton(onClick = {
                         reveal = !reveal
