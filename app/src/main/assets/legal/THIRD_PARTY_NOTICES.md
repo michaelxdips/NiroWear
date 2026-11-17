@@ -8,6 +8,7 @@ Third-party components retain their own license terms. These notices do not gran
 | Material Keyboard/Voice vectors | [Apache-2.0](MATERIAL_ICONS_LICENSE.txt), [Google attribution and SVG conversion notice](MATERIAL_ICONS_NOTICE.txt) |
 | CommonMark and table/autolink extensions 0.24.0 | [BSD-2-Clause](COMMONMARK-BSD-2-Clause.txt), Copyright 2015 Atlassian Pty Ltd |
 | autolink-java 0.11.0 | [MIT](AUTOLINK-MIT.txt), Copyright 2015 Robin Stocker |
+| ZXing core 3.5.3 (pairing QR encode, and the decoder the JVM test scans the rendered pixels with) | [Apache-2.0](LICENSE-809fa1ed2145.txt), Copyright ZXing Authors |
 | Kotlin standard library 2.3.21 | [Apache-2.0](KOTLIN-LICENSE.txt), [copyright](KOTLIN-COPYRIGHT.txt), [ThreeTenBP BSD terms](KOTLIN-THREETENBP-BSD-3-Clause.txt), [Boost terms](KOTLIN-BOOST-1.0.txt) |
 | kotlinx.coroutines 1.9.0 | [License](COROUTINES-LICENSE.txt), [NOTICE](COROUTINES-NOTICE.txt) |
 | kotlinx.serialization 1.11.0 | [License](SERIALIZATION-LICENSE.txt), [NOTICE](SERIALIZATION-NOTICE.txt) |

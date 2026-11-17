@@ -2995,12 +2995,12 @@ adb install -r app-release.apk</pre>
             </tr>
             <tr>
               <td>Renderer emits semantic blocks, never one text node — and a big table or code fence expands into per-row / per-chunk lazy items, so nothing is withheld</td>
-              <td><span class="pill pill-source">Source</span> <span class="pill pill-device">JVM</span> 286 tests / 45 suites, 0 failures, 0 errors, 0 skipped. <span class="pill pill-emu">Emulator</span> A 120-row table reaches row 119 and a 200-line fence keeps every line.</td>
+              <td><span class="pill pill-source">Source</span> <span class="pill pill-device">JVM</span> 297 tests / 48 suites, 0 failures, 0 errors, 1 skipped (the opt-in live provider smoke, skipped when its environment variables are absent). <span class="pill pill-emu">Emulator</span> A 120-row table reaches row 119 and a 200-line fence keeps every line.</td>
               <td>ContentBlock.kt, RenderUnit.kt; RenderUnitTest; app/build/test-results/testDebugUnitTest/</td>
             </tr>
             <tr>
               <td>The whole interface is localized, not only the renderer</td>
-              <td><span class="pill pill-source">Source</span> 117 user-visible strings in <code>values/strings.xml</code> with a complete Indonesian set in <code>values-in/strings.xml</code>: 117 keys each, zero missing, zero undefined references. Failure text is included: a stored failure is a token (<code>NETWORK_UNAVAILABLE</code>, <code>TIMEOUT|partial</code>) resolved at display time, so a row written under English reads Indonesian after a language switch and a pre-token row keeps its original sentence.</td>
+              <td><span class="pill pill-source">Source</span> 120 user-visible strings in <code>values/strings.xml</code> with a complete Indonesian set in <code>values-in/strings.xml</code>: 120 keys each, zero missing, zero undefined references. Failure text is included: a stored failure is a token (<code>NETWORK_UNAVAILABLE</code>, <code>TIMEOUT|partial</code>) resolved at display time, so a row written under English reads Indonesian after a language switch and a pre-token row keeps its original sentence.</td>
               <td>values/strings.xml, values-in/strings.xml; ProviderErrorMessageTest; ErrorTextTest</td>
             </tr>
             <tr>
@@ -3017,6 +3017,11 @@ adb install -r app-release.apk</pre>
               <td>Native LaTeX typesetting in release builds</td>
               <td><span class="pill pill-emu">Emulator</span> Release APK produced Math canvas nodes for a display integral and inline math; 30 TTF files present.</td>
               <td>Release notes, v0.2.1</td>
+            </tr>
+            <tr>
+              <td>Pairing offers NFC and QR, not a URL to retype</td>
+              <td><span class="pill pill-device">JVM</span> NDEF URI record, Type 2 Tag capability container and the reader's SELECT/READ exchange asserted byte for byte (<code>NfcPairingTest</code>, 7 tests). <span class="pill pill-device">Watch</span> <code>dumpsys nfc</code> lists <code>NfcPairingService</code> as the default <code>other</code>-category APDU service with AIDs <code>D2760000850101</code> and <code>F001020304050607</code>; the QR node measured 346 px at 466 and 264 px at 384, and the planner's own pixels at those widths decode back to the URL (<code>PairingQrTest</code>, 3 tests). A phone tap and a camera scan are still unverified.</td>
+              <td>NdefTag.kt, NfcPairingService.kt, QrCode.kt, ProviderScreen.kt; NfcPairingTest; PairingQrTest</td>
             </tr>
             <tr>
               <td>Credential pairing encrypts the payload</td>

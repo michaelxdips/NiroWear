@@ -121,6 +121,10 @@ dependencies {
     implementation("org.commonmark:commonmark:0.24.0")
     implementation("org.commonmark:commonmark-ext-gfm-tables:0.24.0")
     implementation("org.commonmark:commonmark-ext-autolink:0.24.0")
+    // Pairing QR: the platform has no QR encoder, and this artifact is also the DECODER the JVM
+    // test uses to prove the rendered pixels scan — an encoder alone could only prove
+    // self-consistency. Apache-2.0, pure JVM (no Android dependency), ~340 KB.
+    implementation("com.google.zxing:core:3.5.3")
     testImplementation("junit:junit:4.13.2")
     // GPL v2-or-later WITH an independent-module linking exception: the exception permits linking
     // with MIT code and distributing the executable under terms of our choice. Notices + source

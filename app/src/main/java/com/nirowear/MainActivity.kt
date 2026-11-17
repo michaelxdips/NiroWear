@@ -662,6 +662,15 @@ private fun ChatReader(
                             .SolidColor(Color.White),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                     keyboardActions = KeyboardActions(onSend = { submitEditor() }),
+                    // singleLine is what makes the ImeAction above real. A multi-line
+                    // BasicTextField is flagged TYPE_TEXT_FLAG_MULTI_LINE, so Gboard Wear shows a
+                    // return key and the framework routes Enter to a newline instead of onSend —
+                    // measured on the reference watch: with the flag off, a composing draft
+                    // "hello" plus KEYCODE_ENTER became "hello\n" and nothing was sent. The
+                    // keyboard is a full-screen overlay here, so the draft is read in the IME's own
+                    // composing strip anyway and losing soft wrap inside the hidden field costs
+                    // nothing, while the Send key it buys is the only reachable one.
+                    singleLine = true,
                 )
                 Button(
                     onClick = { submitEditor() },

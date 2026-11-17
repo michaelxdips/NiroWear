@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  AIDs answered while a pairing session is armed. D2760000850101 is the NFC Forum NDEF
+  application: a phone reader selects it first, reads the capability container and then the NDEF
+  file, which is what turns a tap into "open this URL". F001020304050607 is the project's own
+  identifier, so an explicit SELECT for this app also answers.
+
+  category="other" is correct here: this is not a payment card, and a watch cannot present a
+  payment AID without a payment app.
+-->
+<host-apdu-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/provider_pairing_nfc_service"
+    android:requireDeviceUnlock="false">
+    <aid-group
+        android:description="@string/provider_pairing_nfc_service"
+        android:category="other">
+        <aid-filter android:name="D2760000850101" />
+        <aid-filter android:name="F001020304050607" />
+    </aid-group>
+</host-apdu-service>

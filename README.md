@@ -115,6 +115,14 @@ To add one: **Menu → Providers / model → Add …**, then fill name, base URL
 - **Discovery failing never blocks manual entry.** Type the model ID yourself; a compatible endpoint may legitimately not implement `/models`.
 - **A model is never silently substituted.** Changing a key on an existing profile does not retarget your next send; switching provider is an explicit action.
 
+### Pairing without typing a URL
+
+`Set up from phone` arms a 120 s session and offers two ways in, both carrying the same capability URL:
+
+- **NFC tap.** The watch emulates an NDEF tag (`HostApduService`, NDEF application `D2760000850101` plus the project AID) so a phone tap opens the page. The emulated tag exists only while the session is armed; outside it every command answers `6A82`.
+- **QR scan.** The same URL is drawn on the dial, integer-scaled so modules never fall on half pixels. `dumpsys nfc` on the reference watch lists the service as the default `other`-category APDU service; the QR's device-measured canvas widths (330 px at 466, 248 px at 384) are the widths `PairingQrTest` decodes back to the URL.
+- **The URL is still shown**, for a phone with neither.
+
 ## Build from source
 
 Requirements: JDK 17+ (developed against Android Studio's JBR), Android SDK 37, and network access for the first dependency resolve.
@@ -177,7 +185,7 @@ Every number below came from a command run on this tree. Anything not measured i
 
 | Check | Result | Source |
 |---|---|---|
-| JVM unit tests | **286 / 286**, 45 suites, 0 failures | `app/build/test-results/testDebugUnitTest/*.xml` |
+| JVM unit tests | **297 tests, 48 suites, 0 failures, 1 skipped** (the opt-in live provider smoke, skipped without its environment variables) | `app/build/test-results/testDebugUnitTest/*.xml` |
 | Android Lint | **0 errors, 0 warnings** | `app/build/reports/lint-results-debug.xml` |
 | ktlint | **0 violations** | `:app:ktlintCheck` |
 | Assemblies | `assembleDebug` + `assembleRelease` pass | Gradle output |
@@ -207,7 +215,7 @@ Three published figures have been wrong and are corrected rather than quietly dr
 - **Published artifact.** `v0.2.1` `app-release.apk`, 3,702,157 B, SHA-256 `56974449…749cb6d9` (from the release API, 2026-11-15; re-hashed locally after download). A local build of the same tree is **not** bit-identical; trust the hash in the release body, not a local cut.
 - **Signing identity.** `CN=NiroWear Release`, SHA-256 `0D:C5:0F:C0:19:…:86:54:3E`, valid to 2056.
 
-**Explicitly unverified.** A physical watch has never run this build: battery, thermals, real touch and bezel input, and TalkBack *audio* are unmeasured. The pairing certificate click-through on a real phone is unmeasured. All are tracked as issues below.
+**Explicitly unverified.** A physical watch has never run this build: battery, thermals, real touch and bezel input, and TalkBack *audio* are unmeasured. The pairing certificate click-through on a real phone is unmeasured. The NFC pairing path is proven down to the bytes (`NfcPairingTest`, `dumpsys nfc`) but no handset has tapped the watch, and the QR has been decoded from rendered pixels in JVM, never scanned by a camera — the provider screen is `FLAG_SECURE`, so its screenshots are black by design. All are tracked as issues below.
 
 **Host-driven gates.** Six instrumentation methods are excluded from the default run because they need real process death between phases (`@HostDrivenGate`, `notAnnotation` in `app/build.gradle.kts`). They are executed by four host scripts that are deliberately outside the published tree — `.gitignore` ignores `scripts/*` and re-includes only `disposable-instrumentation.ps1` and `test-clean-wear.py`, so `check-wear-acceptance-seed.ps1`, `check-native-restart.ps1`, `check-combined-lifecycle.ps1` and `check-credential-promotion.ps1` stay on the maintainer's machine and a clone cannot run them. Each refuses a device whose `adb emu avd name` is not the AVD it was told to expect. Last run on a Wear OS 37 AVD: **all six pass**.
 
@@ -224,7 +232,7 @@ Stated plainly, because a README that hides these is useless.
 - **Test sources are published.** `app/src/test` and `app/src/androidTest` were ignored by the allowlist until 2026-11-16, which meant every CI run executed **zero** tests while reporting success. Both suites are in git now and the `jvm` job's result check refuses a run that produced no result XML.
 - **The connected suite runs in CI as a named smoke gate.** The job boots a Wear OS 5 (API 34) AVD patched to 466 × 466 @ 320 and runs ten classes the physical-watch run passed; the full suite is still a hardware/manual gate because two classes never finish (#50). Every class in the gate was green locally first.
 - **Hardware-only defects are filed, not hidden:** #47 rotary, #48 table semantics on API 34, #50 two classes that do not finish on hardware. #49 (Arabic-Indic digits inside an English sentence) is fixed and verified on the watch: the hidden-cell note formats its count with `Locale.ENGLISH`, and `RendererArPluralTest` now asserts that helper instead of the platform formatter.
-- **A reported Send-tap layout shift is not reproduced yet (#52).** With the composer open and the IME shown, the measured bounds are `Prompter [177,56][289,94]`, editor `[80,126][386,274]`, Send `[197,340][270,376]` on a 466 px screen — no double inset at that moment. A real provider key (or a debug fixture) is needed to admit a turn and compare the list anchor before and after the tap.
+- **The Send tap was a keyboard tap (#52), and that is fixed.** With the composer open the IME covers the whole 466 px dial (measured: `mIsInputViewShown=true`, screenshot shows no app pixels), so the app's own Send button at `[197,340][270,376]` sits under the letter row: tapping it typed `v` and the draft became `hellov` instead of being sent. The reachable control is the IME's own Send key, and it did not work either — `BasicTextField` defaulted to multi-line, so the field reported `inputType=0x28001` (TYPE_TEXT_FLAG_MULTI_LINE) with `imeOptions=0x2000004` (`IME_FLAG_NO_ENTER_ACTION`) and Enter appended `\n`. With `singleLine = true` the same key sends: measured `OK (1 test)` for `ComposerSendReachabilityTest#enterDoesNotInsertNewline`, and a typed `ping` sent from the IME produced `Streaming…`, then `Pong—I'm reachable.` from `gpt-6-luna` with the keyboard closed.
 - **Math limits.** Rendering is cached in memory, so a formula does not flash its raw LaTeX when it scrolls back. A formula wider than the bitmap bound is typeset once at a smaller size — never below half — before falling back to readable source text. File-inclusion macros, macro definitions, unbalanced braces and oversized `\rule` dimensions are refused outright.
 - **Renderer limits, still true.** A fence opened inside a quote can be closed by a `> ``` ` line inside its own sample. A table row wider than its header has extra cells dropped by the Markdown parser; the count is announced, but only for the block shapes the overflow scan has tests for.
 

@@ -70,6 +70,9 @@
     <string name="provider_pairing_starting">Starting…</string>
     <string name="provider_not_home_network">Not a home network. Cancel if unsure.</string>
     <string name="provider_pairing_unavailable">Pairing unavailable. Enter the key below.</string>
+    <string name="provider_pairing_nfc">Tap your phone to the watch, or scan the code.</string>
+    <string name="provider_pairing_qr">Pairing QR code</string>
+    <string name="provider_pairing_nfc_service">NiroWear pairing</string>
     <string name="provider_label_name">Name</string>
     <string name="provider_label_base_url">Base URL</string>
     <string name="provider_label_manual_model">Manual model ID</string>

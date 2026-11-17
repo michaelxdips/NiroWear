@@ -212,6 +212,46 @@ class ComposerSendReachabilityTest {
         }
     }
 
+    /**
+     * The IME action must SEND, not insert a newline.
+     *
+     * Measured defect on the reference watch: `BasicTextField` defaults to multi-line, which marks
+     * the field TYPE_TEXT_FLAG_MULTI_LINE, so Gboard Wear swapped its Send key for a return key and
+     * Enter appended "\n" to the draft. A user tapping where the app's Send button had been typed a
+     * stray character and the draft moved, which is the reported "tapping Send shifts the message".
+     *
+     * Tolerant by design: with a provider configured Enter sends and the editor closes; with none the
+     * ViewModel refuses, the editor stays open and the draft survives. Both are acceptable outcomes —
+     * a newline is not.
+     */
+    @Test fun enterDoesNotInsertNewline() {
+        val activity =
+            i.startActivitySync(
+                Intent(i.targetContext, MainActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK),
+            )
+        try {
+            val editor = awaitComposer()
+            assertTrue(
+                "ACTION_SET_TEXT on the composer",
+                editor.performAction(
+                    AccessibilityNodeInfo.ACTION_SET_TEXT,
+                    Bundle().apply {
+                        putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, draft)
+                    },
+                ),
+            )
+            awaitNode("composer text '$draft'") { it.text?.toString()?.contains(draft) == true }
+            shell("input keyevent 66")
+            SystemClock.sleep(1500)
+            val remaining = composer()?.text?.toString().orEmpty()
+            println("After Enter the composer reads '${remaining.take(40)}'")
+            assertFalse("Enter must not insert a newline, composer='$remaining'", remaining.contains("\n"))
+        } finally {
+            i.runOnMainSync { activity.finish() }
+        }
+    }
+
     private companion object {
         /** Clear space required below the Send target when IME geometry is unavailable (observed 56px). */
         const val MIN_KEYBOARD_STRIP_PX = 32
