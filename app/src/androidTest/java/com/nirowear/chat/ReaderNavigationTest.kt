@@ -101,6 +101,23 @@ class ReaderNavigationTest {
         SystemClock.sleep(300)
     }
 
+    /**
+     * Accessibility click on the label's clickable ancestor. A coordinate tap cannot reach a control
+     * that the full-screen IME covers, but the semantics node is still in the app tree, so
+     * ACTION_CLICK is the only host-side path that stays valid with the keyboard up.
+     */
+    private fun clickNode(label: String): Boolean {
+        repeat(20) {
+            var n = find(label)
+            while (n != null) {
+                if (n.isClickable) return n.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                n = n.parent
+            }
+            SystemClock.sleep(150)
+        }
+        return false
+    }
+
     private fun tap(
         label: String,
         scroll: Boolean = false,
@@ -661,7 +678,7 @@ class ReaderNavigationTest {
                             "\n\n",
                         ) { "Edited continuation $it. New content remains readable." }
                     server.enqueue(response(replacement))
-                    tap("Edit & resend")
+                    assertTrue("Edit & resend is not clickable through semantics", clickNode("Edit & resend"))
                     await("Retry response")
                     val finish = SystemClock.uptimeMillis() + 10000
                     while (dao.snapshot(id).last().status == "STREAMING" &&
