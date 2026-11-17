@@ -3030,7 +3030,7 @@ adb install -r app-release.apk</pre>
             </tr>
             <tr>
               <td>Touch reach, battery and thermals on a real watch</td>
-              <td><span class="pill pill-hw">Watch</span> v0.2.1 installed on a Xiaomi Watch 2 (API 34, 466x466, armeabi-v7a): versionCode 14, signer verified, cold start <strong>1,174 ms</strong>. Battery and thermals are still unmeasured; the rotary crown does not move the reader (#47).</td>
+              <td><span class="pill pill-hw">Watch</span> v0.2.1 installed on a Xiaomi Watch 2 (API 34, 466x466, armeabi-v7a): versionCode 14, signer verified, cold start <strong>median 723 ms</strong> over five release launches (720-1,105 ms). Battery and thermals are still unmeasured; the rotary crown does not move the reader (#47).</td>
               <td>adb; issue #47</td>
             </tr>
             <tr>
@@ -3084,7 +3084,7 @@ adb install -r app-release.apk</pre>
         <p class="status-note">
           <strong>Physical watch, 2026-11-16.</strong> v0.2.1 was installed on a Xiaomi Watch 2: Android
           14 / API 34, 466x466 @ 320 dpi, <code>armeabi-v7a</code>, versionCode 14, signer
-          <code>0dc50f…86543e</code>, cold start <strong>1,174 ms</strong>. The suite was then run per
+          <code>0dc50f…86543e</code>, cold start <strong>median 723 ms</strong> over five release launches (720-1,105 ms; first observed 1,174 ms). The suite was then run per
           class with <code>am instrument</code> and <code>pm clear</code> between classes. 25 of 43
           classes passed first pass; eleven of the eighteen failures were <code>adb: device offline</code>,
           not test results, because this watch drops the ADB transport when it sleeps. Real defects found
@@ -3098,10 +3098,11 @@ adb install -r app-release.apk</pre>
           Test sources are published as of 2026-11-16. Until then <code>app/src/test</code> and
           <code>app/src/androidTest</code> were ignored by the repository's allowlist, so every CI run
           executed <strong>zero</strong> tests and still reported success. The <code>jvm</code> job now
-          runs 286 tests in 45 suites and refuses a run that produced no result XML; a new
-          <code>instrumented</code> job boots a Wear OS 5 (API 34) AVD patched to 466x466 @ 320 on every
-          pull request. That job is new: its first green run is its evidence, and this page will cite the
-          run id when it exists.
+          runs 286 tests in 45 suites and refuses a run that produced no result XML; the
+          <code>instrumented</code> job boots a Wear OS 5 (API 34) AVD patched to 466x466 @ 320 and runs a
+          named smoke subset of ten classes that passed on the physical watch (run
+          <code>44022163836</code> is green). The full suite stays a hardware gate while #50 (two classes
+          that never finish) is open.
         </p>
 
       </div>

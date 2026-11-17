@@ -57,6 +57,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.Path
@@ -620,6 +622,11 @@ private fun ChatReader(
                     editedId = null
                 }
             }
+            val focusRequester = remember { FocusRequester() }
+            // Opening the editor used to need a SECOND tap on the field before the IME appeared, which
+            // is exactly the "wait for the keyboard" step the owner reported. Focus is requested as the
+            // editor composes, so one tap on Keyboard input starts typing.
+            LaunchedEffect(Unit) { focusRequester.requestFocus() }
             Column(
                 // imePadding, not just adjustResize: this app targets SDK 37, so on Android 15+
                 // it is edge-to-edge by default and the IME arrives as an INSET the window no
@@ -647,6 +654,7 @@ private fun ChatReader(
                             // and announced only "edit box" — the heading is a separate node and does
                             // not describe the field it sits above.
                             .semantics { contentDescription = promptEditorLabel }
+                            .focusRequester(focusRequester)
                             .padding(8.dp),
                     textStyle = TextStyle(color = Color.White, fontSize = 16.sp),
                     cursorBrush =
