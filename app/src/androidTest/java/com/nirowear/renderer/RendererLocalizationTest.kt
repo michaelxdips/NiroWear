@@ -94,7 +94,13 @@ class RendererLocalizationTest {
                     if (count == 0) {
                         assertFalse("Zero should show no hidden-cell notice", texts.any { it.contains("cell") || it.contains("sel") })
                     } else {
-                        val number = NumberFormat.getIntegerInstance(locale).apply { isGroupingUsed = false }.format(count)
+                        // ASCII digits on purpose: the note falls back to English when no
+                        // translation exists, and getQuantityString formatting with the
+                        // READER's locale put Arabic-Indic digits inside an English sentence
+                        // (#49). hiddenCellsText therefore formats with Locale.ENGLISH, and
+                        // this expectation follows that decision instead of contradicting it.
+                        val number =
+                            NumberFormat.getIntegerInstance(Locale.ENGLISH).apply { isGroupingUsed = false }.format(count)
                         val singular = count == 1
                         val expected = if (locale == Locale.forLanguageTag("id")) {
                             if (singular) {

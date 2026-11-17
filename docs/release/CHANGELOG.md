@@ -3,6 +3,22 @@
 Notable changes to NiroWear. Versions follow the published APK releases at
 [NiroWear releases](https://github.com/michaelxdips/NiroWear/releases).
 
+## 0.2.2 — 2026-11-17
+
+Fixed from measurements on the physical watch, with the numbers kept next to each claim:
+
+- **`Stop` label centered.** Measured `Rect(189,344,243,380)` inside `Rect(161,314,305,410)` — 17 px
+  left of centre, from the icon-aware default content padding. Now a full-width, centre-aligned label:
+  `dx = 0, dy = 0` (`StopButtonCenterTest`).
+- **Composer holds a full `TextFieldValue`** (text + selection + composition) for the draft and the
+  edit body; the editor was measured handing the app `composition=(0,2)` while only the text was kept.
+  The lost-word symptom in #62 did not reproduce through real typing and stays open with that evidence.
+- **Provider screen fully localized (#66):** `Tambah compatible` → `Tambah kompatibel`; the key-shape
+  advisory and the remote-typing tip are resources now. 124 keys per locale, zero missing.
+- **`RendererLocalizationTest`** no longer expects Arabic-Indic digits inside the English fallback
+  sentence, matching the #49 decision.
+- Release notes: `docs/release/RELEASE_NOTES_0.2.2.md`.
+
 ## Unreleased
 
 ### Tests actually run in CI
