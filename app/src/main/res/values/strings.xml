@@ -66,7 +66,7 @@
     <string name="provider_cancel_pairing">Cancel pairing</string>
     <string name="provider_no_wifi">No Wi-Fi address. Turn on Wi-Fi, or enter the key below.</string>
     <string name="provider_key_received">Key received.</string>
-    <string name="provider_pairing_starting">Startingâ€¦</string>
+    <string name="provider_pairing_starting">Starting…</string>
     <string name="provider_not_home_network">Not a home network. Cancel if unsure.</string>
     <string name="provider_pairing_unavailable">Pairing unavailable. Enter the key below.</string>
     <string name="provider_pairing_nfc">Tap your phone to the watch, or scan the code.</string>
@@ -92,7 +92,7 @@
     <string name="provider_deleted">Provider deleted. History kept.</string>
     <string name="provider_delete_failed">Delete failed. Try again.</string>
     <string name="provider_delete">Delete provider</string>
-    <string name="provider_working">Workingâ€¦</string>
+    <string name="provider_working">Working…</string>
 
     <!-- Reader action button in the chat overlay. -->
     <string name="reader_action_retry">Retry response</string>

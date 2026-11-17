@@ -66,7 +66,7 @@
     <string name="provider_cancel_pairing">Batalkan pemasangan</string>
     <string name="provider_no_wifi">Tidak ada alamat Wi-Fi. Nyalakan Wi-Fi, atau masukkan key di bawah.</string>
     <string name="provider_key_received">Key diterima.</string>
-    <string name="provider_pairing_starting">Memulaiâ€¦</string>
+    <string name="provider_pairing_starting">Memulai…</string>
     <string name="provider_not_home_network">Bukan jaringan rumah. Batalkan jika ragu.</string>
     <string name="provider_pairing_unavailable">Pemasangan tidak tersedia. Masukkan key di bawah.</string>
     <string name="provider_pairing_nfc">Tempelkan ponsel ke jam, atau pindai kode.</string>
@@ -92,7 +92,7 @@
     <string name="provider_deleted">Provider dihapus. Riwayat tetap disimpan.</string>
     <string name="provider_delete_failed">Gagal menghapus. Coba lagi.</string>
     <string name="provider_delete">Hapus provider</string>
-    <string name="provider_working">Bekerjaâ€¦</string>
+    <string name="provider_working">Bekerja…</string>
 
     <!-- Reader action button in the chat overlay. -->
     <string name="reader_action_retry">Ulangi jawaban</string>
