@@ -1282,7 +1282,25 @@ private fun ChatReader(
                                         chat.stop()
                                     },
                                     modifier = Modifier.widthIn(min = 72.dp).heightIn(min = 48.dp),
-                                ) { Text(stringResource(R.string.chat_stop), fontSize = 12.sp, maxLines = 1) }
+                                    // Measured on the reference watch: with the default (icon-aware)
+                                    // content padding the label sat at Rect(189,344,243,380) inside a
+                                    // button at Rect(161,314,305,410) — 17 px left of centre, which
+                                    // is the "Stop is slightly not centred" report. A text-only
+                                    // button needs no leading icon reserve.
+                                    contentPadding = PaddingValues(0.dp),
+                                ) {
+                                    // The button's minimum width is wider than the word, and the
+                                    // content ROW starts at the left edge, so the label has to claim
+                                    // the full width and centre its own text: measured 17 px off with
+                                    // the default padding and 45 px off with padding alone.
+                                    Text(
+                                        stringResource(R.string.chat_stop),
+                                        fontSize = 12.sp,
+                                        maxLines = 1,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        textAlign = TextAlign.Center,
+                                    )
+                                }
                             }
                             if (!following) ReaderAction(retry = false, onClick = { following = true })
                         } else {

@@ -2230,8 +2230,8 @@ html[data-theme="dark"] .pill-hw{color:#C79BFF}
         </p>
 
         <div class="actions">
-          <a class="btn" href="https://github.com/michaelxdips/NiroWear/releases/download/v0.2.1/app-release.apk">
-            Download APK <span class="sz">3.7 MB · v0.2.1</span>
+          <a class="btn" href="https://github.com/michaelxdips/NiroWear/releases/latest/download/app-release.apk">
+            Download APK <span class="sz">v0.2.2</span>
           </a>
           <a class="btn line" href="#bench">Try the renderer</a>
         </div>
@@ -2859,7 +2859,7 @@ HTTP/1.1 400
             <pre>adb install -r app-release.apk</pre>
           </div>
           <p class="fine">
-            Signed · non-debuggable · versionCode 14 · the exact size and SHA-256 are printed in the release body by the workflow that built it
+            Signed · non-debuggable · versionCode 15 ( .2.2) · the exact size and SHA-256 are printed in the release body by the workflow that built it
           </p>
         </div>
 
@@ -2935,7 +2935,7 @@ adb install -r app-release.apk</pre>
           </div>
           <div class="limit">
             <dt>Screen reader</dt>
-            <dd>TalkBack <em>audio</em> acceptance is still incomplete — nobody has listened to a real watch. The four measured structural dead stops are fixed: the "Links" group node is actionable (announces the count, opens the first link), the composer field carries its own label, a credential entry's label is no longer read twice, and the provider header grows to two lines instead of clipping at 130 dp.</dd>
+            <dd>TalkBack <em>audio</em> acceptance is still incomplete — nobody has listened to a real watch. The four measured structural dead stops are fixed: the "Links" group node is actionable (announces the count, opens the first link), the composer field carries its own label, a credential entry's label is no longer read twice, and the provider header grows to two lines instead of clipping at 130 dp. Traversal order on the empty-state dial was measured from the node tree (2026-11-17): reader → "Ask anything" → "Add provider from menu." → Menu → provider header → Keyboard input → Voice input, with every control carrying a <code>content-desc</code> and a 96 px (48 dp) box.</dd>
           </div>
           <div class="limit">
             <dt>0.1.1 lifecycle fixes</dt>
@@ -2980,7 +2980,7 @@ adb install -r app-release.apk</pre>
           <tbody>
             <tr>
               <td>The published APK is signed by the release identity</td>
-              <td><span class="pill pill-source">Source</span> <span class="pill pill-device">JVM</span> <code>apksigner verify --print-certs</code> on the downloaded <code>v0.2.1</code> asset reports <code>CN=NiroWear Release</code> / <code>0dc50fc0…86543e</code>, and <code>aapt2 dump badging</code> reports <code>versionCode='14' versionName='0.2.1'</code>; the release workflow asserts the same certificate before it publishes. 0.1.0 was signed with the Android debug lineage, so a 0.1.0 install must be uninstalled before updating.</td>
+              <td><span class="pill pill-source">Source</span> <span class="pill pill-device">JVM</span> <code>apksigner verify --print-certs</code> on the downloaded <code>v0.2.1</code> asset reports <code>CN=NiroWear Release</code> / <code>0dc50fc0…86543e</code>, and <code>aapt2 dump badging</code> reports <code>versionCode='14' versionName='0.2.1'</code> (checked 2026-11-15; <code>0.2.2</code> is signed by the same workflow and identity, from manifest <code>versionCode 15</code>); the release workflow asserts the same certificate before it publishes. 0.1.0 was signed with the Android debug lineage, so a 0.1.0 install must be uninstalled before updating.</td>
               <td>.github/workflows/release.yml; release body</td>
             </tr>
             <tr>
@@ -3000,7 +3000,7 @@ adb install -r app-release.apk</pre>
             </tr>
             <tr>
               <td>The whole interface is localized, not only the renderer</td>
-              <td><span class="pill pill-source">Source</span> 119 user-visible strings in <code>values/strings.xml</code> with a complete Indonesian set in <code>values-in/strings.xml</code>: 119 keys each, zero missing, zero undefined references. Failure text is included: a stored failure is a token (<code>NETWORK_UNAVAILABLE</code>, <code>TIMEOUT|partial</code>) resolved at display time, so a row written under English reads Indonesian after a language switch and a pre-token row keeps its original sentence.</td>
+              <td><span class="pill pill-source">Source</span> 124 user-visible strings in <code>values/strings.xml</code> with a complete Indonesian set in <code>values-in/strings.xml</code>: 124 keys each, zero missing, zero undefined references (counted 2026-11-17). Provider-type names and the two provider-screen hints resolve from resources instead of being formatted in Kotlin, so the in-ID title reads <code>Tambah kompatibel</code> rather than <code>Tambah compatible</code>. Failure text is included: a stored failure is a token (<code>NETWORK_UNAVAILABLE</code>, <code>TIMEOUT|partial</code>) resolved at display time, so a row written under English reads Indonesian after a language switch and a pre-token row keeps its original sentence.</td>
               <td>values/strings.xml, values-in/strings.xml; ProviderErrorMessageTest; ErrorTextTest</td>
             </tr>
             <tr>
@@ -3016,7 +3016,7 @@ adb install -r app-release.apk</pre>
             <tr>
               <td>Native LaTeX typesetting in release builds</td>
               <td><span class="pill pill-emu">Emulator</span> Release APK produced Math canvas nodes for a display integral and inline math; 30 TTF files present.</td>
-              <td>Release notes, v0.2.1</td>
+              <td>Release notes, v0.2.2</td>
             </tr>
             <tr>
               <td>Pairing offers NFC and QR, not a URL to retype</td>
@@ -3035,7 +3035,7 @@ adb install -r app-release.apk</pre>
             </tr>
             <tr>
               <td>Touch reach, battery and thermals on a real watch</td>
-              <td><span class="pill pill-hw">Watch</span> v0.2.1 installed on a Xiaomi Watch 2 (API 34, 466x466, armeabi-v7a): versionCode 14, signer verified, cold start <strong>median 723 ms</strong> over five release launches (720-1,105 ms). Battery and thermals are still unmeasured; the rotary crown does not move the reader (#47).</td>
+              <td><span class="pill pill-hw">Watch</span> v0.2.1 installed on a Xiaomi Watch 2 (API 34, 466x466, armeabi-v7a): versionCode 14, signer verified, cold start <strong>median 723 ms</strong> over five release launches (720-1,105 ms) on 2026-11-16. Re-measured 2026-11-17 on the same class of unit (docked, charging, release of <code>main</code>): <strong>median 4373 ms</strong> (4311, 4345, 4406, 4619 ms of four valid runs) — a 6× gap filed as #65, not folded into the older figure. Battery and thermals are still unmeasured; the rotary crown does not move the reader (#47).</td>
               <td>adb; issue #47</td>
             </tr>
             <tr>
@@ -3071,8 +3071,8 @@ adb install -r app-release.apk</pre>
 
         <p class="status-note">
           The JVM and lint figures above were read from the result XML produced by a forced re-run on
-          2026-11-16 (<code>286 tests / 45 suites</code>, lint 0 warnings), not quoted from memory. This
-          page describes <strong>0.2.1</strong>; the audit rounds that produced it changed chat
+          2026-11-17 (<code>303 tests / 49 suites</code>, lint 0 warnings), not quoted from memory. This
+          page describes <strong>0.2.2</strong>; the audit rounds that produced it changed chat
           lifecycle, Keystore, adapter and renderer code, so any claim here that cites an earlier
           emulator run is dated rather than current. The connected-test suite is now MEASURED, not
           assumed: <strong>71 tests, 2 failing, 0 errors</strong> on a Wear OS 37 AVD (2026-11-09). An
@@ -3100,10 +3100,27 @@ adb install -r app-release.apk</pre>
           targets stay 48 dp, and measured screenshots at 384 and node bounds at 466 confirm the fix.
         </p>
         <p class="status-note">
+          <strong>Physical watch, 2026-11-17 (second pass, <code>main</code> after #64/#67/#68).</strong>
+          Cold start re-measured at <strong>median 4373 ms</strong> (4311, 4345, 4406, 4619 ms of four valid
+          <code>am start -W</code> runs after <code>am force-stop</code>), six times the 2026-11-16 figure — filed as
+          #65 rather than overwriting it. Scroll cost: <strong>761 frames, 9 janky (1.18 %)</strong>, 50th percentile
+          8 ms, 90th 13 ms, 95th 25 ms, 99th 44 ms. A <code>454x454</code> override kept every control at 96 px
+          (48 dp) and the reader at <code>[0,96][454,250]</code>. The <strong>Stop</strong> label was measured 17 px left
+          of centre (<code>Rect(189,344,243,380)</code> inside <code>Rect(161,314,305,410)</code>) and is now
+          <strong>dx = 0, dy = 0</strong> with a full-width, centre-aligned label. The second send through the app
+          button was measured with real key taps and one BACK press to dismiss the keyboard (ESCAPE and swipe-down do
+          not dismiss Gboard Wear): drafts stored unchanged and the reader's first row stayed
+          <code>Rect(48,114,418,158)</code> across the send. The full suite was then run per class with
+          <code>pm clear</code> between classes — <strong>38 of 45 passed</strong>; one failure is the phone-browser
+          pairing test, one was a stale Arabic-digit expectation that contradicted #49 and has been corrected, and four
+          classes produced no summary because the runner died at teardown with a
+          <code>DeadObjectException</code> from <code>UiAutomation.disconnect</code> (#50 tracks the two known ones).
+        </p>
+        <p class="status-note">
           Test sources are published as of 2026-11-16. Until then <code>app/src/test</code> and
           <code>app/src/androidTest</code> were ignored by the repository's allowlist, so every CI run
           executed <strong>zero</strong> tests and still reported success. The <code>jvm</code> job now
-          runs 286 tests in 45 suites and refuses a run that produced no result XML; the
+          runs 303 tests in 49 suites and refuses a run that produced no result XML; the
           <code>instrumented</code> job boots a Wear OS 5 (API 34) AVD patched to 466x466 @ 320 and runs a
           named smoke subset of ten classes that passed on the physical watch (run
           <code>44022163836</code> is green). The full suite stays a hardware gate while #50 (two classes

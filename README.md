@@ -78,8 +78,8 @@ It exists because a watch is a bad screen for a good answer. Every other approac
 
 ### Interface
 
-- **Fully localized.** 117 user-visible strings in English and Indonesian (`values/` + `values-in/`, the
-  same 117 keys in both files, none missing), on top of the renderer's own resource set.
+- **Fully localized.** 124 user-visible strings in English and Indonesian (`values/` + `values-in/`, the
+  same 124 keys in both files, none missing, counted 2026-11-17), on top of the renderer's own resource set. The provider screen's hints and provider-type names resolve from resources rather than being formatted in Kotlin, so a sentence cannot leak English into the Indonesian UI (#66).
 - **Accessibility that is tested, not asserted.** The link group node is actionable, the composer field carries its own label, credential labels are announced once, and the provider header grows instead of clipping at large font scales. TalkBack *audio* acceptance still needs a real watch — see [Limitations](#known-limitations).
 
 ## Install
@@ -215,7 +215,17 @@ Three published figures have been wrong and are corrected rather than quietly dr
 - **Composer, real Gboard taps** (keys measured from a screenshot; rows y=205/277/342, space y=420): `h i` → `Hi`, space → `Hi `, `t h e r e` → `Hi there`, space → `Hi there `. A multi-word prompt survives real keyboard commits, and the IME's own Send stored `hi there` in the conversation against a mock provider (`ComposerImeCommitTest`, `OK (1 test)`). The reported lost-word symptom (#62) did **not** reproduce on either the pre-change or the current build — see the evidence on the issue; the composer still now keeps the whole `TextFieldValue` (text + selection + composition) instead of only its text, because the editor was measured handing the app `composition=(0,2)` while the app stored the text alone.
 - **Documents the limits of the drivers:** `adb shell input text` and injected key events deliver nothing while the keyboard window is up, and an `InputConnection` taken from `AndroidComposeView` is not the served IME session — both were measured and are recorded in `ComposerImeCommitTest` so they are not "rediscovered" as evidence.
 - **Locale walk in `in-ID`** (`cmd locale set-app-locales`): Home, Menu, History and Provider read Indonesian (`Pembaca percakapan`, `Input keyboard`, `Riwayat`, `Kembali`, `Tambah kompatibel`, `Provider kustom`). One string mixes languages — the screen title reads `Tambah compatible` because `ProviderType.label` is hard-coded English (#66).
-- **Rotary, re-confirmed absent:** `pm list features` lists only `android.hardware.type.watch` and the watchface runtime, and `dumpsys input` has no `ROTARY` line (#47). `logcat -b crash` held no entries.
+- **Rotary, re-confirmed absent:** `pm list features` lists only `android.hardware.type.watch` and the watchface runtime, and `dumpsys input` has no `ROTARY` line (#47). `logcat -b crash` held no entries before the suite run.
+- **Scroll cost:** `dumpsys gfxinfo com.nirowear` after 18 swipes over the stored answers reports **761 frames, 9 janky (1.18 %; legacy metric 7.88 %)**, 50th percentile 8 ms, 90th 13 ms, 95th 25 ms, 99th 44 ms, GPU 50th 2 ms / 99th 9 ms.
+- **454 × 454 override** (`wm size 454x454`, then `reset`): the reader took `[0,96][454,250]` and the three controls stayed 96 × 96 px (48 dp) at `[71,262][167,358]`, `[179,262][275,358]`, `[287,262][383,358]` — no clipping, no scale change.
+- **"Stop" label centring, measured and fixed:** the label sat at `Rect(189,344,243,380)` inside a button at `Rect(161,314,305,410)` — **17 px left of centre**, which is the owner's report. Wear Material 3 pads a button for an optional leading icon; with `contentPadding = PaddingValues(0.dp)` the label moved to the left edge (45 px off), and the fix that holds is a full-width label with `TextAlign.Center`, measured `Rect(161,344,305,380)` against `Rect(161,314,305,410)`: **dx = 0, dy = 0** (`StopButtonCenterTest`, `OK (1 test)`).
+- **#52, second send through the app button:** keys typed for real, keyboard dismissed with one BACK press (**ESCAPE and a swipe-down do not dismiss Gboard Wear — measured**), then `ACTION_CLICK` on Send. Drafts stored unchanged (`Ping`, `Pong`) and the reader's first row stayed `Rect(48,114,418,158)` before and after the second send (`ComposerSendButtonTest`, `OK (1 test)`).
+- **#66 fixed and re-measured:** the in-ID provider title now reads `Tambah kompatibel`; the two hint sentences that were formatted in Kotlin moved behind `provider_key_mismatch` / `provider_remote_typing`. Resource parity is exact: **124 keys in each locale, zero missing, zero extra**.
+- **Per-class instrumented run with `pm clear` between classes** (45 classes, `am instrument -e class`, `notAnnotation com.nirowear.HostDrivenGate`, 420 s cap per class): **38 passed**, 2 failed, 1 lost the ADB transport, 4 produced no JUnit summary.
+  - `PairingUiTest#keyArrivesFromPhoneWithoutTypingOnWatch` fails as designed — no phone browser (#28).
+  - `RendererLocalizationTest#hiddenCellNoticesUseLocaleAndQuantity` expected Arabic-Indic digits for `ar`, contradicting the #49 decision (ASCII digits inside the English fallback sentence); the expectation was stale and now follows the decision.
+  - No summary: `ReaderNavigationTest`, `ProviderSetupUiTest`, `StoppedStatusUiTest`, `ProviderValidationRaceTest`. The crash buffer shows the runner dying at teardown with `java.lang.RuntimeException: Error while disconnecting UiAutomation … DeadObjectException` (`Instrumentation.finish`), not a product assertion. #50 keeps tracking the first two.
+  - `SettingsRecoveryTest` produced no summary in the sweep and **passed (3 tests)** when re-run alone — the sweep's no-summary is not stable evidence.
 
 **Other measured facts**
 

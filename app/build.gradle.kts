@@ -1,4 +1,4 @@
-﻿import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     id("com.android.application")
@@ -33,8 +33,8 @@ android {
         applicationId = "com.nirowear"
         minSdk = 30
         targetSdk = 37
-        versionCode = 14
-        versionName = "0.2.1"
+        versionCode = 15
+        versionName = "0.2.2"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         testInstrumentationRunnerArguments["notAnnotation"] = "com.nirowear.HostDrivenGate"
     }
