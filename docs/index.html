@@ -2979,84 +2979,49 @@ adb install -r app-release.apk</pre>
           </thead>
           <tbody>
             <tr>
-              <td>The published APK is signed by the release identity</td>
-              <td><span class="pill pill-source">Source</span> <span class="pill pill-device">JVM</span> <code>apksigner verify --print-certs</code> on the downloaded <code>v0.2.1</code> asset reports <code>CN=NiroWear Release</code> / <code>0dc50fc0…86543e</code>, and <code>aapt2 dump badging</code> reports <code>versionCode='14' versionName='0.2.1'</code> (checked 2026-11-15). <code>v0.2.2</code> was published on 2026-11-17 by the same workflow and identity: <code>versionCode 15</code>, <code>app-release.apk</code> <strong>3,761,661 B</strong>, SHA-256 <code>1ba0fa8c...802322771</code>; the release workflow asserts the same certificate before it publishes. 0.1.0 was signed with the Android debug lineage, so a 0.1.0 install must be uninstalled before updating.</td>
-              <td>.github/workflows/release.yml; release body</td>
+              <td>Signed release identity</td>
+              <td><span class="pill pill-device">JVM</span> <code>apksigner</code> on the published asset reads <code>CN=NiroWear Release</code> / <code>0dc50fc0…86543e</code>; <code>aapt2</code> reads <code>versionCode 15</code>. <code>v0.2.2</code>, 2026-11-17: <strong>3,761,661 B</strong>, SHA-256 <code>1ba0fa8c…802322771</code>, asserted by the workflow before publishing. A 0.1.0 install used the debug lineage and needs an uninstall first.</td>
+              <td>release.yml; release body</td>
             </tr>
             <tr>
-              <td>Four adapters, four distinct wire protocols</td>
-              <td><span class="pill pill-source">Source</span> One class per provider type; request builders and decoders are separate files.</td>
-              <td>app/src/main/java/com/nirowear/provider/</td>
+              <td>Four adapters, four protocols, no silent EOF</td>
+              <td><span class="pill pill-source">Source</span> One class per provider type; each decoder requires its own terminal event, so a closed socket without one is a failure, not a short answer.</td>
+              <td>provider/*Provider.kt</td>
             </tr>
             <tr>
-              <td>EOF is never treated as success</td>
-              <td><span class="pill pill-source">Source</span> Each decoder requires its own terminal event; a closed socket without one is a failure.</td>
-              <td>OpenAiProvider, AnthropicProvider, GeminiProvider, OpenAiCompatibleProvider</td>
+              <td>Semantic blocks, nothing withheld</td>
+              <td><span class="pill pill-source">Source</span><span class="pill pill-device">JVM</span> Blocks, with per-row and per-chunk lazy items; <strong>303 tests / 49 suites, 0 failures, 1 skipped</strong>. <span class="pill pill-emu">Emulator</span> A 120-row table reaches row 119; a 200-line fence keeps every line.</td>
+              <td>ContentBlock.kt, RenderUnit.kt; RenderUnitTest (5)</td>
             </tr>
             <tr>
-              <td>Renderer emits semantic blocks, never one text node — and a big table or code fence expands into per-row / per-chunk lazy items, so nothing is withheld</td>
-              <td><span class="pill pill-source">Source</span> <span class="pill pill-device">JVM</span> 303 tests / 49 suites, 0 failures, 0 errors, 1 skipped (the opt-in live provider smoke, skipped when its environment variables are absent). <span class="pill pill-emu">Emulator</span> A 120-row table reaches row 119 and a 200-line fence keeps every line.</td>
-              <td>ContentBlock.kt, RenderUnit.kt; RenderUnitTest; app/build/test-results/testDebugUnitTest/</td>
+              <td>Localized end to end, failures included</td>
+              <td><span class="pill pill-source">Source</span> <strong>124 keys</strong> in <code>values/</code> and <strong>124</strong> in <code>values-in/</code>, zero missing (counted 2026-11-17). Type names and provider hints resolve from resources (<code>Tambah kompatibel</code>). A stored failure is a token resolved at display time, so an old row re-reads in the current language.</td>
+              <td>strings.xml ×2; ProviderErrorMessageTest (5); ErrorTextTest</td>
             </tr>
             <tr>
-              <td>The whole interface is localized, not only the renderer</td>
-              <td><span class="pill pill-source">Source</span> 124 user-visible strings in <code>values/strings.xml</code> with a complete Indonesian set in <code>values-in/strings.xml</code>: 124 keys each, zero missing, zero undefined references (counted 2026-11-17). Provider-type names and the two provider-screen hints resolve from resources instead of being formatted in Kotlin, so the in-ID title reads <code>Tambah kompatibel</code> rather than <code>Tambah compatible</code>. Failure text is included: a stored failure is a token (<code>NETWORK_UNAVAILABLE</code>, <code>TIMEOUT|partial</code>) resolved at display time, so a row written under English reads Indonesian after a language switch and a pre-token row keeps its original sentence.</td>
-              <td>values/strings.xml, values-in/strings.xml; ProviderErrorMessageTest; ErrorTextTest</td>
-            </tr>
-            <tr>
-              <td>Accessibility dead stops are fixed, not just described</td>
-              <td><span class="pill pill-source">Source</span> The link group node is actionable (announces the count, opens the first link), the composer field carries its own label, a credential label is announced once, and the provider header grows to two lines instead of clipping at 130 dp. <em>Audio</em> output is still unverified.</td>
+              <td>Accessibility dead stops fixed, not described</td>
+              <td><span class="pill pill-source">Source</span><span class="pill pill-hw">Watch</span> Four stops previously measured as dead are closed: link group actionable, composer labelled, credential label read once, provider header wraps instead of clipping. Every control carries <code>content-desc</code> in a 96 px (48 dp) box; traversal order re-measured 2026-11-17.</td>
               <td>DocumentBlock.kt, MainActivity.kt, ProviderScreen.kt</td>
             </tr>
             <tr>
-              <td>Pairing and model discovery never block the UI thread</td>
-              <td><span class="pill pill-source">Source</span> The listener's key generation, certificate and socket bind run on IO, and its worker join runs on a daemon thread instead of the caller. Discovery carries a 30 s whole-operation budget, because pages were bounded only per socket.</td>
-              <td>ProviderScreen.kt, PairingServer.kt, ProviderContract.kt</td>
+              <td>Pairing: NFC, QR and TLS — bytes, pixels, loopback</td>
+              <td><span class="pill pill-device">JVM</span> NDEF record, Type 2 Tag container and SELECT/READ asserted byte for byte (<code>NfcPairingTest</code>, 10 tests); QR node 346 px at 466 and 264 px at 384, planner pixels decode back to the URL (<code>PairingQrTest</code>, 3). <span class="pill pill-emu">Emulator</span> ECDH P-256 + AES-GCM over loopback; TLS certificate minted per session (<code>PairingServerTest</code>, 16; <code>SelfSignedCertTest</code>, 3). Certificate generation, bind and discovery run off the UI thread. <span class="pill pill-hw">Watch</span> <code>dumpsys nfc</code> lists the service as default <code>other</code> with AIDs <code>D2760000850101</code> and <code>F001020304050607</code>.</td>
+              <td>NdefTag.kt, QrCode.kt, PairingServer.kt, NfcPairingService.kt</td>
             </tr>
             <tr>
-              <td>Native LaTeX typesetting in release builds</td>
-              <td><span class="pill pill-emu">Emulator</span> Release APK produced Math canvas nodes for a display integral and inline math; 30 TTF files present.</td>
-              <td>Release notes, v0.2.2</td>
+              <td>Static analysis clean</td>
+              <td><span class="pill pill-device">JVM</span> ktlint 0 violations; lintDebug <strong>0 errors, 14 warnings</strong>, all “newer version available” notices (9 GradleDependency, 5 NewerVersionAvailable), re-run 2026-11-18.</td>
+              <td>ktlintCheck; lint-results-debug.xml</td>
             </tr>
             <tr>
-              <td>Pairing offers NFC and QR, not a URL to retype</td>
-              <td><span class="pill pill-device">JVM</span> NDEF URI record, Type 2 Tag capability container and the reader's SELECT/READ exchange asserted byte for byte (<code>NfcPairingTest</code>, 7 tests). <span class="pill pill-device">Watch</span> <code>dumpsys nfc</code> lists <code>NfcPairingService</code> as the default <code>other</code>-category APDU service with AIDs <code>D2760000850101</code> and <code>F001020304050607</code>; the QR node measured 346 px at 466 and 264 px at 384, and the planner's own pixels at those widths decode back to the URL (<code>PairingQrTest</code>, 3 tests). A phone tap and a camera scan are still unverified.</td>
-              <td>NdefTag.kt, NfcPairingService.kt, QrCode.kt, ProviderScreen.kt; NfcPairingTest; PairingQrTest</td>
+              <td>Physical watch: timing, frames, memory, suite</td>
+              <td><span class="pill pill-hw">Watch</span> Cold start <strong>723 ms</strong> median on 2026-11-16 (<code>v0.2.1</code>) and <strong>4373 ms</strong> on 2026-11-17 (debug <code>main</code>, 4311–4619 ms, #65). Scroll: <strong>761 frames, 1.18 % janky</strong>, 50th 8 ms. 20-minute session: PSS <strong>+3.2 MB</strong>, <code>Thermal Status</code> stayed 0. <code>454x454</code> keeps every control at 96 px. Suite per class with <code>pm clear</code>: <strong>38 of 45 passed</strong>, 4 gave no summary (runner teardown crash, #50). No rotary device exists on this unit (#47).</td>
+              <td>adb; issues #47, #50, #65</td>
             </tr>
             <tr>
-              <td>Credential pairing encrypts the payload</td>
-              <td><span class="pill pill-emu">Emulator</span> ECDH P-256 + AES-GCM over loopback only. The listener serves TLS with a self-signed certificate minted per session (written as DER in <code>SelfSignedCert.kt</code>), because browsers refuse Web Crypto on a plain-HTTP LAN origin; the handshake itself is unauthenticated. The phone must accept the certificate warning. A real phone on a real LAN has not been tested.</td>
-              <td>PairingServerTest; SelfSignedCertTest</td>
-            </tr>
-            <tr>
-              <td>Static analysis is clean</td>
-              <td><span class="pill pill-device">JVM</span> lintDebug: 0 errors, 14 warnings (re-run 2026-11-18). All 14 are “a newer version is available” notices — 9 GradleDependency, 5 NewerVersionAvailable — none is a code or resource defect.</td>
-              <td>app/build/reports/lint-results-debug.xml</td>
-            </tr>
-            <tr>
-              <td>Touch reach, battery and thermals on a real watch</td>
-              <td><span class="pill pill-hw">Watch</span> <code>v0.2.1</code> was the release installed on a Xiaomi Watch 2 (API 34, 466x466, armeabi-v7a): versionCode 14, signer verified, cold start <strong>median 723 ms</strong> over five release launches (720-1,105 ms) on 2026-11-16. The 2026-11-17 numbers on this page were measured against the debug build of <code>main</code> (versionCode 15, the 0.2.2 tree), not a release APK. Re-measured 2026-11-17 on the same class of unit (docked, charging, release of <code>main</code>): <strong>median 4373 ms</strong> (4311, 4345, 4406, 4619 ms of four valid runs) — a 6× gap filed as #65, not folded into the older figure. Battery and thermals are still unmeasured; the rotary crown does not move the reader (#47).</td>
-              <td>adb; issue #47</td>
-            </tr>
-            <tr>
-              <td>Voice transcription accuracy</td>
-              <td><span class="pill pill-none">Unverified</span> Intent dispatch is tested; recognition quality belongs to the platform and was not measured.</td>
-              <td>—</td>
-            </tr>
-            <tr>
-              <td>Link taps reach a destination on a paired device</td>
-              <td><span class="pill pill-none">Unverified</span> Unit-tested; the emulator has no ACTION_VIEW handler to observe.</td>
-              <td>—</td>
-            </tr>
-            <tr>
-              <td>TalkBack reads the full answer in order</td>
-              <td><span class="pill pill-none">Unverified</span> Semantics and target geometry are tested, and the four known dead stops are fixed; audio output was never listened to.</td>
-              <td>—</td>
-            </tr>
-            <tr>
-              <td>Every official provider works with production credentials</td>
-              <td><span class="pill pill-emu">Partial</span> Controlled endpoints plus one third-party Responses endpoint. Not a live sweep of all four.</td>
-              <td>docs/memory/PROVIDERS.md</td>
+              <td>Still unverified — no evidence exists</td>
+              <td><span class="pill pill-none">Unverified</span> Voice transcription accuracy (intent dispatch is tested). Link taps reaching a destination on a paired phone. TalkBack audio. All four providers against production credentials (controlled endpoints plus one third-party Responses endpoint). Battery drain in percent and any thermal level above 0.</td>
+              <td>docs/memory/PROVIDERS.md; issues #27, #28</td>
             </tr>
           </tbody>
         </table>
