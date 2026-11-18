@@ -282,19 +282,17 @@ class CompatibleChatTest {
                         // from BEFORE the edit started and assert against the whole old history —
                         // measured on CI 2026-11-18: expected the two edited rows, got all six.
                         assertTrue("edit() accepts the turn", accepted)
-                        val deadline = SystemClock.uptimeMillis() + 15000
+                        // Poll for the FINAL history, not for its first row. Waiting only for row 0
+                        // let the assertion read "[Edited first prompt, ]" — the edit had landed but
+                        // the continuation was still being written (measured on CI 2026-11-18).
+                        val expected = listOf("Edited first prompt", "Edited continuation")
+                        val deadline = SystemClock.uptimeMillis() + 20000
                         var edited = app.database.chats().snapshot(id).map { it.rawContent }
-                        while (SystemClock.uptimeMillis() < deadline && edited.firstOrNull() != "Edited first prompt") {
+                        while (SystemClock.uptimeMillis() < deadline && edited != expected) {
                             delay(100)
                             edited = app.database.chats().snapshot(id).map { it.rawContent }
                         }
-                        assertEquals(
-                            listOf(
-                                "Edited first prompt",
-                                "Edited continuation",
-                            ),
-                            edited,
-                        )
+                        assertEquals(expected, edited)
                         app.database.chats().deleteConversation(id)
                     } finally {
                         app.settings.delete(a.id)
