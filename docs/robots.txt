@@ -1,0 +1,5 @@
+# Both pages are public documentation for the project; nothing here is private.
+User-agent: *
+Allow: /
+
+Sitemap: https://michaelxdips.github.io/NiroWear/sitemap.xml
