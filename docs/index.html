@@ -1928,6 +1928,13 @@ html[data-theme="dark"] .chip-table .chip-t{color:#9BE8D5}
 .panel{display:none}
 .panel.on{display:block}
 
+/* ---------- faq ---------- */
+.faq{display:grid;gap:0;margin:34px 0 0;padding-top:22px;border-top:1px solid var(--hair)}
+.faq-item{padding:14px 0;border-bottom:1px solid var(--hair-soft)}
+.faq-item:last-child{border-bottom:0}
+.faq-item dt{font-size:14px;color:var(--ink);margin-bottom:4px}
+.faq-item dd{margin:0;font-size:14px;line-height:1.55;color:var(--steel)}
+
 /* ---------- limits ---------- */
 
 .limits{
@@ -2143,7 +2150,8 @@ html[data-theme="dark"] .pill-hw{color:#C79BFF}
   .sec-body > .col,.colo-grid > .col{grid-column:1}
   .masthead .spec{display:none}
   .masthead nav{gap:16px}
-  .masthead nav a.opt{display:none}
+  /* A download page must keep its Install link on a phone; the other section links can go. */
+  .masthead nav a.opt:not([href="#install"]){display:none}
   .sec{padding:56px 0 60px}
   .hero{padding-top:44px}
   .limit{grid-template-columns:minmax(0,1fr);gap:4px}
@@ -2151,7 +2159,17 @@ html[data-theme="dark"] .pill-hw{color:#C79BFF}
   .dial-in{padding:44px 38px 48px;font-size:12px}
   .dim-top{display:none}
   .dim-right{display:none}
-  .status th:nth-child(3),.status td:nth-child(3){display:none}
+  /* A three-column evidence table cannot survive a 390 px phone. Stack each claim into a card and
+     keep the "where" line, which used to be dropped entirely at this width. */
+  .status thead{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip-path:inset(50%)}
+  .status,.status tbody,.status tr,.status td{display:block;width:auto}
+  .status tr{padding:14px 0 16px;border-bottom:1px solid var(--hair)}
+  .status tr:last-child{border-bottom:0}
+  .status td{border:0;padding:0}
+  .status td:first-child{font-size:15px;color:var(--ink);margin-bottom:6px}
+  .status td:nth-child(2){font-size:13.5px;line-height:1.5}
+  .status td:nth-child(3){display:block;margin-top:8px;font-size:10.5px;color:var(--steel)}
+  .status td:nth-child(3)::before{content:"Where \00b7\00a0";letter-spacing:.12em;text-transform:uppercase}
   .bench-tools{gap:12px}
 }
 
@@ -2201,14 +2219,15 @@ html.boot-pending .boot{display:grid}
   place-items:center;
 }
 .boot-dial svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
-.boot-ring{
-  fill:none;
-  stroke:var(--cobalt);
-  stroke-width:2;
-  stroke-dasharray:1445;
-  stroke-dashoffset:1445;
-  animation:boot-ring .95s cubic-bezier(.55,.06,.2,1) forwards;
-}
+/* Surface vocabulary, not a spinner: a faint bezel, sixty ticks with twelve majors, one hand that
+   sweeps a single turn while the readout counts, and a complication carrying facts from this page. */
+.boot-face{animation:boot-wake .24s ease-out both}
+.boot-bezel{fill:none;stroke:var(--steel);stroke-opacity:.35;stroke-width:1}
+.boot-ticks{animation:boot-ticks .3s ease-out both}
+.boot-ticks line{stroke:var(--steel);stroke-opacity:.5;stroke-width:1}
+.boot-ticks line.major{stroke:var(--ink);stroke-opacity:.8;stroke-width:1.6}
+.boot-hand{transform-origin:233px 233px;animation:boot-sweep .95s cubic-bezier(.45,.05,.2,1) .1s both}
+.boot-hand line{stroke:var(--cobalt);stroke-width:3;stroke-linecap:round}
 .boot-read{
   display:flex;
   align-items:baseline;
@@ -2218,7 +2237,26 @@ html.boot-pending .boot{display:grid}
 }
 .boot-count{font-size:clamp(26px,7.5vmin,46px);font-variant-numeric:tabular-nums}
 .boot-unit{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--steel)}
-@keyframes boot-ring{to{stroke-dashoffset:0}}
+.boot-chip{
+  position:absolute;
+  bottom:7%;
+  padding:5px 11px;
+  border:1px solid var(--hair);
+  border-radius:999px;
+  background:var(--paper);
+  font-family:var(--util);
+  font-size:9.5px;
+  letter-spacing:.16em;
+  text-transform:uppercase;
+  color:var(--steel);
+  opacity:0;
+  animation:boot-chip .35s ease .5s forwards;
+}
+/* A dim face that lifts to full contrast, the way a watch leaves always-on. */
+@keyframes boot-wake{from{opacity:.12}to{opacity:1}}
+@keyframes boot-ticks{from{opacity:0}to{opacity:1}}
+@keyframes boot-sweep{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+@keyframes boot-chip{to{opacity:1}}
 @keyframes boot-out{to{opacity:0;transform:translateY(-10px)}}
 html.boot-leaving .boot{animation:boot-out .22s ease forwards}
 @media (prefers-reduced-motion:reduce){
@@ -2257,12 +2295,15 @@ html.boot-leaving .boot{animation:boot-out .22s ease forwards}
 
 <div class="boot" id="boot" aria-hidden="true">
   <div class="boot-dial">
-    <svg viewBox="0 0 466 466" focusable="false" aria-hidden="true">
-      <circle class="boot-ring" cx="233" cy="233" r="230"></circle>
+    <svg class="boot-face" viewBox="0 0 466 466" focusable="false" aria-hidden="true">
+      <circle class="boot-bezel" cx="233" cy="233" r="228"></circle>
+      <g class="boot-ticks" id="bootTicks"></g>
+      <g class="boot-hand"><line x1="233" y1="80" x2="233" y2="20"></line></g>
     </svg>
     <div class="boot-read">
       <span class="boot-count" id="bootCount">0</span><span class="boot-unit">px</span>
     </div>
+    <div class="boot-chip" id="bootChip">303 tests</div>
   </div>
 </div>
 
@@ -2991,6 +3032,31 @@ adb install -r app-release.apk</pre>
           </div>
           <p class="fine">Requires Wear OS 3 (API 30) or newer.</p>
         </div>
+
+        <dl class="faq">
+          <div class="faq-item">
+            <dt>Where does the key go?</dt>
+            <dd>Into the watch: versioned AES-GCM ciphertext, with the key material in the Android
+              Keystore. It is sent only to the provider you configured — there is no NiroWear server,
+              no relay and no analytics. Backup stays off because the keys are device-bound.</dd>
+          </div>
+          <div class="faq-item">
+            <dt>Which providers work?</dt>
+            <dd>OpenAI, Anthropic, Gemini, and any OpenAI-compatible endpoint — four adapters, and the
+              provider can be switched per conversation without losing the history.</dd>
+          </div>
+          <div class="faq-item">
+            <dt>Do I need an account?</dt>
+            <dd>No sign-up and no account. You bring the provider and the key, which is the whole point
+              of BYOK.</dd>
+          </div>
+          <div class="faq-item">
+            <dt>Can I set it up without a phone?</dt>
+            <dd>Yes — type the key on the watch. The phone path is faster, but it needs a browser on the
+              same Wi-Fi to accept the pairing page's self-signed certificate; manual entry is the
+              supported fallback.</dd>
+          </div>
+        </dl>
 
       </div>
     </div>
@@ -4848,9 +4914,38 @@ if (typeof module !== "undefined" && module.exports) {
   if (!root.classList.contains("boot-pending")) return;
   var boot = document.getElementById("boot");
   var count = document.getElementById("bootCount");
-  var started = performance.now();
+  var chip = document.getElementById("bootChip");
+
+  /* Sixty ticks, twelve majors: the bezel that makes the circle read as a watch face rather than a
+     spinner. Built once, in DOM order, so it costs nothing on the next visit (which never runs this). */
+  var ticks = document.getElementById("bootTicks");
+  if (ticks) {
+    var frag = document.createDocumentFragment();
+    for (var i = 0; i < 60; i++) {
+      var major = i % 5 === 0;
+      var a = (i / 60) * Math.PI * 2;
+      var r1 = major ? 197 : 205;
+      var r2 = 215;
+      var line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      line.setAttribute("x1", String(233 + Math.sin(a) * r1));
+      line.setAttribute("y1", String(233 - Math.cos(a) * r1));
+      line.setAttribute("x2", String(233 + Math.sin(a) * r2));
+      line.setAttribute("y2", String(233 - Math.cos(a) * r2));
+      if (major) line.setAttribute("class", "major");
+      frag.appendChild(line);
+    }
+    ticks.appendChild(frag);
+  }
+
+  var DELAY = 100;
+  var started = performance.now() + DELAY;
   var DURATION = 950;
   var done = false;
+  var chipStep = 0;
+
+  function setChip(text) {
+    if (chip && chip.textContent !== text) chip.textContent = text;
+  }
 
   function finish() {
     if (done) return;
@@ -4870,8 +4965,11 @@ if (typeof module !== "undefined" && module.exports) {
 
   function step(now) {
     if (done) return;
-    var p = Math.min(1, (now - started) / DURATION);
+    var p = Math.min(1, Math.max(0, (now - started) / DURATION));
     if (count) count.textContent = String(Math.round(466 * p));
+    /* The complication swaps to two more facts while the hand turns: tests, then the cut. */
+    if (p >= 0.45 && chipStep === 0) { chipStep = 1; setChip("1.18% jank"); }
+    if (p >= 0.8 && chipStep === 1) { chipStep = 2; setChip("v0.2.2"); }
     if (p < 1) requestAnimationFrame(step);
     else finish();
   }
