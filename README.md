@@ -92,7 +92,7 @@ It exists because a watch is a bad screen for a good answer. Every other approac
 Verify what you installed:
 
 ```bash
-aapt2 dump badging app-release.apk | head -3    # versionCode 14, versionName 0.2.1
+aapt2 dump badging app-release.apk | head -3    # versionCode 15, versionName 0.2.2
 sha256sum app-release.apk                       # compare with the hash in the release body
 ```
 
@@ -186,10 +186,11 @@ Every number below came from a command run on this tree. Anything not measured i
 | Check | Result | Source |
 |---|---|---|
 | JVM unit tests | **303 tests, 49 suites, 0 failures, 1 skipped** (the opt-in live provider smoke, skipped without its environment variables) | `app/build/test-results/testDebugUnitTest/*.xml` |
-| Android Lint | **0 errors, 0 warnings** | `app/build/reports/lint-results-debug.xml` |
+| Android Lint | **0 errors, 14 warnings** (re-run 2026-11-18) | `app/build/reports/lint-results-debug.xml` |
 | ktlint | **0 violations** | `:app:ktlintCheck` |
 | Assemblies | `assembleDebug` + `assembleRelease` pass | Gradle output |
-| Instrumented suite (Wear OS 37 AVD, 466×466) | **71 tests, 2 failing, 0 errors** | `app/build/outputs/androidTest-results/connected/debug/*.xml` |
+| Instrumented suite (Wear OS 37 AVD, 466×466) — last AVD run 2026-11-09 | **71 tests, 2 failing, 0 errors** | `app/build/outputs/androidTest-results/connected/debug/*.xml` |
+| Instrumented suite (physical watch), per class with `pm clear` — 2026-11-17 | **38 of 45 classes passed**; 3 failures named below, 4 classes produced no JUnit summary (runner teardown crash) | `am instrument` output, quoted in the issue comments |
 
 The two remaining failures, read from the result XML of the last recorded AVD run (2026-11-09):
 

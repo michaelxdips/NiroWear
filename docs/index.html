@@ -3030,12 +3030,12 @@ adb install -r app-release.apk</pre>
             </tr>
             <tr>
               <td>Static analysis is clean</td>
-              <td><span class="pill pill-device">JVM</span> lintDebug: 0 errors, 0 warnings. The last GradleDependency notice was cleared by bumping androidx.test:runner 1.5.0 → 1.5.2.</td>
+              <td><span class="pill pill-device">JVM</span> lintDebug: 0 errors, 14 warnings (re-run 2026-11-18). All 14 are “a newer version is available” notices — 9 GradleDependency, 5 NewerVersionAvailable — none is a code or resource defect.</td>
               <td>app/build/reports/lint-results-debug.xml</td>
             </tr>
             <tr>
               <td>Touch reach, battery and thermals on a real watch</td>
-              <td><span class="pill pill-hw">Watch</span> v0.2.1 installed on a Xiaomi Watch 2 (API 34, 466x466, armeabi-v7a): versionCode 14, signer verified, cold start <strong>median 723 ms</strong> over five release launches (720-1,105 ms) on 2026-11-16. Re-measured 2026-11-17 on the same class of unit (docked, charging, release of <code>main</code>): <strong>median 4373 ms</strong> (4311, 4345, 4406, 4619 ms of four valid runs) — a 6× gap filed as #65, not folded into the older figure. Battery and thermals are still unmeasured; the rotary crown does not move the reader (#47).</td>
+              <td><span class="pill pill-hw">Watch</span> <code>v0.2.1</code> was the release installed on a Xiaomi Watch 2 (API 34, 466x466, armeabi-v7a): versionCode 14, signer verified, cold start <strong>median 723 ms</strong> over five release launches (720-1,105 ms) on 2026-11-16. The 2026-11-17 numbers on this page were measured against the debug build of <code>main</code> (versionCode 15, the 0.2.2 tree), not a release APK. Re-measured 2026-11-17 on the same class of unit (docked, charging, release of <code>main</code>): <strong>median 4373 ms</strong> (4311, 4345, 4406, 4619 ms of four valid runs) — a 6× gap filed as #65, not folded into the older figure. Battery and thermals are still unmeasured; the rotary crown does not move the reader (#47).</td>
               <td>adb; issue #47</td>
             </tr>
             <tr>
@@ -3071,11 +3071,11 @@ adb install -r app-release.apk</pre>
 
         <p class="status-note">
           The JVM and lint figures above were read from the result XML produced by a forced re-run on
-          2026-11-17 (<code>303 tests / 49 suites</code>, lint 0 warnings), not quoted from memory. This
+          2026-11-18 (<code>303 tests / 49 suites</code>, lint 0 errors / 14 dependency notices), not quoted from memory. This
           page describes <strong>0.2.2</strong>; the audit rounds that produced it changed chat
           lifecycle, Keystore, adapter and renderer code, so any claim here that cites an earlier
           emulator run is dated rather than current. The connected-test suite is now MEASURED, not
-          assumed: <strong>71 tests, 2 failing, 0 errors</strong> on a Wear OS 37 AVD (2026-11-09). An
+          assumed: <strong>71 tests, 2 failing, 0 errors</strong> on a Wear OS 37 AVD (2026-11-09), and on the physical watch the suite was then run per class on 2026-11-17 with <code>pm clear</code> between classes — <strong>38 of 45 classes passed</strong>, with 4 classes yielding no JUnit summary because the runner died at teardown. An
           earlier revision of this page said "14 failing": that figure was arithmetic from a partial
           run, not a measurement, and was wrong — the tests share one app process, so a class that
           passes on its own can still fail in suite order. A full-suite run at that point reported 18,
