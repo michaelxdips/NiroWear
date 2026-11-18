@@ -77,6 +77,10 @@
 !docs/index.html
 !docs/changelog.html
 !docs/.nojekyll
+# Crawler hints for the published pages: without these two the allowlist hides them and Pages
+# serves a 404 for both.
+!docs/robots.txt
+!docs/sitemap.xml
 !fixtures/MATERIAL_ICONS_LICENSE.txt
 !fixtures/MATERIAL_ICONS_NOTICE.txt
 !fixtures/RENDER_TORTURE_FIXTURE.md

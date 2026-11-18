@@ -9,6 +9,16 @@
 <meta property="og:description" content="A Wear OS chat client that treats the watch as the primary device. BYOK, MIT licensed.">
 <meta property="og:type" content="website">
 <meta name="color-scheme" content="light dark">
+<link rel="canonical" href="https://michaelxdips.github.io/NiroWear/">
+<meta property="og:url" content="https://michaelxdips.github.io/NiroWear/">
+<meta property="og:image" content="https://michaelxdips.github.io/NiroWear/screenshots/chat-home.png">
+<meta property="og:image:width" content="466">
+<meta property="og:image:height" content="466">
+<meta property="og:image:alt" content="The NiroWear reader on a 466-pixel round watch face: a user question and a streamed answer.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="NiroWear — the whole answer, inside a 466-pixel circle">
+<meta name="twitter:description" content="A Wear OS chat client that treats the watch as the primary device. BYOK, MIT licensed.">
+<meta name="twitter:image" content="https://michaelxdips.github.io/NiroWear/screenshots/chat-home.png">
 <link rel="icon" href="branding/nirowear-mark.svg">
 <style>
 /* ============================================================
@@ -267,6 +277,10 @@ p:last-child{margin-bottom:0}
 
 .masthead nav a{color:var(--steel)}
 .masthead nav a:hover{color:var(--ink);text-decoration:none}
+
+/* Keyboard users land on a 15-section page; this is the only way past the nav. */
+.skip{position:absolute;left:-9999px;top:0;z-index:200;background:var(--ink);color:var(--paper);padding:8px 14px;border-radius:0;font-size:13px;text-decoration:none}
+.skip:focus{left:8px;top:8px;outline:2px solid var(--cobalt);outline-offset:2px}
 
 .tbtn{
   appearance:none;
@@ -2172,6 +2186,7 @@ html[data-theme="dark"] .pill-hw{color:#C79BFF}
 </script>
 </head>
 <body>
+<a class="skip" href="#top">Skip to content</a>
 
 <div class="ruler" aria-hidden="true">
   <div class="ruler-scale"></div>
@@ -2197,7 +2212,7 @@ html[data-theme="dark"] .pill-hw{color:#C79BFF}
       <a href="#status" class="opt">Status</a>
       <a href="changelog.html">Changelog</a>
       <a href="https://github.com/michaelxdips/NiroWear">Source</a>
-      <button class="tbtn" id="theme" aria-label="Switch colour scheme">◐</button>
+      <button class="tbtn" id="theme" aria-label="Dark colour scheme" aria-pressed="false">◐</button>
     </nav>
   </div>
 </header>
@@ -2918,36 +2933,28 @@ adb install -r app-release.apk</pre>
       <div class="col">
         <dl class="limits">
           <div class="limit">
-            <dt>Native math typesetting</dt>
-            <dd>Now in release builds. LaTeX is typeset natively; the fallback only covers input the renderer deliberately refuses, such as file-inclusion macros and unbalanced braces.</dd>
-          </div>
-          <div class="limit">
-            <dt>Physical watch acceptance</dt>
-            <dd>Battery, thermals and input on a real Xiaomi Watch 2 are not yet verified. Emulator evidence is extensive; it is not the same thing.</dd>
+            <dt>Battery and thermals</dt>
+            <dd>Charge percent over a session is unmeasured, and no thermal level above <code>Thermal Status: 0</code> has ever been reached — a 20-minute session held 0, which is not the same as proving none exists.</dd>
           </div>
           <div class="limit">
             <dt>Voice accuracy</dt>
-            <dd>The intent launch and return path is tested. Recognition quality is the platform's, and has not been accepted.</dd>
+            <dd>The intent launch and return path is tested; recognition quality is the platform's and has not been accepted.</dd>
           </div>
           <div class="limit">
             <dt>Link destinations</dt>
             <dd>Links open through the system handler. Completion on a real paired device is unverified.</dd>
           </div>
           <div class="limit">
-            <dt>Screen reader</dt>
-            <dd>TalkBack <em>audio</em> acceptance is still incomplete — nobody has listened to a real watch. The four measured structural dead stops are fixed: the "Links" group node is actionable (announces the count, opens the first link), the composer field carries its own label, a credential entry's label is no longer read twice, and the provider header grows to two lines instead of clipping at 130 dp. Traversal order on the empty-state dial was measured from the node tree (2026-11-17): reader → "Ask anything" → "Add provider from menu." → Menu → provider header → Keyboard input → Voice input, with every control carrying a <code>content-desc</code> and a 96 px (48 dp) box.</dd>
+            <dt>Screen-reader audio</dt>
+            <dd>Semantics, traversal order and 48 dp targets are measured; audio has never been heard on the watch.</dd>
           </div>
           <div class="limit">
-            <dt>0.1.1 lifecycle fixes</dt>
-            <dd>The Keystore split, the STOPPED/ERROR recovery of an interrupted edit or retry, the editor recovery after a refused edit and the Stop-button sizing compile and are reasoned from the code, but have no JVM test and no device run. A physical watch is the proof.</dd>
+            <dt>Provider coverage</dt>
+            <dd>Controlled endpoints plus one third-party Responses endpoint — not all four providers with production credentials.</dd>
           </div>
           <div class="limit">
-            <dt>Updating from 0.1.0</dt>
-            <dd>0.1.0 shipped under the Android debug signing lineage; from 0.1.1 the release key is <code>CN=NiroWear Release</code>. Android refuses an in-place update across that change, so uninstall first — that removes local conversations and saved keys.</dd>
-          </div>
-          <div class="limit">
-            <dt>Live provider smoke</dt>
-            <dd>Coverage is against controlled endpoints and one third-party Responses endpoint — not every official provider with production credentials.</dd>
+            <dt>Math fallback</dt>
+            <dd>Input the renderer refuses on purpose — file-inclusion macros, unbalanced braces, oversized <code>\rule</code> — shows its source text instead. That is a decision, not a typesetting guarantee.</dd>
           </div>
         </dl>
       </div>
@@ -4659,10 +4666,17 @@ if (typeof module !== "undefined" && module.exports) {
 
   var tbtn = document.getElementById("theme");
   if (tbtn) {
+    // aria-pressed tells a screen reader whether the dark scheme is ON, which the ◐ glyph cannot.
+    function syncThemeButton() {
+      var dark = root.getAttribute("data-theme") === "dark";
+      tbtn.setAttribute("aria-pressed", dark ? "true" : "false");
+    }
+    syncThemeButton();
     tbtn.addEventListener("click", function () {
       var next = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
       root.setAttribute("data-theme", next);
       try { localStorage.setItem("nirowear-scheme", next); } catch (e) {}
+      syncThemeButton();
     });
   }
 
