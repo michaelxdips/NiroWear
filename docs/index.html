@@ -2860,6 +2860,11 @@ HTTP/1.1 400
           There is no store listing. Sideload the signed release, or build it yourself from
           source — the repository compiles the same app.
         </p>
+        <p class="fine">
+          Needs Wear OS 3+ (<code>minSdk 30</code>), 32- or 64-bit ARM, 3.6 MB of storage, and a
+          provider key you own — typed on the watch or sent from a phone on the same Wi-Fi. No
+          account, no relay, no server of ours.
+        </p>
       </div>
     </div>
 
@@ -2868,12 +2873,12 @@ HTTP/1.1 400
       <div class="col">
 
         <div class="tabs" role="tablist" aria-label="Install method">
-          <button class="tab" role="tab" aria-selected="true" data-panel="p-apk">Signed APK</button>
-          <button class="tab" role="tab" aria-selected="false" data-panel="p-src">From source</button>
-          <button class="tab" role="tab" aria-selected="false" data-panel="p-wifi">Wireless ADB</button>
+          <button class="tab" id="t-apk" role="tab" aria-selected="true" aria-controls="p-apk" data-panel="p-apk" tabindex="0">Signed APK</button>
+          <button class="tab" id="t-src" role="tab" aria-selected="false" aria-controls="p-src" data-panel="p-src" tabindex="-1">From source</button>
+          <button class="tab" id="t-wifi" role="tab" aria-selected="false" aria-controls="p-wifi" data-panel="p-wifi" tabindex="-1">Wireless ADB</button>
         </div>
 
-        <div class="panel on" id="p-apk">
+        <div class="panel on" id="p-apk" role="tabpanel" aria-labelledby="t-apk" tabindex="0">
           <p style="color:var(--steel);font-size:15px">
             Download the latest release, then install over ADB. <strong>Updating from 0.1.0 requires an
             uninstall first</strong>: 0.1.0 was signed with the Android debug lineage and 0.1.1 with the
@@ -2890,7 +2895,7 @@ HTTP/1.1 400
           </p>
         </div>
 
-        <div class="panel" id="p-src">
+        <div class="panel" id="p-src" role="tabpanel" aria-labelledby="t-src" tabindex="0">
           <p style="color:var(--steel);font-size:15px">
             Needs JDK 25 and Android SDK platform 37. The Gradle wrapper is checked in; do not
             install Gradle separately.
@@ -2907,7 +2912,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk</pre>
           </p>
         </div>
 
-        <div class="panel" id="p-wifi">
+        <div class="panel" id="p-wifi" role="tabpanel" aria-labelledby="t-wifi" tabindex="0">
           <p style="color:var(--steel);font-size:15px">
             Both devices on the same network. The address and port come from the watch's own
             wireless-debugging screen.
@@ -4581,6 +4586,11 @@ if (typeof module !== "undefined" && module.exports) {
       if (bestId) {
         var el = document.getElementById(bestId);
         setStage(+el.getAttribute("data-stage"));
+        // Tell a screen reader which nav item is the section being read; the highlight is visual only.
+        Array.prototype.slice.call(document.querySelectorAll("header nav a[href^='#']")).forEach(function (a) {
+          if (a.getAttribute("href") === "#" + bestId) a.setAttribute("aria-current", "true");
+          else a.removeAttribute("aria-current");
+        });
       }
     }, { rootMargin: "-40% 0px -40% 0px", threshold: [0, 0.01, 0.25, 0.5, 1] });
 
@@ -4604,17 +4614,36 @@ if (typeof module !== "undefined" && module.exports) {
     });
   }
 
-  mtabs.forEach(function (tab) {
-    tab.addEventListener("click", function () {
-      selectTab(tab, mtabs, "aria-selected", "aria-controls");
+  /* One keyboard pattern for every tablist: click activates, Arrow/Home/End move the selection, and
+     only the selected tab stays in the Tab order (roving tabindex). The install tabs used to be
+     click-only, which is a dead end for anyone driving the page from the keyboard. */
+  function wireTablist(list, selectedAttr, panelAttr) {
+    if (!list.length) return;
+    function activate(tab, focus) {
+      list.forEach(function (t) {
+        var on = t === tab;
+        t.setAttribute(selectedAttr, on ? "true" : "false");
+        t.setAttribute("tabindex", on ? "0" : "-1");
+        var panel = document.getElementById(t.getAttribute(panelAttr));
+        if (panel) panel.classList.toggle("on", on);
+      });
+      if (focus) tab.focus();
+    }
+    list.forEach(function (tab, i) {
+      tab.setAttribute("tabindex", tab.getAttribute(selectedAttr) === "true" ? "0" : "-1");
+      tab.addEventListener("click", function () { activate(tab, false); });
+      tab.addEventListener("keydown", function (e) {
+        var next = null;
+        if (e.key === "ArrowRight") next = list[(i + 1) % list.length];
+        else if (e.key === "ArrowLeft") next = list[(i - 1 + list.length) % list.length];
+        else if (e.key === "Home") next = list[0];
+        else if (e.key === "End") next = list[list.length - 1];
+        if (next) { e.preventDefault(); activate(next, true); }
+      });
     });
-    tab.addEventListener("keydown", function (e) {
-      var i = mtabs.indexOf(tab), next = null;
-      if (e.key === "ArrowRight") next = mtabs[(i + 1) % mtabs.length];
-      if (e.key === "ArrowLeft") next = mtabs[(i - 1 + mtabs.length) % mtabs.length];
-      if (next) { e.preventDefault(); next.focus(); selectTab(next, mtabs, "aria-selected", "aria-controls"); }
-    });
-  });
+  }
+
+  wireTablist(mtabs, "aria-selected", "aria-controls");
 
   /* ============================================================
      6. Theme
@@ -4651,16 +4680,7 @@ if (typeof module !== "undefined" && module.exports) {
      ============================================================ */
 
   var tabs = Array.prototype.slice.call(document.querySelectorAll(".tab"));
-  tabs.forEach(function (tab) {
-    tab.addEventListener("click", function () {
-      tabs.forEach(function (t) {
-        var on = t === tab;
-        t.setAttribute("aria-selected", on ? "true" : "false");
-        var panel = document.getElementById(t.getAttribute("data-panel"));
-        if (panel) panel.classList.toggle("on", on);
-      });
-    });
-  });
+  wireTablist(tabs, "aria-selected", "data-panel");
 
   /* ============================================================
      8. Copy
