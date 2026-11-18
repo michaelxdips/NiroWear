@@ -2179,6 +2179,51 @@ html[data-theme="dark"] .pill-hw{color:#C79BFF}
   body{background:#fff;color:#000}
   .sec{break-inside:avoid}
 }
+
+/* ---------- intro: the 466 dial draws itself, once per session ---------- */
+/* Shown only while <html> carries .boot-pending, which the head script sets before first paint and
+   only when the visitor has not seen it this session and has not asked for reduced motion. Every
+   deliberate input skips it, so it can never hold the page hostage. */
+.boot{
+  position:fixed;
+  inset:0;
+  z-index:320;
+  display:none;
+  place-items:center;
+  background:var(--paper);
+}
+html.boot-pending .boot{display:grid}
+.boot-dial{
+  position:relative;
+  width:min(78vmin,466px);
+  aspect-ratio:1;
+  display:grid;
+  place-items:center;
+}
+.boot-dial svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.boot-ring{
+  fill:none;
+  stroke:var(--cobalt);
+  stroke-width:2;
+  stroke-dasharray:1445;
+  stroke-dashoffset:1445;
+  animation:boot-ring .95s cubic-bezier(.55,.06,.2,1) forwards;
+}
+.boot-read{
+  display:flex;
+  align-items:baseline;
+  gap:.4em;
+  font-family:var(--util);
+  color:var(--ink);
+}
+.boot-count{font-size:clamp(26px,7.5vmin,46px);font-variant-numeric:tabular-nums}
+.boot-unit{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--steel)}
+@keyframes boot-ring{to{stroke-dashoffset:0}}
+@keyframes boot-out{to{opacity:0;transform:translateY(-10px)}}
+html.boot-leaving .boot{animation:boot-out .22s ease forwards}
+@media (prefers-reduced-motion:reduce){
+  html.boot-pending .boot{display:none}
+}
 </style>
 <script>
 /* Apply the stored or preferred scheme before first paint. Running this at the end
@@ -2194,11 +2239,32 @@ html[data-theme="dark"] .pill-hw{color:#C79BFF}
       document.documentElement.setAttribute("data-theme", "dark");
     }
   } catch (e) {}
+  /* The intro is gated before first paint for the same reason as the scheme: deciding later would
+     flash the hero and then cover it. It plays once per session, and never under reduced motion. */
+  try {
+    var seen = sessionStorage.getItem("nirowear-intro");
+    var calm = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (!seen && !calm) {
+      document.documentElement.className += " boot-pending";
+      document.documentElement.style.overflow = "hidden";
+    }
+  } catch (e2) {}
 })();
 </script>
 </head>
 <body>
 <a class="skip" href="#top">Skip to content</a>
+
+<div class="boot" id="boot" aria-hidden="true">
+  <div class="boot-dial">
+    <svg viewBox="0 0 466 466" focusable="false" aria-hidden="true">
+      <circle class="boot-ring" cx="233" cy="233" r="230"></circle>
+    </svg>
+    <div class="boot-read">
+      <span class="boot-count" id="bootCount">0</span><span class="boot-unit">px</span>
+    </div>
+  </div>
+</div>
 
 <div class="ruler" aria-hidden="true">
   <div class="ruler-scale"></div>
@@ -4771,6 +4837,49 @@ if (typeof module !== "undefined" && module.exports) {
   });
 
   tick();
+})();
+</script>
+<script>
+/* Intro hand-off. The ring animates in CSS; this counts 0 -> 466 in step with it, then removes the
+   overlay and releases the scroll lock. Any deliberate input finishes it early, and `done` guards
+   against finishing twice. */
+(function () {
+  var root = document.documentElement;
+  if (!root.classList.contains("boot-pending")) return;
+  var boot = document.getElementById("boot");
+  var count = document.getElementById("bootCount");
+  var started = performance.now();
+  var DURATION = 950;
+  var done = false;
+
+  function finish() {
+    if (done) return;
+    done = true;
+    try { sessionStorage.setItem("nirowear-intro", "1"); } catch (e) {}
+    root.style.overflow = "";
+    root.classList.add("boot-leaving");
+    if (boot) {
+      window.setTimeout(function () {
+        root.classList.remove("boot-pending", "boot-leaving");
+        if (boot.parentNode) boot.parentNode.removeChild(boot);
+      }, 240);
+    } else {
+      root.classList.remove("boot-pending", "boot-leaving");
+    }
+  }
+
+  function step(now) {
+    if (done) return;
+    var p = Math.min(1, (now - started) / DURATION);
+    if (count) count.textContent = String(Math.round(466 * p));
+    if (p < 1) requestAnimationFrame(step);
+    else finish();
+  }
+  requestAnimationFrame(step);
+
+  ["click", "keydown", "wheel", "touchstart"].forEach(function (ev) {
+    window.addEventListener(ev, function () { finish(); }, { once: true, passive: true });
+  });
 })();
 </script>
 </body>
