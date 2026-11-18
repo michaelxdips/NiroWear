@@ -1,5 +1,6 @@
 package com.nirowear.chat
 
+import android.os.SystemClock
 import androidx.lifecycle.viewModelScope
 import androidx.test.platform.app.InstrumentationRegistry
 import com.nirowear.NiroApplication
@@ -274,16 +275,25 @@ class CompatibleChatTest {
                         assertEquals(b.id, switched.last().providerProfileId)
 
                         second.enqueue(response("Edited continuation"))
-                        withContext(Dispatchers.Main) { chat.edit(switched.first().id, "Edited first prompt") }
-                        withTimeout(10000) { chat.state.first { !it.generating } }
+                        val accepted =
+                            withContext(Dispatchers.Main) { chat.edit(switched.first().id, "Edited first prompt") }
+                        // `edit()` returning true means the TURN WAS ACCEPTED, not that the row is on
+                        // disk. `state.first { !it.generating }` could therefore read the idle state
+                        // from BEFORE the edit started and assert against the whole old history —
+                        // measured on CI 2026-11-18: expected the two edited rows, got all six.
+                        assertTrue("edit() accepts the turn", accepted)
+                        val deadline = SystemClock.uptimeMillis() + 15000
+                        var edited = app.database.chats().snapshot(id).map { it.rawContent }
+                        while (SystemClock.uptimeMillis() < deadline && edited.firstOrNull() != "Edited first prompt") {
+                            delay(100)
+                            edited = app.database.chats().snapshot(id).map { it.rawContent }
+                        }
                         assertEquals(
                             listOf(
                                 "Edited first prompt",
                                 "Edited continuation",
                             ),
-                            app.database.chats().snapshot(id).map {
-                                it.rawContent
-                            },
+                            edited,
                         )
                         app.database.chats().deleteConversation(id)
                     } finally {
