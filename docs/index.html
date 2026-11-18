@@ -1906,11 +1906,23 @@ html[data-theme="dark"] .chip-table .chip-t{color:#9BE8D5}
   padding:11px 18px 11px 0;
   margin-right:14px;
   cursor:pointer;
+  /* The right padding keeps a comfortable hit area, but the indicator must sit under the LABEL, not
+     under the padded box: measured 18 px of bar past the last glyph, which read as "slightly off". */
+  position:relative;
 }
 
 .tab[aria-selected="true"]{
   color:var(--ink);
-  border-bottom-color:var(--cobalt);
+}
+
+.tab[aria-selected="true"]::after{
+  content:"";
+  position:absolute;
+  left:0;
+  right:18px;
+  bottom:-1px;
+  height:2px;
+  background:var(--cobalt);
 }
 
 .panel{display:none}
