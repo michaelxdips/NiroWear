@@ -20,8 +20,11 @@ for line in text.splitlines():
     if match:
         state[match[1]] = match[2]
     match = re.match(r"INSTRUMENTATION_STATUS_CODE: (-?\d+)", line)
-    if match and int(match[1]) <= 0 and "test" in state:
-        cases.append((state.copy(), int(match[1])))
+    if match:
+        # Every status code closes a bundle. A diagnostic sendStatus(0) carries neither class nor
+        # test, so it must never inherit the previous bundle's identity and become a fake result.
+        if int(match[1]) <= 0 and "class" in state and "test" in state:
+            cases.append((state.copy(), int(match[1])))
         state = {}
 if expected is None:
     assert cases, "No terminal test records"
