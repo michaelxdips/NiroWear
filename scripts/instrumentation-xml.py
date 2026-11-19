@@ -42,22 +42,24 @@ print(suite.attrib)
 if expected is not None:
     problems = []
     ran = {case.get("class", "") for case, _ in cases}
-    if ran != set(expected):
+    if not expected or ran != set(expected):
         problems.append("classes ran %s != expected %s" % (sorted(ran), sorted(set(expected))))
     pairs = [(case.get("class", ""), case["test"]) for case, _ in cases]
     if len(pairs) != len(set(pairs)):
         problems.append("duplicate (class,test) records present")
-    failed = sorted({code for _, code in cases if code != 0})
+    lines = [line.rstrip() for line in text.splitlines()]
+    failed = sorted({line for line in lines if line.startswith("INSTRUMENTATION_STATUS_CODE:")
+                     and line not in ("INSTRUMENTATION_STATUS_CODE: 0", "INSTRUMENTATION_STATUS_CODE: 1")})
     if failed:
-        problems.append("non-pass status codes: %s" % failed)
-    codes = [int(value) for value in re.findall(r"(?m)^INSTRUMENTATION_CODE: (-?\d+)", text)]
-    totals = [int(value) for value in re.findall(r"(?m)^OK \((\d+) tests?\)", text)]
-    if codes[-1:] != [-1]:
-        problems.append("final INSTRUMENTATION_CODE missing or not -1: %s" % codes)
-    if not totals:
-        problems.append("OK (n tests) summary missing")
-    elif totals[-1] != len(cases):
-        problems.append("OK (%d tests) != %d recorded tests" % (totals[-1], len(cases)))
+        problems.append("non-pass or malformed status codes: %s" % failed)
+    codes = [line for line in lines if line.startswith("INSTRUMENTATION_CODE:")]
+    totals = [re.fullmatch(r"OK \((\d+) tests?\)", line) for line in lines if line.startswith("OK (")]
+    if codes != ["INSTRUMENTATION_CODE: -1"]:
+        problems.append("expected one final INSTRUMENTATION_CODE: -1, got %s" % codes)
+    if len(totals) != 1 or totals[0] is None:
+        problems.append("expected one valid OK (n tests) summary")
+    elif int(totals[0][1]) != len(cases):
+        problems.append("OK (%s tests) != %d recorded tests" % (totals[0][1], len(cases)))
     for problem in problems:
         print("SMOKE_CLASSES_FAIL: " + problem)
     sys.exit(1 if problems else 0)
