@@ -236,8 +236,32 @@ jobs:
           SMOKE="$SMOKE,com.nirowear.renderer.RendererTapAndPanTest"
           SMOKE="$SMOKE,com.nirowear.renderer.LinkActionsTest"
           echo "smoke classes: $SMOKE"
-          ANDROID_SERIAL=emulator-5554 ./gradlew :app:connectedDebugAndroidTest \
-            -Pandroid.testInstrumentationRunnerArguments.class="$SMOKE" --console=plain
+          # The runner is driven directly instead of through the AGP connected task: that task
+          # re-serialises the class filter and the runner arrived holding only the first class
+          # (artifact 14500777823), so a 10-class gate was silently a 1-class gate. Built APKs plus one
+          # literal `am instrument -e class` call make CI and the local run the same invocation.
+          ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest --console=plain
+          NAME=$(adb -s emulator-5554 emu avd name 2>/dev/null | head -1 | tr -d '\r')
+          test "$NAME" = "wear34" || { echo "::error::emulator-5554 is '$NAME', not wear34"; exit 1; }
+          QEMU=$(adb -s emulator-5554 shell getprop ro.kernel.qemu | tr -d '\r')
+          test "$QEMU" = "1" || { echo "::error::emulator-5554 is not an emulator (qemu=$QEMU)"; exit 1; }
+          adb -s emulator-5554 install -r app/build/outputs/apk/debug/app-debug.apk
+          adb -s emulator-5554 install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+          # The raw record is kept even when the run fails: the converter judges it afterwards, and the
+          # artifact path below already publishes it.
+          RAW=app/build/outputs/androidTest-results/connected/debug/smoke.txt
+          mkdir -p "$(dirname "$RAW")"
+          set +e
+          adb -s emulator-5554 shell am instrument -w -r -e class "$SMOKE" \
+            -e notAnnotation com.nirowear.HostDrivenGate \
+            com.nirowear.test/androidx.test.runner.AndroidJUnitRunner | tee "$RAW"
+          PIPE_CODES=("${PIPESTATUS[@]}")
+          set -e
+          echo "pipeline exits: ${PIPE_CODES[*]}"
+          # Both sides of the pipe are checked: a broken adb transport and a failed tee both lose the
+          # evidence, and a lost record must never be read as a pass.
+          test "${PIPE_CODES[0]}" = "0" -a "${PIPE_CODES[1]}" = "0" || { echo "::error::am instrument/tee exited ${PIPE_CODES[*]}"; exit 1; }
+          python3 scripts/instrumentation-xml.py "$RAW" --smoke-classes "$SMOKE"
 
       - name: Collect logcat
         if: always()
