@@ -14,6 +14,7 @@ path = Path(argv[0])
 raw = path.read_bytes()
 text = raw.decode("utf-16" if raw.startswith((b"\xff\xfe", b"\xfe\xff")) else "utf-8-sig")
 cases = []
+runner_errors = []
 state = {}
 for line in text.splitlines():
     match = re.match(r"INSTRUMENTATION_STATUS: (class|test|stack)=(.*)", line)
@@ -23,19 +24,26 @@ for line in text.splitlines():
     if match:
         # Every status code closes a bundle. A diagnostic sendStatus(0) carries neither class nor
         # test, so it must never inherit the previous bundle's identity and become a fake result.
-        if int(match[1]) <= 0 and "class" in state and "test" in state:
-            cases.append((state.copy(), int(match[1])))
+        code = int(match[1])
+        if code <= 0 and "class" in state and "test" in state:
+            cases.append((state.copy(), code))
+        elif code in (-1, -2):
+            runner_errors.append((code, state.get("stack", "See complete literal instrumentation log")))
         state = {}
 if expected is None:
-    assert cases, "No terminal test records"
-suite = E.Element("testsuite", tests=str(len(cases)), failures=str(sum(code in (-1, -2) for _, code in cases)),
-                  errors="0", skipped=str(sum(code in (-3, -4) for _, code in cases)))
+    assert cases or runner_errors, "No terminal test records"
+suite = E.Element("testsuite", tests=str(len(cases) + len(runner_errors)),
+                  failures=str(sum(code in (-1, -2) for _, code in cases)),
+                  errors=str(len(runner_errors)), skipped=str(sum(code in (-3, -4) for _, code in cases)))
 for case, code in cases:
     node = E.SubElement(suite, "testcase", classname=case.get("class", ""), name=case["test"])
     if code in (-1, -2):
         E.SubElement(node, "failure").text = case.get("stack", "See complete literal instrumentation log")
     elif code in (-3, -4):
         E.SubElement(node, "skipped").text = case.get("stack", "Skipped by runner")
+for index, (code, stack) in enumerate(runner_errors, 1):
+    node = E.SubElement(suite, "testcase", classname="AndroidJUnitRunner", name=f"runner-error-{index}")
+    E.SubElement(node, "error", message=f"Unattributed instrumentation status {code}").text = stack
 E.ElementTree(suite).write(path.with_suffix(".xml"), encoding="utf-8", xml_declaration=True)
 print(suite.attrib)
 
