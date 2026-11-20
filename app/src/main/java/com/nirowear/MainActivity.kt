@@ -2,6 +2,7 @@ package com.nirowear
 
 import android.app.Activity
 import android.content.ActivityNotFoundException
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.speech.RecognizerIntent
@@ -85,6 +86,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.preferencesDataStore
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -115,9 +119,13 @@ import com.nirowear.renderer.ResponseParser
 import com.nirowear.renderer.renderUnitsFor
 import com.nirowear.renderer.unitRangeByBlock
 import com.nirowear.settings.ProviderScreen
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 // ponytail: single-activity app; the reader publishes its crown handler here. Move to a
 // CompositionLocal if a second activity or split-screen reader ever exists.
@@ -125,6 +133,44 @@ private var rotary: ((Float) -> Boolean)? = null
 
 /** A filled field value with the caret after the text — what a programmatic fill must look like. */
 private fun fieldOf(text: String) = TextFieldValue(text, TextRange(text.length))
+
+/**
+ * The composer's unsent text, and nothing else: one private DataStore file, one key.
+ *
+ * Written only on an explicit composer exit or an admitted send — never on a keystroke — and read
+ * once per app visit when a fresh composer opens. [write] with an empty string deletes the key, so an
+ * empty draft leaves no record behind and the next entry starts clean.
+ */
+internal object ComposerDraft {
+    private val Context.data by preferencesDataStore("composer_draft")
+    private val textKey = stringPreferencesKey("unsent_text")
+
+    suspend fun read(context: Context): String? = context.data.data.first()[textKey]
+
+    suspend fun write(
+        context: Context,
+        text: String,
+    ) {
+        context.data.edit { prefs ->
+            if (text.isEmpty()) prefs.remove(textKey) else prefs[textKey] = text
+        }
+    }
+}
+
+/**
+ * A draft read either returns the stored text (possibly absent) or fails.
+ *
+ * The two are different facts: "no draft" legitimately opens an empty composer, while "the store
+ * could not be read" must NOT open a blank editor over text that is still on disk — that blank editor
+ * is how the saved text would be erased by the next exit.
+ */
+private sealed interface DraftRead {
+    data class Loaded(
+        val text: String?,
+    ) : DraftRead
+
+    object Failed : DraftRead
+}
 
 class MainActivity : ComponentActivity() {
     override fun onGenericMotionEvent(event: MotionEvent): Boolean {
@@ -523,6 +569,81 @@ private fun ChatReader(
             saveReaderPosition()
         }
     }
+    // I4: the composer's unsent text is the only thing that outlives the app. One key, one writer and
+    // one reader behind `draftGate`, plus a synchronous `draftBusy` guard TAKEN BEFORE any I/O starts:
+    // a second BACK, Send, a voice result or a re-entry cannot overlap an in-flight save/read/delete.
+    // The read happens while OPENING a composer (guarded entry, below) — not at startup, never on a
+    // keystroke. The stored text is the text as typed: no trim, no filtering.
+    val draftContext = LocalContext.current
+    val draftScope = rememberCoroutineScope()
+    val draftGate = remember { Mutex() }
+    val draftNotice = stringResource(R.string.chat_draft_not_saved)
+    // Once per Activity: after the first successful read the in-memory field is the truth, including
+    // a deliberately emptied one, so nothing can be restored over the user's own edits later.
+    var draftInitialized by remember { mutableStateOf(false) }
+    var draftBusy by remember { mutableStateOf(false) }
+
+    suspend fun persistDraft(text: String): Boolean =
+        draftGate.withLock {
+            try {
+                ComposerDraft.write(draftContext, text)
+                true
+            } catch (cancel: CancellationException) {
+                throw cancel
+            } catch (_: Exception) {
+                // The key on disk is untouched; the caller decides whether it may still close.
+                notice = draftNotice
+                false
+            }
+        }
+
+    suspend fun readDraft(): DraftRead =
+        draftGate.withLock {
+            try {
+                val stored = ComposerDraft.read(draftContext)
+                // Marked only AFTER a successful read; a failure is retried on the next entry.
+                draftInitialized = true
+                DraftRead.Loaded(stored)
+            } catch (cancel: CancellationException) {
+                throw cancel
+            } catch (_: Exception) {
+                notice = draftNotice
+                DraftRead.Failed
+            }
+        }
+
+    /**
+     * The one guarded way into the composer, for both input paths.
+     *
+     * Busy is taken before the coroutine launches and released in `finally`; the editor opens only
+     * after a successful restore, so a failed read cannot present a blank editor over text that is
+     * still on disk and tempt the user to overwrite it. [spoken] appends to the draft, never replaces.
+     */
+    fun openComposer(spoken: String?) {
+        if (draftBusy) return
+        draftBusy = true
+        draftScope.launch {
+            try {
+                var base = draftField.text
+                if (!draftInitialized) {
+                    when (val read = readDraft()) {
+                        is DraftRead.Failed -> return@launch
+                        is DraftRead.Loaded -> if (base.isEmpty()) base = read.text.orEmpty()
+                    }
+                }
+                if (spoken != null) {
+                    base = if (base.isBlank()) spoken else base.trimEnd() + " " + spoken
+                }
+                draftField = fieldOf(base)
+                // The composer always edits the DRAFT; a stale edit body must never reappear here.
+                editField = TextFieldValue()
+                editedId = null
+                editing = true
+            } finally {
+                draftBusy = false
+            }
+        }
+    }
     val voice =
         rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
             if (result.resultCode == Activity.RESULT_OK) {
@@ -532,29 +653,37 @@ private fun ChatReader(
                     ?.firstOrNull()
                     ?.takeIf { it.isNotBlank() }
                     ?.let { spoken ->
-                        // Voice ADDS to the draft. The draft deliberately survives backing out of the
-                        // editor, so replacing it here destroyed a typed prompt with no undo.
-                        draftField =
-                            fieldOf(
-                                if (draftField.text.isBlank()) {
-                                    spoken
-                                } else {
-                                    draftField.text.trimEnd() + " " + spoken
-                                },
-                            )
-                        // Voice is a fresh compose, never a resumed edit.
-                        editField = TextFieldValue()
-                        editedId = null
-                        editing = true
+                        // Voice enters through the same guarded path as the keyboard, so a spoken
+                        // prompt adds to the draft (in-memory or recovered) and cannot land in the
+                        // middle of a save.
+                        openComposer(spoken)
                     }
             }
         }
     BackHandler(editing) {
-        editing = false
-        // Backing out abandons the edit body and NOTHING else: the user's unsent draft lives in its own
-        // slot, so it is neither restored nor destroyed here. A plain compose keeps what was typed.
-        editField = TextFieldValue()
-        editedId = null
+        if (editedId != null) {
+            // Backing out abandons the edit body and NOTHING else: the user's unsent draft lives in
+            // its own slot, and an abandoned edit body must never be persisted as that draft.
+            editing = false
+            editField = TextFieldValue()
+            editedId = null
+        } else if (!draftBusy) {
+            // The IME consumes the first BACK; this handler only runs once the keyboard is gone, so
+            // BACK here means "close the composer". Busy is taken synchronously, so a second press
+            // cannot start a competing save.
+            val closing = draftField.text
+            draftBusy = true
+            draftScope.launch {
+                if (persistDraft(closing)) {
+                    editing = false
+                    editField = TextFieldValue()
+                    editedId = null
+                }
+                // A failed save leaves the editor and its text exactly where they were, notice shown,
+                // so BACK can be retried. Closing on a failed write is how the text got lost.
+                draftBusy = false
+            }
+        }
     }
     BackHandler(providerScreen) { providerScreen = false }
     BackHandler(historyScreen) { historyScreen = false }
@@ -612,7 +741,9 @@ private fun ChatReader(
             // wait for the keyboard to go away, find the app's Send, tap it. `ImeAction.Send` submits
             // from the keyboard itself, so the field never has to be abandoned first.
             fun submitEditor() {
-                if (editorText.isBlank()) return
+                // Settling a save/delete takes precedence: a Send fired into it could either replay a
+                // draft that is being cleared or clear one that is being written.
+                if (editorText.isBlank() || draftBusy) return
                 val editTarget = editedId
                 val started =
                     if (editTarget != null) {
@@ -639,6 +770,15 @@ private fun ChatReader(
                         editField = TextFieldValue()
                     } else {
                         draftField = TextFieldValue()
+                        // The send was ADMITTED, so the persisted slot must not hand the text back on
+                        // the next entry or later in this session. Delete through the same gate, after
+                        // the send, so it cannot race a BACK save still in flight. A refused send
+                        // never reaches this branch and leaves the draft alone.
+                        draftBusy = true
+                        draftScope.launch {
+                            persistDraft("")
+                            draftBusy = false
+                        }
                     }
                     notice = ""
                     editedId = null
@@ -661,11 +801,24 @@ private fun ChatReader(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Text(stringResource(R.string.chat_prompt), modifier = Modifier.align(Alignment.CenterHorizontally))
+                // A save failure leaves this editor open on purpose, so its error has to be visible
+                // HERE — the reader's notice row is behind the editor and would never be seen.
+                if (notice.isNotEmpty()) {
+                    Text(notice, modifier = Modifier.align(Alignment.CenterHorizontally))
+                }
                 // The `semantics` lambda is not a composable scope.
                 val promptEditorLabel = stringResource(R.string.chat_prompt_editor)
                 BasicTextField(
                     value = editorField,
-                    onValueChange = { if (composing) editField = it else draftField = it },
+                    onValueChange = {
+                        // While a save is settling the snapshot must not move under it; the editor
+                        // closes only after that write lands, so a keystroke here would be lost.
+                        if (composing) {
+                            editField = it
+                        } else if (!draftBusy) {
+                            draftField = it
+                        }
+                    },
                     modifier =
                         Modifier
                             .weight(1f)
@@ -1317,12 +1470,9 @@ private fun ChatReader(
                                     // it, and the code is the intended behaviour.)
                                     .clickable(role = Role.Button, onClick = {
                                         saveReaderPosition()
-                                        // The keyboard always composes the DRAFT. `editText` and
-                                        // `editedId` are cleared together, so a stale edit body can
-                                        // never reappear as a fresh message.
-                                        editField = TextFieldValue()
-                                        editedId = null
-                                        editing = true
+                                        // Entry is guarded: the stored draft is read first and the
+                                        // editor opens only after a successful restore.
+                                        openComposer(null)
                                     }),
                                 contentAlignment = Alignment.Center,
                             ) {
@@ -1340,6 +1490,9 @@ private fun ChatReader(
                                     .semantics { contentDescription = voiceInputLabel }
                                     .clickable(role = Role.Button, onClick = {
                                         saveReaderPosition()
+                                        // A launch while a draft operation is settling could hand the
+                                        // recogniser a stale prompt; the guard makes that impossible.
+                                        if (draftBusy) return@clickable
                                         try {
                                             voice.launch(
                                                 Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {

@@ -20,6 +20,7 @@
     <string name="chat_empty_start">Pakai keyboard atau suara untuk mulai.</string>
     <string name="chat_copy_unsaved">Salin jawaban belum tersimpan</string>
     <string name="chat_retry_saving">Coba simpan lagi</string>
+    <string name="chat_draft_not_saved">Draf tidak tersimpan. Coba lagi.</string>
     <string name="chat_unsaved_copied">Jawaban yang belum tersimpan disalin sebagai sensitif. Papan klip masih berisi teks biasa.</string>
     <string name="chat_edit_message">Edit pesan</string>
     <string name="chat_menu">Menu</string>
