@@ -147,7 +147,10 @@ internal object ComposerDraft {
 
     suspend fun read(context: Context): String? = context.data.data.first()[textKey]
 
-    suspend fun write(context: Context, text: String) {
+    suspend fun write(
+        context: Context,
+        text: String,
+    ) {
         context.data.edit { prefs ->
             if (text.isEmpty()) prefs.remove(textKey) else prefs[textKey] = text
         }
@@ -810,7 +813,11 @@ private fun ChatReader(
                     onValueChange = {
                         // While a save is settling the snapshot must not move under it; the editor
                         // closes only after that write lands, so a keystroke here would be lost.
-                        if (composing) editField = it else if (!draftBusy) draftField = it
+                        if (composing) {
+                            editField = it
+                        } else if (!draftBusy) {
+                            draftField = it
+                        }
                     },
                     modifier =
                         Modifier
