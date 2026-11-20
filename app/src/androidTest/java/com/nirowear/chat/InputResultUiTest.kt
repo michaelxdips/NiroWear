@@ -9,6 +9,7 @@ import android.os.SystemClock
 import android.speech.RecognizerIntent
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.test.platform.app.InstrumentationRegistry
+import com.nirowear.ComposerDraft
 import com.nirowear.MainActivity
 import com.nirowear.NiroApplication
 import kotlinx.coroutines.flow.first
@@ -74,6 +75,9 @@ class InputResultUiTest {
         )
 
     @Test fun unsentKeyboardDraftSurvivesBackAndReentry() {
+        // Snapshot whatever this device already had; the draft is durable, so this test must not
+        // decide what the NEXT test starts with.
+        val prior = runBlocking { ComposerDraft.read(i.targetContext) }
         val activity = launch()
         try {
             click("Keyboard input")
@@ -93,9 +97,59 @@ class InputResultUiTest {
             click("Keyboard input")
             await("Retained unsent draft")
         } finally {
+            // Restore the snapshot exactly; an emptied key stays emptied.
+            runBlocking { ComposerDraft.write(i.targetContext, prior.orEmpty()) }
             i.runOnMainSync { activity.finish() }
         }
     }
+
+    /**
+     * The draft must survive an explicit composer exit and a FRESH Activity, not just the same
+     * Activity reopening: a new Activity has no `rememberSaveable` state, so the text can only come
+     * back from the persisted slot. The composer is observed to CLOSE — its entry action reappears —
+     * before the store is read, because the save is ordered before the close and reading first would
+     * race it. The stored fixture is restored in the outer finally even when the first stage fails.
+     */
+    @Test fun unsentDraftSurvivesExplicitExitAndFreshRelaunch(): Unit =
+        runBlocking {
+            val prior = ComposerDraft.read(i.targetContext)
+            val text = "Recovered after relaunch"
+            try {
+                ComposerDraft.write(i.targetContext, "")
+                val first = launch()
+                try {
+                    click("Keyboard input")
+                    val editor = awaitEditable()
+                    assertTrue(
+                        editor.performAction(
+                            AccessibilityNodeInfo.ACTION_SET_TEXT,
+                            Bundle().apply {
+                                putCharSequence(
+                                    AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
+                                    text,
+                                )
+                            },
+                        ),
+                    )
+                    i.runOnMainSync { first.onBackPressed() }
+                    // A failed save leaves the editor open, so this await is the close assertion.
+                    await("Keyboard input")
+                    assertEquals("Draft must be on disk once the editor closed", text, ComposerDraft.read(i.targetContext))
+                } finally {
+                    i.runOnMainSync { first.finish() }
+                }
+                val second = launch()
+                try {
+                    click("Keyboard input")
+                    await(text)
+                } finally {
+                    i.runOnMainSync { second.finish() }
+                }
+            } finally {
+                // Restore the pre-test fixture even when the first stage failed.
+                ComposerDraft.write(i.targetContext, prior.orEmpty())
+            }
+        }
 
     @Test fun delegatedResultsRemainEditableNeverAutoSubmitAndCancellationKeepsDraft() =
         runBlocking {
