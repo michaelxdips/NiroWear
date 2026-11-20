@@ -21,6 +21,8 @@ Fixed from measurements on the physical watch, with the numbers kept next to eac
 
 ## Unreleased
 
+- Startup rule: never add animation or delay to mask a slow launch. Measure startup using a release build.
+
 ### Tests actually run in CI
 
 `app/src/test` and `app/src/androidTest` were ignored by the repository's allowlist until 2026-11-16,
