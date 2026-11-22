@@ -1,7 +1,14 @@
 package com.nirowear.chat
 
 import android.app.Application
+import android.os.Bundle
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import com.nirowear.FailureToken
 import com.nirowear.NiroApplication
@@ -27,6 +34,7 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
@@ -92,6 +100,7 @@ fun fakeStream(source: String) =
 
 class ChatViewModel(
     application: Application,
+    savedState: SavedStateHandle = SavedStateHandle(),
 ) : AndroidViewModel(application) {
     private val app = application as NiroApplication
     private val dao = app.database.chats()
@@ -221,14 +230,86 @@ class ChatViewModel(
         mutableState.value = ChatState()
     }
 
-    /** True when the turn actually started, so the caller knows whether the text was accepted. */
+    // Task state can be captured while Send is still writing. Keep its text, but use it only
+    // if Room still has the revision this editor opened on. A save or committed Send supersedes it.
+    private var restoredComposer = savedState.get<Bundle>("composer")?.takeIf { it.containsKey("text") }
+    private var composerRevision: String? = null
+    private var composerLoaded = false
+    var composerField by mutableStateOf(TextFieldValue())
+    var composerBusy by mutableStateOf(false)
+    var composerLive = false
+    var pendingDictation: String? = null
+
+    init {
+        savedState.setSavedStateProvider("composer", ::composerTaskSnapshot)
+    }
+
+    internal fun composerTaskSnapshot(): Bundle {
+        if (!composerLoaded) return restoredComposer ?: Bundle()
+        return Bundle().apply {
+            if (composerLive) {
+                putString("text", composerField.text)
+                putInt("start", composerField.selection.start)
+                putInt("end", composerField.selection.end)
+                putString("revision", composerRevision)
+            }
+        }
+    }
+
+    suspend fun loadComposerDraft() {
+        if (composerLoaded) return
+        val stored = dao.composerDraft()
+        val restored = restoredComposer
+        composerRevision = stored?.revision
+        composerField =
+            if (restored != null && restored.getString("revision") == composerRevision) {
+                TextFieldValue(
+                    restored.getString("text").orEmpty(),
+                    TextRange(restored.getInt("start"), restored.getInt("end")),
+                )
+            } else {
+                val text = stored?.text.orEmpty()
+                TextFieldValue(text, TextRange(text.length))
+            }
+        composerLive = restored != null && restored.getString("revision") == composerRevision
+        restoredComposer = null
+        composerLoaded = true
+    }
+
+    suspend fun saveComposerDraft(text: String) {
+        val revision =
+            java.util.UUID
+                .randomUUID()
+                .toString()
+        // Once the write starts, publish its revision even if Activity recreation cancels Back.
+        withContext(NonCancellable) {
+            dao.saveComposerDraft(text, revision)
+            composerRevision = revision
+            composerLive = false
+        }
+    }
+
+    private fun composerCommitted() {
+        composerField = TextFieldValue()
+        composerLoaded = false
+        composerLive = false
+    }
+
+    /** True means the job started, not that a message committed. */
     fun send(prompt: String?): Boolean = generate(prompt)
+
+    /** Send closes the editor only after the latest text is durable in the draft slot. */
+    fun sendComposer(
+        prompt: String,
+        onDraftSaved: (Boolean) -> Unit,
+    ): Boolean = generate(prompt, onDraftSaved = onDraftSaved)
 
     private fun generate(
         prompt: String?,
         editId: Long? = null,
         editedText: String? = null,
         retry: Boolean = false,
+        onDraftSaved: ((Boolean) -> Unit)? = null,
     ): Boolean {
         if (prompt?.isBlank() == true || mutableState.value.unsaved || mutableState.value.generating ||
             generation?.isActive == true
@@ -277,6 +358,21 @@ class ChatViewModel(
                 // previous answer and leave the reader with neither a row, a status line nor a Retry.
                 var wrote = false
                 try {
+                    if (onDraftSaved != null) {
+                        nothingSent = true
+                        try {
+                            saveComposerDraft(requireNotNull(prompt))
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (_: Exception) {
+                            onDraftSaved(false)
+                            return@launch
+                        } finally {
+                            composerBusy = false
+                        }
+                        nothingSent = false
+                        onDraftSaved(true)
+                    }
                     if (newConversationId != null) {
                         dao.insertConversation(
                             Conversation(
@@ -339,8 +435,17 @@ class ChatViewModel(
                         dao.truncate(conversationId, user.id)
                         wrote = true
                     }
-                    val newAssistantId = dao.admit(conversationId, prompt?.trim(), profile)
-                    assistantId = newAssistantId
+                    // If Stop arrives after SQL commit, remember the assistant ID before cancellation
+                    // can resume this coroutine. Otherwise the fallback would insert the USER twice.
+                    currentCoroutineContext().ensureActive()
+                    val newAssistantId =
+                        withContext(NonCancellable) {
+                            dao.admit(conversationId, prompt?.trim(), profile, onDraftSaved != null).also {
+                                assistantId = it
+                                if (onDraftSaved != null) composerCommitted()
+                            }
+                        }
+                    currentCoroutineContext().ensureActive()
                     // Name the chat from its FIRST prompt. The previous version used `prompt` (the
                     // current message) whether or not a title existed, so every send RENAMED an
                     // existing conversation to its latest message and History stopped being
@@ -349,8 +454,8 @@ class ChatViewModel(
                         runCatching { dao.retitleIfUnnamed(conversationId, text.take(60)) }
                     }
                     val admitted = dao.snapshot(conversationId)
-                    liveAnswer.value = admitted.first { it.id == assistantId }
-                    val rows = admitted.filter { it.id != assistantId && it.rawContent.isNotEmpty() }
+                    liveAnswer.value = admitted.first { it.id == newAssistantId }
+                    val rows = admitted.filter { it.id != newAssistantId && it.rawContent.isNotEmpty() }
                     checkpoints =
                         launch {
                             var publishedLength = 0
@@ -361,7 +466,7 @@ class ChatViewModel(
                                 publishedLength = text.length
                                 liveAnswer.value = liveAnswer.value?.copy(rawContent = content)
                                 try {
-                                    dao.checkpoint(assistantId, content, "STREAMING")
+                                    dao.checkpoint(newAssistantId, content, "STREAMING")
                                 } catch (
                                     cancelled: CancellationException,
                                 ) {
@@ -426,7 +531,7 @@ class ChatViewModel(
                                     check(profile.type == ProviderType.OPENAI)
                                     localPhases =
                                         StoredOpenAiPhases(
-                                            assistantId,
+                                            newAssistantId,
                                             profile.id,
                                             profile.selectedModelId,
                                             base,
@@ -585,7 +690,9 @@ class ChatViewModel(
                                     // A user cancel is STOPPED, not ERROR: the reader renders the
                                     // same line it already shows for a stopped answer.
                                     status = if (failure == null) "STOPPED" else "ERROR",
+                                    consumeComposerDraft = onDraftSaved != null,
                                 )
+                                if (onDraftSaved != null) composerCommitted()
                             }
                         }
                         liveAnswer.value =
