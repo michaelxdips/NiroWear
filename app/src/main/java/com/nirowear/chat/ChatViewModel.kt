@@ -27,8 +27,10 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
@@ -90,6 +92,42 @@ fun fakeStream(source: String) =
         }
     }
 
+/**
+ * Retries transient history queries up to [maxRetries] times with exponential backoff and, when
+ * [catchTerminal] is true, emits an empty list after exhaustion so passive collectors do not crash.
+ */
+internal fun Flow<List<Conversation>>.retryHistoryReads(
+    maxRetries: Long = MAX_HISTORY_RETRIES,
+    backoffMs: (Long) -> Long = { attempt ->
+        (1000L shl attempt.coerceAtMost(2L).toInt()).coerceAtMost(4000L)
+    },
+    onRetrying: () -> Unit,
+    onExhausted: () -> Unit,
+    catchTerminal: Boolean,
+): Flow<List<Conversation>> {
+    val retried =
+        retryWhen { error, attempt ->
+            if (error is CancellationException) throw error
+            if (attempt >= maxRetries) {
+                onExhausted()
+                false
+            } else {
+                onRetrying()
+                delay(backoffMs(attempt))
+                true
+            }
+        }
+    return if (catchTerminal) {
+        retried.catch { error ->
+            if (error is CancellationException) throw error
+            onExhausted()
+            emit(emptyList())
+        }
+    } else {
+        retried
+    }
+}
+
 class ChatViewModel(
     application: Application,
 ) : AndroidViewModel(application) {
@@ -105,24 +143,22 @@ class ChatViewModel(
      * rotation, so until process death), and the message was then overwritten by the next
      * conversation open. `retryWhen` keeps the upstream alive and backs off instead.
      */
-    val conversations =
-        dao
-            .conversations()
-            .retryWhen { error, attempt ->
-                if (error is CancellationException) throw error
-                if (attempt >= MAX_HISTORY_RETRIES) {
-                    // Bounded on purpose: retrying every few seconds forever is a radio-and-CPU leak
-                    // on a watch when the database is genuinely broken. The error stays on screen,
-                    // and reopening the app starts a fresh subscription.
-                    mutableState.value =
-                        mutableState.value.copy(error = FailureToken.HISTORY_UNREADABLE)
-                    false
-                } else {
-                    mutableState.value = mutableState.value.copy(error = FailureToken.HISTORY_RETRYING)
-                    delay((1000L shl attempt.coerceAtMost(2L).toInt()).coerceAtMost(4000L))
-                    true
-                }
-            }
+    private fun retryingConversations(catchTerminal: Boolean): Flow<List<Conversation>> =
+        dao.conversations().retryHistoryReads(
+            onRetrying = {
+                mutableState.value = mutableState.value.copy(error = FailureToken.HISTORY_RETRYING)
+            },
+            onExhausted = {
+                // Bounded on purpose: retrying every few seconds forever is a radio-and-CPU leak
+                // on a watch when the database is genuinely broken. The error stays on screen,
+                // and reopening the app starts a fresh subscription.
+                mutableState.value =
+                    mutableState.value.copy(error = FailureToken.HISTORY_UNREADABLE)
+            },
+            catchTerminal = catchTerminal,
+        )
+
+    val conversations: Flow<List<Conversation>> = retryingConversations(catchTerminal = true)
     val messages = MutableStateFlow<List<StoredMessage>>(emptyList())
     private val liveAnswer = MutableStateFlow<StoredMessage?>(null)
     private var history: Job? = null
@@ -152,7 +188,7 @@ class ChatViewModel(
                         )
                 }
                 dao.recoverInterrupted()
-                conversations.first().firstOrNull()?.let {
+                retryingConversations(catchTerminal = false).first().firstOrNull()?.let {
                     mutableState.value = mutableState.value.copy(conversationId = it.id)
                     observe(it.id)
                 }
