@@ -14,7 +14,7 @@
     <string name="chat_voice_prompt">Tanya NiroWear</string>
     <string name="chat_voice_unavailable">Pengenalan suara tidak tersedia. Pakai keyboard.</string>
     <string name="chat_voice_blocked">Pengenalan suara diblokir. Pakai keyboard.</string>
-    <string name="chat_header_add_provider">Tambahkan provider · Menu</string>
+    <string name="chat_header_add_provider">Tambah provider · Menu</string>
     <string name="chat_ask_anything">Tanya apa saja</string>
     <string name="chat_empty_add_provider">Tambahkan provider dari menu.</string>
     <string name="chat_empty_start">Pakai keyboard atau suara untuk mulai.</string>

@@ -1211,10 +1211,10 @@ private fun ChatReader(
             Box(
                 Modifier
                     .align(Alignment.TopCenter)
-                    // Bounds are MINIMUMS, not fixed sizes: a fixed 130 dp box with maxLines = 1
-                    // clipped the provider name to "Add prov…" at a 2.0x font scale with no way to
-                    // read the rest. Growing up to 300 dp keeps it inside the dial's safe band.
-                    .widthIn(min = 130.dp, max = 300.dp)
+                    // Bounds keep the 48 dp touch target while capping width + top/side inset so
+                    // two-line wrapped headers (e.g. Indonesian "Tambah provider · Menu") remain
+                    // strictly inside the 466 px circular dial chord without bezel clipping.
+                    .widthIn(min = 130.dp, max = 148.dp)
                     .heightIn(min = 48.dp)
                     .semantics { contentDescription = menuLabel }
                     .clickable(role = Role.Button) {
@@ -1232,10 +1232,12 @@ private fun ChatReader(
                     },
                     modifier =
                         Modifier
-                            .heightIn(min = 42.dp)
-                            .wrapContentHeight(Alignment.Bottom)
-                            .padding(bottom = 6.dp),
+                            .heightIn(min = 48.dp)
+                            .padding(start = 18.dp, top = 16.dp, end = 18.dp, bottom = 4.dp)
+                            .wrapContentHeight(Alignment.CenterVertically),
                     fontSize = 12.sp,
+                    lineHeight = 14.sp,
+                    textAlign = TextAlign.Center,
                     // Two lines at 2.0x instead of one clipped line. The parent's contentDescription
                     // still carries the full text for TalkBack, so nothing is lost if it wraps.
                     maxLines = 2,
