@@ -1,10 +1,8 @@
 #!/bin/sh
 # NiroWear pre-push gate (#30).
 #
-# The instrumented sources are gitignored by policy (.gitignore:82-83), so CI cannot compile them
-# and nothing catches their rot: measured 2026-11-15, the private suite did not compile against
-# b02ddfd for a day and no gate failed. This hook is the narrowest fix that needs no policy change
-# and no token — it runs the compile on the only machine that holds the sources.
+# Both test suites are published now (.gitignore:51-52); this local hook catches a broken
+# instrumented compile locally before pushing to CI.
 #
 # Enable once per clone:  git config core.hooksPath .githooks
 # Cost on this tree: about ten seconds warm. It compiles; it installs nothing and drives no device.
