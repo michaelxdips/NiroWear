@@ -3,6 +3,11 @@
 Notable changes to NiroWear. Versions follow the published APK releases at
 [NiroWear releases](https://github.com/michaelxdips/NiroWear/releases).
 
+## Unreleased
+
+- Startup rule: never add animation or delay to mask a slow launch. Measure startup using a release build. (#82)
+- CI instrumented smoke runner passes the 10-class filter directly to `AndroidJUnitRunner` and isolates status bundles in `scripts/instrumentation-xml.py` (#80, #81).
+
 ## 0.2.2 — 2026-11-17
 
 Fixed from measurements on the physical watch, with the numbers kept next to each claim:
@@ -18,10 +23,6 @@ Fixed from measurements on the physical watch, with the numbers kept next to eac
 - **`RendererLocalizationTest`** no longer expects Arabic-Indic digits inside the English fallback
   sentence, matching the #49 decision.
 - Release notes: `docs/release/RELEASE_NOTES_0.2.2.md`.
-
-## Unreleased
-
-- Startup rule: never add animation or delay to mask a slow launch. Measure startup using a release build.
 
 ### Tests actually run in CI
 
