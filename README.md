@@ -85,7 +85,7 @@ It exists because a watch is a bad screen for a good answer. Every other approac
 ## Install
 
 1. Download `app-release.apk` from the [latest release](https://github.com/michaelxdips/NiroWear/releases/latest).
-2. Install it on a Wear OS 3+ watch (`minSdk 30`).
+2. Install it on your watch. Needs Wear OS 3+ (`minSdk 30`), 32- or 64-bit ARM, 3.6 MB of storage, and a provider key you own — typed on the watch or sent from a phone on the same Wi-Fi. No account, no relay, no server of ours.
 
 **Updating.** `0.1.1` and later share one signing key, so they update in place. A `0.1.0` install used the Android debug lineage and needs an uninstall first — that deletes local chats and saved keys, and keys are device-bound, so re-enter them.
 
