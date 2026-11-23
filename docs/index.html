@@ -4479,11 +4479,11 @@ if (typeof module !== "undefined" && module.exports) {
     });
   }
 
-  Array.prototype.slice.call(document.querySelectorAll(".preset")).forEach(function (btn) {
+  Array.prototype.slice.call(document.querySelectorAll("[data-preset]")).forEach(function (btn) {
     btn.addEventListener("click", function () {
       var idx = +btn.getAttribute("data-preset");
       src.value = PRESETS[idx];
-      Array.prototype.slice.call(document.querySelectorAll(".preset")).forEach(function (b) {
+      Array.prototype.slice.call(document.querySelectorAll("[data-preset]")).forEach(function (b) {
         b.setAttribute("aria-pressed", b === btn ? "true" : "false");
       });
       stopStream();
