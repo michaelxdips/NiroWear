@@ -18,7 +18,7 @@ Release signing is environment-driven (`app/build.gradle.kts:55-65`): `NIROWEAR_
 1. Create a new credential-free Wear OS AVD. Do not copy protected userdata or snapshots.
 2. Run `adb devices -l`, then `adb -s <serial> emu avd name`. Verify actual runtime name before every operation.
 3. Install/test only on that new AVD. Avoid unscoped Gradle connected tests; attached protected devices must never receive instrumentation.
-4. Existing scripts assume their documented disposable AVD. Do not run destructive helpers on either `NiroWear_466` or `NiroWear_Harmony_Disposable`: both now contain protected data.
+4. `scripts/disposable-instrumentation.ps1` targets disposable `nirowear-b` (`-Serial emulator-5572`, `-ExpectedAvd nirowear-b`) and refuses `NiroWear_466` or `NiroWear_Harmony_Disposable`: both protected AVDs hold owner data.
 
 No destructive testing required for documentation-only changes. A local fingerprint identifies nothing a
 shipped artifact can be matched to; the tag and the workflow run do (see Acceptance identity). Native

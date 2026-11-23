@@ -54,8 +54,10 @@ the target is an emulator first: `adb shell getprop ro.kernel.qemu` must print `
 `@com.nirowear.HostDrivenGate`, and `app/build.gradle.kts` sets
 `testInstrumentationRunnerArguments["notAnnotation"]` to that annotation. They need a host script to
 seed state, so `connectedDebugAndroidTest` alone will not run them and will not tell you it skipped
-them. Run them explicitly via `scripts/disposable-instrumentation.ps1` or
-`scripts/test-clean-wear.py` when you touch lifecycle, credential promotion, or acceptance seeding.
+them. Run them explicitly against disposable `nirowear-b` via
+`scripts/disposable-instrumentation.ps1` (which refuses protected AVDs such as `NiroWear_466` and
+`NiroWear_Harmony_Disposable`) or `scripts/test-clean-wear.py` when you touch lifecycle,
+credential promotion, or acceptance seeding.
 
 **Instrumented sources are published as of 2026-11-16**, so CI compiles and runs them. The pre-push
 hook is still useful: it catches a broken instrumented compile before the push leaves this machine.
