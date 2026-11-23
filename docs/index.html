@@ -4911,8 +4911,11 @@ if (typeof module !== "undefined" && module.exports) {
    against finishing twice. */
 (function () {
   var root = document.documentElement;
-  if (!root.classList.contains("boot-pending")) return;
   var boot = document.getElementById("boot");
+  if (!root.classList.contains("boot-pending")) {
+    if (boot && boot.parentNode) boot.parentNode.removeChild(boot);
+    return;
+  }
   var count = document.getElementById("bootCount");
   var chip = document.getElementById("bootChip");
 
