@@ -19,7 +19,7 @@ Fixed from measurements on the physical watch, with the numbers kept next to eac
   edit body; the editor was measured handing the app `composition=(0,2)` while only the text was kept.
   The lost-word symptom in #62 did not reproduce through real typing and stays open with that evidence.
 - **Provider screen fully localized (#66):** `Tambah compatible` → `Tambah kompatibel`; the key-shape
-  advisory and the remote-typing tip are resources now. 124 keys per locale, zero missing.
+  advisory and the remote-typing tip are resources now. 125 keys per locale, zero missing.
 - **`RendererLocalizationTest`** no longer expects Arabic-Indic digits inside the English fallback
   sentence, matching the #49 decision.
 - Release notes: `docs/release/RELEASE_NOTES_0.2.2.md`.
