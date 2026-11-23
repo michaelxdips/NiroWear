@@ -4947,20 +4947,21 @@ if (typeof module !== "undefined" && module.exports) {
     if (chip && chip.textContent !== text) chip.textContent = text;
   }
 
-  function finish() {
+  function finish(immediate) {
     if (done) return;
     done = true;
     try { sessionStorage.setItem("nirowear-intro", "1"); } catch (e) {}
     root.style.overflow = "";
-    root.classList.add("boot-leaving");
-    if (boot) {
-      window.setTimeout(function () {
-        root.classList.remove("boot-pending", "boot-leaving");
-        if (boot.parentNode) boot.parentNode.removeChild(boot);
-      }, 240);
-    } else {
+    if (immediate || !boot) {
       root.classList.remove("boot-pending", "boot-leaving");
+      if (boot && boot.parentNode) boot.parentNode.removeChild(boot);
+      return;
     }
+    root.classList.add("boot-leaving");
+    window.setTimeout(function () {
+      root.classList.remove("boot-pending", "boot-leaving");
+      if (boot.parentNode) boot.parentNode.removeChild(boot);
+    }, 240);
   }
 
   function step(now) {
@@ -4976,7 +4977,10 @@ if (typeof module !== "undefined" && module.exports) {
   requestAnimationFrame(step);
 
   ["click", "keydown", "wheel", "touchstart"].forEach(function (ev) {
-    window.addEventListener(ev, function () { finish(); }, { once: true, passive: true });
+    window.addEventListener(ev, function () { finish(false); }, { once: true, passive: true });
+  });
+  document.addEventListener("visibilitychange", function () {
+    if (document.hidden || document.visibilityState === "hidden") finish(true);
   });
 })();
 </script>
