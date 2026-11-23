@@ -26,17 +26,23 @@ class ReaderSemanticsTest {
                     }
                 }
             }
-            SystemClock.sleep(500)
+            SystemClock.sleep(800)
 
             fun nodes(n: AccessibilityNodeInfo?): List<AccessibilityNodeInfo> =
                 if (n == null) emptyList() else listOf(n) + (0 until n.childCount).flatMap { nodes(n.getChild(it)) }
-            val header =
-                nodes(
-                    i.uiAutomation.rootInActiveWindow,
-                ).firstOrNull {
-                    it.text?.toString()?.replace("\u2068", "")?.replace("\u2069", "")
-                        ?.replace("\u200E", "")?.replace("\u200F", "") == "Visible header"
-                }
+            var header: AccessibilityNodeInfo? = null
+            for (attempt in 1..20) {
+                if (android.os.Build.VERSION.SDK_INT >= 33) i.uiAutomation.clearCache()
+                header =
+                    nodes(
+                        i.uiAutomation.rootInActiveWindow,
+                    ).firstOrNull {
+                        it.text?.toString()?.replace("\u2068", "")?.replace("\u2069", "")
+                            ?.replace("\u200E", "")?.replace("\u200F", "") == "Visible header"
+                    }
+                if (header != null && header.isHeading) break
+                SystemClock.sleep(200)
+            }
             assertTrue("Header-only table visible with heading semantics", header != null && header.isHeading)
         } finally {
             i.runOnMainSync { activity.finish() }
