@@ -202,7 +202,7 @@ class IndonesianHeaderAndInputTest {
                         assertEquals("Edit pesan", editActionLabel)
                         assertTrue(editOwner.performAction(AccessibilityNodeInfo.ACTION_LONG_CLICK))
 
-                        val resendBtn = awaitNode("Edit & kirim ulang") { it.text?.toString() == "Edit & kirim ulang" }
+                        awaitNode("Edit & kirim ulang") { it.text?.toString() == "Edit & kirim ulang" }
                         val editor = awaitNode("Edit Kolom pesan") { it.isEditable || it.contentDescription?.toString() == "Kolom pesan" }
                         assertTrue(
                             editor.performAction(
@@ -212,7 +212,9 @@ class IndonesianHeaderAndInputTest {
                                 },
                             ),
                         )
-                        clickableOwner(resendBtn).performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                        awaitNode("Edited composer text") { it.text?.toString()?.contains("Pertanyaan edit") == true }
+                        val resendAfterEdit = awaitNode("Edit & kirim ulang") { it.text?.toString() == "Edit & kirim ulang" }
+                        clickableOwner(resendAfterEdit).performAction(AccessibilityNodeInfo.ACTION_CLICK)
                         awaitNode("Edited assistant answer", timeoutMs = 15_000) {
                             it.text?.toString()?.contains("Jawaban edit berhasil.") == true
                         }
