@@ -21,6 +21,7 @@ import java.net.URL
 import java.security.KeyFactory
 import java.security.KeyPairGenerator
 import java.security.SecureRandom
+import java.security.cert.X509Certificate
 import java.security.interfaces.ECPublicKey
 import java.security.spec.ECGenParameterSpec
 import java.security.spec.ECPoint
@@ -30,6 +31,9 @@ import javax.crypto.Cipher
 import javax.crypto.KeyAgreement
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
+import javax.net.ssl.SSLContext
+import javax.net.ssl.SSLSocket
+import javax.net.ssl.X509TrustManager
 
 /**
  * The whole transport on a real device: watch screen starts the listener, a phone-shaped HTTP client
@@ -72,6 +76,7 @@ class PairingUiTest {
 
     private fun scrollTo(value: String) {
         repeat(12) {
+            if (android.os.Build.VERSION.SDK_INT >= 33) instrumentation.uiAutomation.clearCache()
             if (find(value) != null) return
             shell("input swipe 233 310 233 170 400")
             SystemClock.sleep(400)
@@ -98,16 +103,31 @@ class PairingUiTest {
 
     private fun unb64(text: String) = Base64.getUrlDecoder().decode(text)
 
+    private val trustAll: SSLContext by lazy {
+        val trust =
+            object : X509TrustManager {
+                override fun checkClientTrusted(
+                    chain: Array<X509Certificate>,
+                    authType: String,
+                ) = Unit
+
+                override fun checkServerTrusted(
+                    chain: Array<X509Certificate>,
+                    authType: String,
+                ) = Unit
+
+                override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
+            }
+        SSLContext.getInstance("TLS").apply { init(null, arrayOf(trust), SecureRandom()) }
+    }
+
     /**
-     * A phone-shaped HTTP/1.1 client, over a raw socket.
+     * A phone-shaped HTTPS/1.1 client over a raw TLS socket trusting the watch's ephemeral cert.
      *
-     * Deliberately NOT `HttpURLConnection`. Instrumentation runs inside the *app* process, so
-     * `HttpURLConnection` is subject to the app's own network security config, which permits
-     * cleartext only to localhost, 127.0.0.1 and 10.0.2.2. Dialling the advertised LAN address
-     * through it fails with `Cleartext HTTP traffic to 10.0.2.15 not permitted` — and that failure
-     * is what made an earlier version of this test rewrite the URL to loopback, which is the bug
-     * this test exists to prevent. A real phone browser is a different device under no such policy,
-     * so the faithful model is a plain socket.
+     * PairingServer serves TLS over the advertised LAN IP so phone browsers expose WebCrypto
+     * (`isSecureContext === true`). Using a raw TLS socket trusting the ephemeral self-signed
+     * certificate models the user clicking through the interstitial without mutating the advertised
+     * host to loopback.
      */
     private fun http(
         url: String,
@@ -115,7 +135,7 @@ class PairingUiTest {
     ): Pair<Int, String> {
         val uri = URL(url)
         val host = uri.host
-        val port = if (uri.port > 0) uri.port else 80
+        val port = if (uri.port > 0) uri.port else 443
         val path = uri.file.ifEmpty { "/" }
         val payload = body?.toByteArray()
         val head =
@@ -133,9 +153,10 @@ class PairingUiTest {
                 }
                 append("\r\n")
             }
-        java.net.Socket().use { socket ->
+        (trustAll.socketFactory.createSocket() as SSLSocket).use { socket ->
             socket.connect(java.net.InetSocketAddress(host, port), 5_000)
             socket.soTimeout = 10_000
+            socket.startHandshake()
             socket.getOutputStream().apply {
                 write(head.toByteArray())
                 if (payload != null) write(payload)
@@ -235,21 +256,17 @@ class PairingUiTest {
                 click("Add OpenAI")
                 scrollTo("Set up from phone")
                 click("Set up from phone")
-                // The advertised URL is the pairing surface; read it off the real screen, not a variable.
-                //
-                // The whole URL must be captured, including the capability token path segment. An earlier
-                // version matched only `http://host:port/`, which silently dropped the token, so every
-                // request landed outside the server's `/<token>/` prefix and got 404. That bug was hidden
-                // behind the loopback ConnectException for as long as the latter existed.
+                // Scroll past the QR canvas so the advertised HTTPS capability URL enters viewport.
+                scrollTo("https://")
                 val end = SystemClock.uptimeMillis() + 10_000
                 var url: String? = null
                 while (SystemClock.uptimeMillis() < end && url == null) {
                     if (android.os.Build.VERSION.SDK_INT >= 33) instrumentation.uiAutomation.clearCache()
                     url =
-                        find("http://")
+                        find("https://")
                             ?.text
                             ?.toString()
-                            ?.let { Regex("http://[0-9.]+:[0-9]+/[A-Za-z0-9_-]+/").find(it)?.value }
+                            ?.let { Regex("https://[0-9.]+:[0-9]+/[A-Za-z0-9_-]+/").find(it)?.value }
                     SystemClock.sleep(100)
                 }
                 assertNotNull("Pairing URL not shown on the watch screen", url)
@@ -266,7 +283,7 @@ class PairingUiTest {
                 // policy rejection, a DNS failure or a timeout are all IOExceptions too, and treating any
                 // of them as proof of refusal would make this control pass for the wrong reason — the
                 // same "test that cannot fail" defect the campaign exists to remove.
-                val loopback = advertised.replace(Regex("http://[0-9.]+:"), "http://127.0.0.1:")
+                val loopback = advertised.replace(Regex("https://[0-9.]+:"), "https://127.0.0.1:")
                 val loopbackRefused =
                     try {
                         http(loopback)
