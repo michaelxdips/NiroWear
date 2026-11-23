@@ -24,13 +24,16 @@
     },
     {
       "file": "streaming-stop.png",
-      "source": "artifacts/software-rc-2026-10-09/autonomous-closure/live-final/T7-video-025.png",
-      "sha256": "93a97f29ebf48f8d640e18a2516a9e7ce736f0d311ba2518655fc7b94c4c72bc",
+      "source": ".private/a3-avd-a/streaming-stop.png",
+      "sha256": "0b2685858f92bf4c001b0743bc988c287a5be8f337bc2372af58ab6683325d58",
       "dimensions": [
         466,
         466
       ],
-      "bytes": 43093
+      "bytes": 28854,
+      "captured_on": "2026-11-23",
+      "device": "nirowear-b (emulator-5572, API 34, 466x466, 320dpi)",
+      "stop_label_centering": "dx=0, dy=0"
     },
     {
       "file": "table-record.png",
