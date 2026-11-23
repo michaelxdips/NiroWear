@@ -42,7 +42,7 @@ Read from result files and command output, not from memory:
   produced no JUnit summary because the runner died at teardown with
   `DeadObjectException` from `UiAutomation.disconnect` (`ReaderNavigationTest`, `ProviderSetupUiTest`
   — the two #50 already tracks — plus `StoppedStatusUiTest` and `ProviderValidationRaceTest`).
-- Other measured numbers on that watch: cold start **median 4373 ms** over four valid runs (#65,
+- Other measured numbers on that watch: cold start **median 4375.5 ms** over four valid debug runs (4311, 4345, 4406, 4619 ms; published tag body wrote 4373 ms; #65,
   versus 723 ms on 2026-11-16); scroll **761 frames, 1.18 % janky**, 50th 8 ms / 90th 13 ms / 99th 44
   ms; a `454x454` override keeps every control at 96 px (48 dp).
 - **20-minute session** (149 swipe/tap cycles over the stored answers): `TOTAL PSS 73,642 → 76,949 KB`
