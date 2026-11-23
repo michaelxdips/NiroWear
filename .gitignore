@@ -111,6 +111,8 @@ scripts/*
 # stdlib-only (re, sys, xml.etree, pathlib), holds no paths and no credentials, and without it the
 # published gate runner fails on any clone. The rest of scripts/ stays local on purpose.
 !scripts/instrumentation-xml.py
+# HTML balance checker for docs/*.html (stdlib-only Node, no local paths or secrets).
+!scripts/check-html-balance.js
 .private/
 build/
 .gradle/
