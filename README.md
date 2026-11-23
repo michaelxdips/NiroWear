@@ -78,8 +78,8 @@ It exists because a watch is a bad screen for a good answer. Every other approac
 
 ### Interface
 
-- **Fully localized.** 124 user-visible strings in English and Indonesian (`values/` + `values-in/`, the
-  same 124 keys in both files, none missing, counted 2026-11-17), on top of the renderer's own resource set. The provider screen's hints and provider-type names resolve from resources rather than being formatted in Kotlin, so a sentence cannot leak English into the Indonesian UI (#66).
+- **Fully localized.** 125 user-visible strings in English and Indonesian (`values/` + `values-in/`, the
+  same 125 keys in both files, none missing, counted 2026-11-17), on top of the renderer's own resource set. The provider screen's hints and provider-type names resolve from resources rather than being formatted in Kotlin, so a sentence cannot leak English into the Indonesian UI (#66).
 - **Accessibility that is tested, not asserted.** The link group node is actionable, the composer field carries its own label, credential labels are announced once, and the provider header grows instead of clipping at large font scales. TalkBack *audio* acceptance still needs a real watch — see [Limitations](#known-limitations).
 
 ## Install
@@ -221,7 +221,7 @@ Three published figures have been wrong and are corrected rather than quietly dr
 - **454 × 454 override** (`wm size 454x454`, then `reset`): the reader took `[0,96][454,250]` and the three controls stayed 96 × 96 px (48 dp) at `[71,262][167,358]`, `[179,262][275,358]`, `[287,262][383,358]` — no clipping, no scale change.
 - **"Stop" label centring, measured and fixed:** the label sat at `Rect(189,344,243,380)` inside a button at `Rect(161,314,305,410)` — **17 px left of centre**, which is the owner's report. Wear Material 3 pads a button for an optional leading icon; with `contentPadding = PaddingValues(0.dp)` the label moved to the left edge (45 px off), and the fix that holds is a full-width label with `TextAlign.Center`, measured `Rect(161,344,305,380)` against `Rect(161,314,305,410)`: **dx = 0, dy = 0** (`StopButtonCenterTest`, `OK (1 test)`).
 - **#52, second send through the app button:** keys typed for real, keyboard dismissed with one BACK press (**ESCAPE and a swipe-down do not dismiss Gboard Wear — measured**), then `ACTION_CLICK` on Send. Drafts stored unchanged (`Ping`, `Pong`) and the reader's first row stayed `Rect(48,114,418,158)` before and after the second send (`ComposerSendButtonTest`, `OK (1 test)`).
-- **#66 fixed and re-measured:** the in-ID provider title now reads `Tambah kompatibel`; the two hint sentences that were formatted in Kotlin moved behind `provider_key_mismatch` / `provider_remote_typing`. Resource parity is exact: **124 keys in each locale, zero missing, zero extra**.
+- **#66 fixed and re-measured:** the in-ID provider title now reads `Tambah kompatibel`; the two hint sentences that were formatted in Kotlin moved behind `provider_key_mismatch` / `provider_remote_typing`. Resource parity is exact: **125 keys in each locale, zero missing, zero extra**.
 - **20-minute stress session (149 swipe/tap cycles over the stored answers):** `TOTAL PSS 73,642 → 76,949 KB` (**+3.2 MB**), `RSS 151,936 → 158,352 KB`, swap `285 → 108 KB`. `dumpsys thermalservice` reported `Thermal Status: 0` before and after — the device never left the nominal thermal level, so no throttling was reached and none is claimed. Frames during that continuous gesture loop: 927 janky of 1,363 (**68 %**), which is a stress figure, not a scroll-quality figure — the clean 18-swipe scroll above measured **1.18 %**.
 - **Per-class instrumented run with `pm clear` between classes** (45 classes, `am instrument -e class`, `notAnnotation com.nirowear.HostDrivenGate`, 420 s cap per class): **38 passed**, 2 failed, 1 lost the ADB transport, 4 produced no JUnit summary.
   - `PairingUiTest#keyArrivesFromPhoneWithoutTypingOnWatch` fails as designed — no phone browser (#28).
