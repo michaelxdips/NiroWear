@@ -3246,7 +3246,7 @@ adb install -r app-release.apk</pre>
   </div>
 </footer>
 
-<div class="lb" id="lb" role="dialog" aria-modal="true" aria-label="Enlarged screenshot">
+<div class="lb" id="lb" role="dialog" aria-modal="true" aria-label="Enlarged screenshot" tabindex="-1">
   <img alt="">
 </div>
 
@@ -4856,22 +4856,49 @@ if (typeof module !== "undefined" && module.exports) {
 
   var lb = document.getElementById("lb");
   var lbImg = lb ? lb.querySelector("img") : null;
+  var lbOpener = null;
+
+  function openLb(img) {
+    if (!lb || !lbImg) return;
+    lbOpener = img;
+    lbImg.src = img.src;
+    lbImg.alt = img.alt;
+    lb.classList.add("on");
+    lb.focus();
+  }
+
+  function closeLb() {
+    if (!lb || !lb.classList.contains("on")) return;
+    lb.classList.remove("on");
+    if (lbOpener && typeof lbOpener.focus === "function") lbOpener.focus();
+    lbOpener = null;
+  }
 
   Array.prototype.slice.call(document.querySelectorAll(".plate img")).forEach(function (img) {
-    img.addEventListener("click", function () {
-      if (!lb || !lbImg) return;
-      lbImg.src = img.src;
-      lbImg.alt = img.alt;
-      lb.classList.add("on");
+    img.setAttribute("tabindex", "0");
+    img.setAttribute("role", "button");
+    img.addEventListener("click", function () { openLb(img); });
+    img.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        openLb(img);
+      }
     });
   });
 
   if (lb) {
-    lb.addEventListener("click", function () { lb.classList.remove("on"); });
+    lb.addEventListener("click", closeLb);
   }
 
   document.addEventListener("keydown", function (e) {
-    if (e.key === "Escape" && lb) lb.classList.remove("on");
+    if (!lb || !lb.classList.contains("on")) return;
+    if (e.key === "Escape") {
+      e.preventDefault();
+      closeLb();
+    } else if (e.key === "Tab") {
+      e.preventDefault();
+      lb.focus();
+    }
   });
 
   /* ============================================================
