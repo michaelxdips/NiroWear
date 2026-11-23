@@ -58,6 +58,23 @@ jobs:
           key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle.kts', 'gradle.properties', 'gradle/wrapper/gradle-wrapper.properties', 'gradle/gradle-daemon-jvm.properties', 'gradle/libs.versions.toml') }}
           restore-keys: gradle-${{ runner.os }}-
 
+      - name: Verify release notes exist for tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          notes="docs/release/RELEASE_NOTES_${version}.md"
+          test -f "$notes" || { echo "::error::missing $notes"; exit 1; }
+
+      - name: Run unit tests, lint, and ktlint
+        run: ./gradlew :app:testDebugUnitTest :app:lintDebug :app:ktlintCheck --console=plain
+
+      - name: Verify unit test results exist
+        run: |
+          set -euo pipefail
+          results=$(find app/build/test-results/testDebugUnitTest -name 'TEST-*.xml' | wc -l)
+          test "${results:-0}" -gt 0 || { echo "::error::no unit test result XMLs produced"; exit 1; }
+
       - name: Decode the release keystore
         env:
           KEYSTORE_BASE64: ${{ secrets.NIROWEAR_KEYSTORE_BASE64 }}
