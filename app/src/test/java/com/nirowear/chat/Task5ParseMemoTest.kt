@@ -20,11 +20,12 @@ class Task5ParseMemoTest {
     private fun msg(
         id: Long,
         conv: String,
+        raw: String = "body $id",
     ) = StoredMessage(
         id = id,
         conversationId = conv,
         role = "ASSISTANT",
-        rawContent = "body $id",
+        rawContent = raw,
         status = "SUCCESS",
         providerProfileId = "p",
         providerLabel = "l",
@@ -117,5 +118,33 @@ class Task5ParseMemoTest {
         )
         // Re-opening A still has its entry, so `needsParse` reports false and nothing re-parses.
         assertFalse(needsParse(listOf(msg(1, "A")), "A", afterB.first))
+    }
+
+    @Test
+    fun streamingUpdatesSupersedeEarlierRawSnapshotsForSameMessage() {
+        var memo = emptyMap<StoredMessage, List<Pair<Long, ContentBlock>>>()
+        var recent = emptyList<String>()
+        for (step in 1..50) {
+            val updated = msg(id = 1L, conv = "A", raw = "delta $step")
+            val merged = mergeParsed(memo, mapOf(updated to emptyList()), recent, "A")
+            memo = merged.first
+            recent = merged.second
+        }
+        assertEquals(1, memo.size)
+        assertEquals("delta 50", memo.keys.single().rawContent)
+    }
+
+    @Test
+    fun linearEditRemovesDeletedMessagesFromActiveConversationWhilePreservingOthers() {
+        val emptyBlocks = emptyList<Pair<Long, ContentBlock>>()
+        val mB = msg(id = 10L, conv = "B", raw = "other")
+        val initialA = mapOf(msg(1L, "A", "u1") to emptyBlocks, msg(2L, "A", "a1") to emptyBlocks)
+        val withB = mergeParsed(emptyMap(), mapOf(mB to emptyBlocks), emptyList(), "B")
+        val withA = mergeParsed(withB.first, initialA, withB.second, "A")
+        val editedA = mergeParsed(withA.first, mapOf(msg(1L, "A", "edited") to emptyBlocks), withA.second, "A")
+
+        val keysA = editedA.first.keys.filter { it.conversationId == "A" }
+        assertEquals(listOf("edited"), keysA.map { it.rawContent })
+        assertTrue(editedA.first.keys.any { it.conversationId == "B" && it.id == 10L })
     }
 }
