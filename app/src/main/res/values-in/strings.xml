@@ -130,6 +130,7 @@
     <string name="failure_message_gone">Pesan itu sudah tidak ada di chat ini. Kirim ulang.</string>
     <string name="failure_nothing_to_retry">Tidak ada yang bisa diulang di chat ini.</string>
     <string name="failure_send_failed">Tidak dapat mengirim. Periksa penyiapan provider atau penyimpanan lokal.</string>
+    <string name="failure_answer_not_saved">Jawaban belum tersimpan. Biarkan aplikasi terbuka; Salin jawaban belum tersimpan atau Coba simpan lagi. Chat baru/kirim diblokir sampai tersimpan.</string>
     <string name="failure_save_still_failing">Masih tidak dapat menyimpan. Biarkan aplikasi terbuka dan salin jawaban yang belum tersimpan.</string>
     <string name="failure_settings_unreadable">Pengaturan provider tidak dapat dibaca. Riwayat dan key tersimpan dipertahankan; perubahan penyiapan diblokir.</string>
     <string name="failure_settings_unavailable">Pengaturan provider tidak tersedia. Riwayat dan key tersimpan dipertahankan; perubahan penyiapan diblokir.</string>

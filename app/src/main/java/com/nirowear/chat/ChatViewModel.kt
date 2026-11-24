@@ -534,8 +534,7 @@ class ChatViewModel(
                                     dao.finish(it, savedText, savedStatus, savedFailure, savedPhases)
                                 }
                             }
-                            failure =
-                                "Answer not saved. Keep app open; Copy unsaved answer or Retry saving. New chat/send blocked until saved."
+                            failure = FailureToken.ANSWER_NOT_SAVED
                             mutableState.value = mutableState.value.copy(rawMarkdown = savedText, unsaved = true)
                         }
                         // A provider failure with no partial text left the USER row already written

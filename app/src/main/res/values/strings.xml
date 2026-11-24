@@ -141,6 +141,7 @@
     <string name="failure_message_gone">That message is no longer in this chat. Send it again.</string>
     <string name="failure_nothing_to_retry">Nothing to retry in this chat.</string>
     <string name="failure_send_failed">Cannot send. Check provider setup or local storage.</string>
+    <string name="failure_answer_not_saved">Answer not saved. Keep app open; Copy unsaved answer or Retry saving. New chat/send blocked until saved.</string>
     <string name="failure_save_still_failing">Still cannot save. Keep app open and copy unsaved answer.</string>
     <string name="failure_settings_unreadable">Provider settings unreadable. History and saved keys kept; setup changes blocked.</string>
     <string name="failure_settings_unavailable">Provider settings unavailable. History and saved keys kept; setup changes blocked.</string>

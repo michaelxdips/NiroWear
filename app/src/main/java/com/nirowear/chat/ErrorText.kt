@@ -44,6 +44,7 @@ private val localLabels =
         FailureToken.MESSAGE_GONE to R.string.failure_message_gone,
         FailureToken.NOTHING_TO_RETRY to R.string.failure_nothing_to_retry,
         FailureToken.SEND_FAILED to R.string.failure_send_failed,
+        FailureToken.ANSWER_NOT_SAVED to R.string.failure_answer_not_saved,
         FailureToken.SAVE_STILL_FAILING to R.string.failure_save_still_failing,
         FailureToken.SETTINGS_UNREADABLE to R.string.failure_settings_unreadable,
         FailureToken.SETTINGS_UNAVAILABLE to R.string.failure_settings_unavailable,
