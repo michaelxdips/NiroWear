@@ -95,11 +95,22 @@ object ResponseParser {
      * later rendered as literal dollars. Tilde fences may carry backticks, so only the backtick form is
      * constrained.
      */
-    private fun fenceOpening(line: String): MatchResult? =
-        FENCE.find(line)?.takeIf { match ->
+    private fun leadingSpaceCount(s: String): Int {
+        var i = 0
+        while (i < s.length && s[i] == ' ') i++
+        return i
+    }
+
+    private fun fenceOpening(line: String): MatchResult? {
+        if (!line.contains("```") && !line.contains("~~~")) return null
+        return FENCE.find(line)?.takeIf { match ->
             val run = match.groupValues[1]
             run[0] == '~' || !match.groupValues[2].contains('`')
         }
+    }
+
+    private fun findFence(line: String): MatchResult? =
+        if (line.contains("```") || line.contains("~~~")) FENCE.find(line) else null
 
     private val DEEP_QUOTE = Regex("^\\s*(?:>\\s*)+")
     private val DELIMITER_CELL = Regex(":?-{1,}:?")
@@ -148,12 +159,11 @@ object ResponseParser {
      * real answer uses but keeps the text.
      */
     private fun capContainers(line: String): String {
-        // No blanket fence exemption. It used to return the line untouched whenever it contained a
-        // fence run, which disabled the cap entirely for `">".repeat(200_000) + "```"`: the library
-        // then recursed 200k deep inside the library and threw StackOverflowError, an Error nothing
-        // upstream catches. The cap now runs for every line; at the cap the rest of the markers is
-        // collapsed by uncontainer (a loop, not recursion) and the remaining prefix becomes three
-        // spaces — the legal fence indent — so a deeply quoted fence still parses as a code block.
+        if (line.isEmpty()) return line
+        when (line[0]) {
+            ' ', '>', '-', '*', '+', in '0'..'9' -> Unit
+            else -> return line
+        }
         var index = 0
         var depth = 0
         while (index < line.length) {
@@ -211,6 +221,7 @@ object ResponseParser {
      * `StackOverflowError` and took the app down. A loop cannot overflow.
      */
     private fun uncontainer(line: String): String {
+        if (line.isEmpty()) return line
         var index = 0
         while (true) {
             var cursor = index
@@ -220,10 +231,10 @@ object ResponseParser {
                 cursor++
                 spaces++
             }
-            if (cursor >= line.length) return line.substring(index)
+            if (cursor >= line.length) return if (index == 0) line else line.substring(index)
 
             var end = -1
-            when (val char = line[cursor]) {
+            when (line[cursor]) {
                 '>', '-', '*', '+' -> {
                     end = cursor + 1
                 }
@@ -239,7 +250,9 @@ object ResponseParser {
                 }
             }
             // A marker only counts when followed by a space or the end of the line.
-            if (end < 0 || (end < line.length && line[end] != ' ')) return line.substring(index)
+            if (end < 0 || (end < line.length && line[end] != ' ')) {
+                return if (index == 0) line else line.substring(index)
+            }
             index = if (end < line.length) end + 1 else line.length
             if (index >= line.length) return ""
         }
@@ -302,7 +315,12 @@ object ResponseParser {
      * ponytail: two pipes is a heuristic; a prose line carrying two pipes would also keep its dollars
      * inline. Lossless, so the ceiling is display quality only.
      */
-    private fun isTableRow(line: String): Boolean = line.trimStart().startsWith("|") || line.count { it == '|' } >= 2
+    private fun isTableRow(line: String): Boolean {
+        if (line.indexOf('|') < 0) return false
+        val start = leadingSpaceCount(line)
+        if (start < line.length && line[start] == '|') return true
+        return line.count { it == '|' } >= 2
+    }
 
     /**
      * Container identity of a line, used to decide whether two lines belong to the same table.
@@ -323,8 +341,12 @@ object ResponseParser {
         listIndent: Int,
     ): String {
         val content = uncontainer(raw)
-        val quoteDepth = raw.substring(0, raw.length - content.length).count { it == '>' }
-        val indent = content.length - content.trimStart(' ').length
+        val prefixLen = raw.length - content.length
+        var quoteDepth = 0
+        for (k in 0 until prefixLen) {
+            if (raw[k] == '>') quoteDepth++
+        }
+        val indent = leadingSpaceCount(content)
         val inItem = listIndent > 0 && (content.length != raw.length || indent >= listIndent)
         return quoteDepth.toString() + ":" + if (inItem) listIndent else indent
     }
@@ -387,6 +409,7 @@ object ResponseParser {
      */
     private fun scanTableOverflow(markdown: String): ArrayDeque<Int> {
         val dropped = ArrayDeque<Int>()
+        if (markdown.indexOf('|') < 0) return dropped
         val lines = markdown.split('\n')
         var index = 0
         var fence: Char? = null
@@ -408,12 +431,12 @@ object ResponseParser {
                 index++
                 continue
             }
-            if (HTML_BLOCK.find(line) != null) {
+            if (line.indexOf('<') >= 0 && HTML_BLOCK.find(line) != null) {
                 inHtml = true
                 index++
                 continue
             }
-            val contentLeading = line.length - line.trimStart(' ').length
+            val contentLeading = leadingSpaceCount(line)
             val markerIndent = listMarkerContentIndent(raw, if (listIndent > 0) Int.MAX_VALUE else 3)
             if (markerIndent != null) {
                 listIndent = markerIndent
@@ -422,7 +445,7 @@ object ResponseParser {
             }
             val view =
                 if (listIndent > 0 && contentLeading >= listIndent) line.substring(listIndent) else line
-            val rawLeading = raw.length - raw.trimStart(' ').length
+            val rawLeading = leadingSpaceCount(raw)
             val listView = if (listIndent > 0 && rawLeading >= listIndent) raw.substring(listIndent) else raw
             if (fence == null) {
                 // OPEN detection tolerates container markers: replayFence leaves them in place when the
@@ -442,7 +465,7 @@ object ResponseParser {
                 // the RAW line only, so a properly marked quoted fence (which the parser replays raw)
                 // opened a fence here that never closed: every later table in the chunk queued nothing
                 // and a clamped table reported no hidden cells.
-                val closer = if (fenceNested) FENCE.find(view) else FENCE.find(raw) ?: FENCE.find(listView)
+                val closer = if (fenceNested) findFence(view) else findFence(raw) ?: findFence(listView)
                 if (closer != null) {
                     val run = closer.groupValues[1]
                     if (run.first() == fence && run.length >= fenceLength && closer.groupValues[2].isBlank()) {
@@ -450,6 +473,10 @@ object ResponseParser {
                         fenceNested = false
                     }
                 }
+                index++
+                continue
+            }
+            if (line.indexOf('|') < 0) {
                 index++
                 continue
             }
@@ -466,7 +493,7 @@ object ResponseParser {
             val relativeIndent = if (listIndent > 0) (indent - listIndent).coerceAtLeast(0) else indent
             val delimiterRaw = if (index + 1 < lines.size) lines[index + 1] else ""
             val delimiter = uncontainer(delimiterRaw)
-            val headerCells = if (line.contains('|')) splitTableRow(line) else emptyList()
+            val headerCells = splitTableRow(line)
             // GFM also requires the delimiter row to have exactly as many cells as the header; without
             // that check a header over a shorter delimiter row was counted although the library parses
             // it as a paragraph.
@@ -487,10 +514,10 @@ object ResponseParser {
                 val nextLine = uncontainer(nextRaw)
                 // A row only belongs to this table if it sits in the same container.
                 if (containerKey(nextRaw, listIndent) != key) break
-                val nextIndent = nextLine.length - nextLine.trimStart(' ').length
+                val nextIndent = leadingSpaceCount(nextLine)
                 val nextRelative = if (listIndent > 0) (nextIndent - listIndent).coerceAtLeast(0) else nextIndent
                 if (nextRelative >= 4) break
-                if (fenceOpening(nextRaw) != null || !nextLine.contains('|') || isDelimiterRow(nextLine)) break
+                if (fenceOpening(nextRaw) != null || nextLine.indexOf('|') < 0 || isDelimiterRow(nextLine)) break
                 total += (splitTableRow(nextLine).size - width).coerceAtLeast(0)
                 index++
             }
@@ -579,7 +606,8 @@ object ResponseParser {
             val leading = line.length - line.trimStart(' ').length
             return if (leading >= mathDedent) line.substring(mathDedent) else line
         }
-        for (line in source.replace("\r\n", "\n").split('\n')) {
+        val normalized = if (source.indexOf('\r') >= 0) source.replace("\r\n", "\n") else source
+        for (line in normalized.split('\n')) {
             // Bound nesting before the Markdown library recurses on it.
             val bounded = capContainers(line)
             // A display may close mid-line; whatever follows is ordinary content again, so the
@@ -631,7 +659,7 @@ object ResponseParser {
                 // its `$$`/`\[` body lines were then torn out as display math, so the sample rendered
                 // as an empty code block, a formula and a stray "```". Any fence inside a nested list
                 // hit this.
-                val contentLeading = container.length - container.trimStart(' ').length
+                val contentLeading = leadingSpaceCount(container)
                 val markerIndent =
                     listMarkerContentIndent(
                         rest,
@@ -657,7 +685,7 @@ object ResponseParser {
                 // top-level fence must see the raw bytes (a body line "> ```" is literal content and
                 // must not close the block), but a list-indented fence only closes once its list
                 // indentation — not its quotes — has been removed.
-                val rawLeading = rest.length - rest.trimStart(' ').length
+                val rawLeading = leadingSpaceCount(rest)
                 val listView =
                     if (listContentIndent > 0 && rawLeading >= listContentIndent) {
                         rest.substring(listContentIndent)
@@ -687,7 +715,7 @@ object ResponseParser {
                 // spilled out as prose.
                 val fenceBody = if (fenceNested) fenced else listView
                 if (fence != null) {
-                    FENCE.find(fenceBody)?.let { match ->
+                    findFence(fenceBody)?.let { match ->
                         val run = match.groupValues[1]
                         if (run.first() == fence && run.length >= fenceLength && match.groupValues[2].isBlank()) {
                             fence = null
@@ -708,7 +736,8 @@ object ResponseParser {
                         fenceOpenedBehindContainer = fenceNested
                     }
                 }
-                val trimmed = container.trimStart()
+                var trimStart = 0
+                while (trimStart < container.length && container[trimStart].isWhitespace()) trimStart++
                 val relativeIndent =
                     if (listContentIndent > 0) (contentLeading - listContentIndent).coerceAtLeast(0) else contentLeading
                 val indented =
@@ -717,8 +746,8 @@ object ResponseParser {
                     when {
                         fence != null -> null
                         indented -> null
-                        trimmed.startsWith("\\[") -> "\\[" to "\\]"
-                        trimmed.startsWith("$$") -> "$$" to "$$"
+                        container.startsWith("\\[", trimStart) -> "\\[" to "\\]"
+                        container.startsWith("$$", trimStart) -> "$$" to "$$"
                         else -> null
                     }
                 if (opening == null && fence == null && !indented && !isTableRow(container)) {
@@ -776,7 +805,7 @@ object ResponseParser {
                     }
                 }
                 if (opening == null) {
-                    val fenceOpen = FENCE.find(fenced) != null && fence == null
+                    val fenceOpen = findFence(fenced) != null && fence == null
                     if (inFence || fence != null || fenceOpen) {
                         // A fence run buffers raw; at close the whole run replays stripped
                         // only if a lazy (unmarked, unindented) content line proved the
@@ -806,7 +835,7 @@ object ResponseParser {
                     // A list marker's content indent is 2 columns at the first level, 4 at the second
                     // (a wide ordered marker like "10. " is 4 too, so this is a best-effort level).
                     mathDepth = if (listContentIndent > 0) ((listContentIndent / 2) - 1).coerceIn(0, 4) else 0
-                    rest = trimmed.removePrefix(opening.first)
+                    rest = container.substring(trimStart + opening.first.length)
                 }
             }
         }
@@ -821,7 +850,175 @@ object ResponseParser {
         return blocks
     }
 
-    private fun children(node: Node): Sequence<Node> = generateSequence(node.firstChild) { it.next }
+    /**
+     * Completed-prefix snapshot used by [parseIncremental] to avoid re-parsing closed top-level
+     * blocks on every streaming delta while preserving bit-identical output to [parse].
+     */
+    internal data class IncrementalParseState(
+        val prefix: String,
+        val prefixBlocks: List<ContentBlock>,
+    )
+
+    /**
+     * Streaming-aware entrypoint: reuses [previous]'s already-parsed [IncrementalParseState.prefixBlocks]
+     * whenever [source] extends [IncrementalParseState.prefix] across a verified non-continuable
+     * top-level blank-line boundary with no link reference definitions. Always falls back to full
+     * [parse] when any ambiguity exists.
+     */
+    internal fun parseIncremental(
+        previous: IncrementalParseState?,
+        source: String,
+    ): Pair<IncrementalParseState?, List<ContentBlock>> {
+        val normalized = if (source.indexOf('\r') >= 0) source.replace("\r\n", "\n") else source
+        if (normalized.length < MIN_INCREMENTAL_PREFIX_CHARS || normalized.contains("]:")) {
+            return null to parse(normalized)
+        }
+        val base =
+            if (previous != null &&
+                previous.prefix.isNotEmpty() &&
+                normalized.length > previous.prefix.length &&
+                normalized.startsWith(previous.prefix) &&
+                isSafeContinuationStart(normalized[previous.prefix.length])
+            ) {
+                previous
+            } else {
+                null
+            }
+        val tail = if (base != null) normalized.substring(base.prefix.length) else normalized
+        val tailCut = findSafePrefixCut(tail)
+        if (base != null && tailCut < MIN_INCREMENTAL_ADVANCE_CHARS) {
+            return base to (base.prefixBlocks + parse(tail))
+        }
+        if (tailCut >= MIN_INCREMENTAL_ADVANCE_CHARS) {
+            val addedPrefix = tail.substring(0, tailCut)
+            val rest = tail.substring(tailCut)
+            val addedBlocks = parse(addedPrefix)
+            val nextPrefix = if (base != null) base.prefix + addedPrefix else addedPrefix
+            val nextBlocks = if (base != null) base.prefixBlocks + addedBlocks else addedBlocks
+            return IncrementalParseState(nextPrefix, nextBlocks) to (nextBlocks + parse(rest))
+        }
+        return null to parse(normalized)
+    }
+
+    private const val MIN_INCREMENTAL_PREFIX_CHARS = 384
+    private const val MIN_INCREMENTAL_ADVANCE_CHARS = 384
+
+    private fun isSafeContinuationStart(ch: Char): Boolean =
+        ch != '\n' && ch != ' ' && ch != '\t' && ch != '>' && ch != '-' && ch != '*' &&
+            ch != '+' && ch != '=' && ch != '|' && ch != '<' && ch !in '0'..'9'
+
+    /**
+     * Returns the character index right after the last blank line `\n\n` where CommonMark and
+     * [ResponseParser] state are strictly top-level clean (no open fence/math/HTML/list/quote/table)
+     * and the following line cannot lazily continue or alter any preceding block; 0 if none exists.
+     */
+    private fun findSafePrefixCut(source: String): Int {
+        var lineStart = 0
+        var lastCut = 0
+        var fence: Char? = null
+        var fenceLen = 0
+        var fenceNested = false
+        var mathClosing: String? = null
+        var listIndent = 0
+        var paragraphTopClean = true
+        var seenNonBlankInBlock = false
+
+        while (lineStart < source.length) {
+            val nl = source.indexOf('\n', lineStart)
+            val lineEnd = if (nl < 0) source.length else nl
+            val raw = source.substring(lineStart, lineEnd)
+            val nextStart = if (nl < 0) source.length else nl + 1
+
+            if (mathClosing != null) {
+                if (closingIndex(raw, mathClosing, 0) >= 0) {
+                    mathClosing = null
+                }
+                paragraphTopClean = false
+                seenNonBlankInBlock = true
+            } else if (fence != null) {
+                val contentLeading = leadingSpaceCount(raw)
+                val check = if (listIndent > 0 && contentLeading >= listIndent) raw.substring(listIndent) else raw
+                val matcherTarget = if (fenceNested) uncontainer(check) else check
+                findFence(matcherTarget)?.let { match ->
+                    val run = match.groupValues[1]
+                    if (run.first() == fence && run.length >= fenceLen && match.groupValues[2].isBlank()) {
+                        fence = null
+                        fenceNested = false
+                    }
+                }
+                paragraphTopClean = false
+                seenNonBlankInBlock = true
+            } else if (raw.isEmpty()) {
+                listIndent = 0
+                if (seenNonBlankInBlock &&
+                    paragraphTopClean &&
+                    nextStart < source.length &&
+                    isSafeContinuationStart(source[nextStart])
+                ) {
+                    lastCut = nextStart
+                }
+                paragraphTopClean = true
+                seenNonBlankInBlock = false
+            } else {
+                seenNonBlankInBlock = true
+                val container = uncontainer(raw)
+                val leading = leadingSpaceCount(container)
+                val markerIndent = listMarkerContentIndent(raw, if (listIndent > 0) Int.MAX_VALUE else 3)
+                if (markerIndent != null) {
+                    listIndent = markerIndent
+                } else if (container.isNotBlank() && leading < listIndent) {
+                    listIndent = 0
+                }
+                val rawLeading = leadingSpaceCount(raw)
+                val view = if (listIndent > 0 && rawLeading >= listIndent) raw.substring(listIndent) else raw
+                val opener = fenceOpening(uncontainer(view))
+                if (opener != null) {
+                    fence = opener.groupValues[1].first()
+                    fenceLen = opener.groupValues[1].length
+                    fenceNested = uncontainer(raw) != raw
+                    paragraphTopClean = false
+                } else if (raw.indexOf('<') >= 0 && HTML_BLOCK.find(container) != null) {
+                    // HTML blocks (e.g. <pre>, <!--) can span blank lines, so disable incremental split.
+                    return lastCut
+                } else {
+                    var trim = 0
+                    while (trim < container.length && container[trim].isWhitespace()) trim++
+                    val openTok =
+                        when {
+                            rawLeading >= 4 || raw.startsWith('\t') -> null
+                            container.startsWith("\\[", trim) -> "\\[" to "\\]"
+                            container.startsWith("$$", trim) -> "$$" to "$$"
+                            else -> null
+                        }
+                    if (openTok != null) {
+                        val after = container.substring(trim + openTok.first.length)
+                        if (closingIndex(after, openTok.second, 0) < 0) {
+                            mathClosing = openTok.second
+                        }
+                        paragraphTopClean = false
+                    } else if (raw.contains("$$")) {
+                        val mid = findMidlineDisplay(container)
+                        if (mid >= 0 && closingIndex(container, "$$", mid + 2) < 0) {
+                            mathClosing = "$$"
+                        }
+                        paragraphTopClean = false
+                    } else if (
+                        rawLeading > 0 ||
+                        container != raw ||
+                        markerIndent != null ||
+                        listIndent != 0 ||
+                        raw.startsWith('\t') ||
+                        raw.indexOf('|') >= 0
+                    ) {
+                        paragraphTopClean = false
+                    }
+                }
+            }
+            if (nl < 0) break
+            lineStart = nl + 1
+        }
+        return lastCut
+    }
 
     /** True when the line is itself a fence run, possibly behind container markers. */
     private fun isFenceRun(line: String): Boolean {
@@ -854,6 +1051,7 @@ object ResponseParser {
         container: String,
         from: Int = 0,
     ): Int {
+        if (container.indexOf("$$", from) < 0) return -1
         var index = from
         var code = false
         while (index < container.length) {
@@ -954,14 +1152,21 @@ object ResponseParser {
             }
 
             is BlockQuote -> {
-                children(node).forEach { appendBlocks(it, out, dropped, depth + 1, true) }
+                var child = node.firstChild
+                while (child != null) {
+                    appendBlocks(child, out, dropped, depth + 1, true)
+                    child = child.next
+                }
             }
 
             is BulletList, is OrderedList -> {
                 val start = (node as? OrderedList)?.markerStartNumber ?: 1
-                children(node).forEachIndexed { index, item ->
+                var index = 0
+                var item = node.firstChild
+                while (item != null) {
                     var first = true
-                    children(item).forEach { child ->
+                    var child = item.firstChild
+                    while (child != null) {
                         if (child is Paragraph) {
                             val marker =
                                 if (!first) {
@@ -983,17 +1188,32 @@ object ResponseParser {
                             // behaviour stays and the reason is recorded here.
                             appendBlocks(child, out, dropped, depth + 1, quoted)
                         }
+                        child = child.next
                     }
+                    index++
+                    item = item.next
                 }
             }
 
             is TableBlock -> {
-                val rows =
-                    children(node)
-                        .flatMap { children(it) }
-                        .filterIsInstance<TableRow>()
-                        .map { row -> children(row).map { inlines(it) }.toList() }
-                        .toList()
+                val rows = ArrayList<List<List<InlineContent>>>()
+                var section = node.firstChild
+                while (section != null) {
+                    var row = section.firstChild
+                    while (row != null) {
+                        if (row is TableRow) {
+                            val cells = ArrayList<List<InlineContent>>()
+                            var cell = row.firstChild
+                            while (cell != null) {
+                                cells += inlines(cell)
+                                cell = cell.next
+                            }
+                            rows += cells
+                        }
+                        row = row.next
+                    }
+                    section = section.next
+                }
                 val overflow = if (dropped.isNotEmpty()) dropped.removeFirst() else 0
                 out += ContentBlock.Table(rows.firstOrNull().orEmpty(), rows.drop(1), overflow)
             }
@@ -1003,7 +1223,11 @@ object ResponseParser {
             }
 
             else -> {
-                children(node).forEach { appendBlocks(it, out, dropped, depth, quoted) }
+                var child = node.firstChild
+                while (child != null) {
+                    appendBlocks(child, out, dropped, depth, quoted)
+                    child = child.next
+                }
             }
         }
     }
@@ -1020,28 +1244,37 @@ object ResponseParser {
      * At the cap the remaining subtree is emitted as plain text rather than dropped, so a
      * pathological answer degrades instead of vanishing or crashing.
      */
-    private fun inlines(
+    private fun inlines(node: Node): List<InlineContent> {
+        val out = ArrayList<InlineContent>(4)
+        collectInlines(node, InlineContent(""), 0, out)
+        return out
+    }
+
+    private fun collectInlines(
         node: Node,
-        style: InlineContent = InlineContent(""),
-        depth: Int = 0,
-    ): List<InlineContent> =
+        style: InlineContent,
+        depth: Int,
+        out: MutableList<InlineContent>,
+    ) {
         if (depth >= MAX_INLINE_DEPTH) {
-            listOf(style.copy(text = flattenText(node)))
-        } else {
-            children(node)
-                .flatMap { child ->
-                    when (child) {
-                        is Text -> listOf(style.copy(text = child.literal))
-                        is MathInline -> listOf(style.copy(text = child.source, math = true))
-                        is Code -> listOf(style.copy(text = child.literal, code = true))
-                        is StrongEmphasis -> inlines(child, style.copy(bold = true), depth + 1)
-                        is Emphasis -> inlines(child, style.copy(italic = true), depth + 1)
-                        is Link -> inlines(child, style.copy(link = child.destination), depth + 1)
-                        is SoftLineBreak -> listOf(style.copy(text = " "))
-                        is HardLineBreak -> listOf(style.copy(text = "\n"))
-                        is HtmlInline -> listOf(style.copy(text = child.literal))
-                        else -> inlines(child, style, depth + 1)
-                    }.asSequence()
-                }.toList()
+            out += style.copy(text = flattenText(node))
+            return
         }
+        var child = node.firstChild
+        while (child != null) {
+            when (child) {
+                is Text -> out += style.copy(text = child.literal)
+                is MathInline -> out += style.copy(text = child.source, math = true)
+                is Code -> out += style.copy(text = child.literal, code = true)
+                is StrongEmphasis -> collectInlines(child, style.copy(bold = true), depth + 1, out)
+                is Emphasis -> collectInlines(child, style.copy(italic = true), depth + 1, out)
+                is Link -> collectInlines(child, style.copy(link = child.destination), depth + 1, out)
+                is SoftLineBreak -> out += style.copy(text = " ")
+                is HardLineBreak -> out += style.copy(text = "\n")
+                is HtmlInline -> out += style.copy(text = child.literal)
+                else -> collectInlines(child, style, depth + 1, out)
+            }
+            child = child.next
+        }
+    }
 }
