@@ -15,7 +15,7 @@ _(Nothing pending release — all verified fixes below ship in 0.3.0.)_
 - Strengthen `ComposerSendButtonTest` to prove like-for-like cancel zero-shift (`index=2->2, offset=102->102`, `Rect(48, 122 - 418, 166)`) plus settled Turn 2 follow on `nirowear-b`.
 - Optimize streaming Markdown parsing (`ResponseParser.needsPreScan`, `ResponseParser.parseIncremental` prefix caching, single-flight `parseDispatcher`), cutting debug-AVD 4 KB parse P95 from `90.948 ms` to `11.735 ms` (pipe-free) and `48.184 ms` to `12.077 ms` (mixed), and same-process coalesced mixed burst total parse CPU from `79.503 ms` to `21.880 ms` (`P95 1.080 ms`).
 - Harden History Flow retry handling (`P1`), SSE monotonic idle timing (`P2`), parse memo eviction (`P3`), release workflow test/lint/notes preflight (`P4`, `P5`), CI test-source enforcement (`P12`), website accessibility/layout (`A1..A8`, `P6`, `P7`), and documentation sync (`B1..B4`, `K4` reconciling closed `#50` under `#84`).
-- Release notes: `docs/release/RELEASE_NOTES_0.3.0.md` (**316 unit tests / 51 suites**, `0` failures, `1` skipped; `lintDebug` `0` errors / `1` warning; `ktlintCheck` `0` violations).
+- Release notes: `docs/release/RELEASE_NOTES_0.3.0.md` (`versionCode 16`, signed APK **3,779,197 B**, SHA-256 `d94a5af3755b1c3d86257525cd643042db4cf64d7f755cbcdcab5ea23e040ca2`; **316 unit tests / 51 suites**, `0` failures, `1` skipped; `lintDebug` `0` errors / `1` warning; `ktlintCheck` `0` violations).
 - Startup rule: never add animation or delay to mask a slow launch. Measure startup using a release build. (#82)
 - CI instrumented smoke runner passes the 10-class filter directly to `AndroidJUnitRunner` and isolates status bundles in `scripts/instrumentation-xml.py` (#80, #81).
 
