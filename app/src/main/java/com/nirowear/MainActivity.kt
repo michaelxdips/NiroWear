@@ -73,10 +73,12 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
@@ -636,7 +638,7 @@ private fun ChatReader(
         // assignment could never change anything.
         renderLab = false
     }
-    Box(Modifier.fillMaxSize().background(Color.Black)) {
+    Box(Modifier.fillMaxSize().background(Color.Black).semantics { isTraversalGroup = true }) {
         if (providerScreen) {
             ProviderScreen { providerScreen = false }
         } else if (historyScreen) {
@@ -1019,6 +1021,47 @@ private fun ChatReader(
             val readerLabel = stringResource(R.string.chat_reader_description)
             // The Menu button's own label; resolved here for the same reason.
             val menuLabel = stringResource(R.string.chat_menu)
+            // Declared BEFORE LazyColumn (with equal zIndex) so accessibility child order matches
+            // top-to-bottom reading order (Menu -> Reader/Menu list -> Footer). LazyColumn sits
+            // below top = 48.dp padding so the two regions do not contend for taps.
+            Box(
+                Modifier
+                    .align(Alignment.TopCenter)
+                    // Bounds keep the 48 dp touch target while capping width + top/side inset so
+                    // two-line wrapped headers (e.g. Indonesian "Tambah provider · Menu") remain
+                    // strictly inside the 466 px circular dial chord without bezel clipping.
+                    .widthIn(min = 130.dp, max = 148.dp)
+                    .heightIn(min = 48.dp)
+                    .semantics {
+                        traversalIndex = 0f
+                        contentDescription = menuLabel
+                    }.clickable(role = Role.Button) {
+                        if (!sectionMenu) saveReaderPosition()
+                        sectionMenu = !sectionMenu
+                    },
+                contentAlignment = Alignment.TopCenter,
+            ) {
+                Text(
+                    if (renderLab) {
+                        "RenderLab · $section"
+                    } else {
+                        providerState.selected?.let { "${it.displayName} · ${it.selectedModelId}" }
+                            ?: stringResource(R.string.chat_header_add_provider)
+                    },
+                    modifier =
+                        Modifier
+                            .heightIn(min = 48.dp)
+                            .padding(start = 18.dp, top = 16.dp, end = 18.dp, bottom = 4.dp)
+                            .wrapContentHeight(Alignment.CenterVertically),
+                    fontSize = 12.sp,
+                    lineHeight = 14.sp,
+                    textAlign = TextAlign.Center,
+                    // Two lines at 2.0x instead of one clipped line. The parent's contentDescription
+                    // still carries the full text for TalkBack, so nothing is lost if it wraps.
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
             LazyColumn(
                 modifier =
                     Modifier
@@ -1034,6 +1077,7 @@ private fun ChatReader(
                                     } + 6.dp
                                 },
                         ).semantics {
+                            traversalIndex = 1f
                             contentDescription =
                                 if (sectionMenu) {
                                     navMenuLabel
@@ -1289,46 +1333,11 @@ private fun ChatReader(
                     }
                 }
             }
-            Box(
-                Modifier
-                    .align(Alignment.TopCenter)
-                    // Bounds keep the 48 dp touch target while capping width + top/side inset so
-                    // two-line wrapped headers (e.g. Indonesian "Tambah provider · Menu") remain
-                    // strictly inside the 466 px circular dial chord without bezel clipping.
-                    .widthIn(min = 130.dp, max = 148.dp)
-                    .heightIn(min = 48.dp)
-                    .semantics { contentDescription = menuLabel }
-                    .clickable(role = Role.Button) {
-                        if (!sectionMenu) saveReaderPosition()
-                        sectionMenu = !sectionMenu
-                    },
-                contentAlignment = Alignment.TopCenter,
-            ) {
-                Text(
-                    if (renderLab) {
-                        "RenderLab · $section"
-                    } else {
-                        providerState.selected?.let { "${it.displayName} · ${it.selectedModelId}" }
-                            ?: stringResource(R.string.chat_header_add_provider)
-                    },
-                    modifier =
-                        Modifier
-                            .heightIn(min = 48.dp)
-                            .padding(start = 18.dp, top = 16.dp, end = 18.dp, bottom = 4.dp)
-                            .wrapContentHeight(Alignment.CenterVertically),
-                    fontSize = 12.sp,
-                    lineHeight = 14.sp,
-                    textAlign = TextAlign.Center,
-                    // Two lines at 2.0x instead of one clipped line. The parent's contentDescription
-                    // still carries the full text for TalkBack, so nothing is lost if it wraps.
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
             if (!sectionMenu) {
                 Column(
                     Modifier
                         .align(Alignment.BottomCenter)
+                        .semantics { traversalIndex = 2f }
                         .onSizeChanged {
                             footerHeight = it.height
                         }.padding(

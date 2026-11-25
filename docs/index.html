@@ -2303,7 +2303,7 @@ html.boot-leaving .boot{animation:boot-out .22s ease forwards}
     <div class="boot-read">
       <span class="boot-count" id="bootCount">0</span><span class="boot-unit">px</span>
     </div>
-    <div class="boot-chip" id="bootChip">303 tests</div>
+    <div class="boot-chip" id="bootChip">316 tests</div>
   </div>
 </div>
 
@@ -2365,7 +2365,7 @@ html.boot-leaving .boot{animation:boot-out .22s ease forwards}
 
         <div class="actions">
           <a class="btn" href="https://github.com/michaelxdips/NiroWear/releases/latest/download/app-release.apk">
-            Download APK <span class="sz">v0.2.2</span>
+            Download APK <span class="sz">v0.3.0</span>
           </a>
           <a class="btn line" href="#bench">Try the renderer</a>
         </div>
@@ -2998,7 +2998,7 @@ HTTP/1.1 400
             <pre>adb install -r app-release.apk</pre>
           </div>
           <p class="fine">
-            Signed · non-debuggable · versionCode 15 (0.2.2) · the exact size and SHA-256 are printed in the release body by the workflow that built it
+            Signed · non-debuggable · versionCode 16 (0.3.0) · the exact size and SHA-256 are printed in the release body by the workflow that built it
           </p>
         </div>
 
@@ -3136,7 +3136,7 @@ adb install -r app-release.apk</pre>
           <tbody>
             <tr>
               <td>Signed release identity</td>
-              <td><span class="pill pill-device">JVM</span> <code>apksigner</code> on the published asset reads <code>CN=NiroWear Release</code> / <code>0dc50fc0…86543e</code>; <code>aapt2</code> reads <code>versionCode 15</code>. <code>v0.2.2</code>, 2026-11-17: <strong>3,761,661 B</strong>, SHA-256 <code>1ba0fa8c…802322771</code>, asserted by the workflow before publishing. A 0.1.0 install used the debug lineage and needs an uninstall first.</td>
+              <td><span class="pill pill-device">JVM</span> <code>apksigner</code> on published assets reads <code>CN=NiroWear Release</code> / <code>0dc50fc0…86543e</code>; current release cut <code>0.3.0</code> uses <code>versionCode 16</code> (SHA-256 printed in the release body by the workflow that signs it; prior <code>v0.2.2</code> 2026-11-17 was <strong>3,761,661 B</strong>, SHA-256 <code>1ba0fa8c…802322771</code>). A 0.1.0 install used the debug lineage and needs an uninstall first.</td>
               <td>release.yml; release body</td>
             </tr>
             <tr>
@@ -3146,17 +3146,17 @@ adb install -r app-release.apk</pre>
             </tr>
             <tr>
               <td>Semantic blocks, nothing withheld</td>
-              <td><span class="pill pill-source">Source</span><span class="pill pill-device">JVM</span> Blocks, with per-row and per-chunk lazy items; <strong>303 tests / 49 suites, 0 failures, 1 skipped</strong>. <span class="pill pill-emu">Emulator</span> A 120-row table reaches row 119; a 200-line fence keeps every line.</td>
+              <td><span class="pill pill-source">Source</span><span class="pill pill-device">JVM</span> Blocks, with per-row and per-chunk lazy items; <strong>316 tests / 51 suites, 0 failures, 1 skipped</strong>. <span class="pill pill-emu">Emulator</span> A 120-row table reaches row 119; a 200-line fence keeps every line.</td>
               <td>ContentBlock.kt, RenderUnit.kt; RenderUnitTest (5)</td>
             </tr>
             <tr>
               <td>Localized end to end, failures included</td>
-              <td><span class="pill pill-source">Source</span> <strong>126 keys</strong> in <code>values/</code> and <strong>126</strong> in <code>values-in/</code>, zero missing (counted 2026-11-26; v0.2.2 shipped 125 and Unreleased adds <code>failure_answer_not_saved</code>). Type names and provider hints resolve from resources (<code>Tambah kompatibel</code>). A stored failure is a token resolved at display time, so an old row re-reads in the current language.</td>
+              <td><span class="pill pill-source">Source</span> <strong>127 keys</strong> in <code>values/</code> and <strong>127</strong> in <code>values-in/</code>, zero missing (counted 2026-11-26; v0.2.2 shipped 125 and 0.3.0 adds <code>chat_draft_unavailable</code> + <code>failure_answer_not_saved</code>). Type names and provider hints resolve from resources (<code>Tambah kompatibel</code>). A stored failure is a token resolved at display time, so an old row re-reads in the current language.</td>
               <td>strings.xml ×2; ProviderErrorMessageTest (5); ErrorTextTest</td>
             </tr>
             <tr>
               <td>Accessibility dead stops fixed, not described</td>
-              <td><span class="pill pill-source">Source</span><span class="pill pill-hw">Watch</span> Four stops previously measured as dead are closed: link group actionable, composer labelled, credential label read once, provider header wraps instead of clipping. Every control carries <code>content-desc</code> in a 96 px (48 dp) box; traversal order re-measured 2026-11-17.</td>
+              <td><span class="pill pill-source">Source</span><span class="pill pill-hw">Watch</span> Four stops previously measured as dead are closed: link group actionable, composer labelled, credential label read once, provider header wraps instead of clipping, and top-to-bottom TalkBack traversal order (<code>Menu → Reader → Footer</code>) is enforced and tested. Every control carries <code>content-desc</code> in a 96 px (48 dp) box.</td>
               <td>DocumentBlock.kt, MainActivity.kt, ProviderScreen.kt</td>
             </tr>
             <tr>
@@ -3166,13 +3166,13 @@ adb install -r app-release.apk</pre>
             </tr>
             <tr>
               <td>Static analysis clean</td>
-              <td><span class="pill pill-device">JVM</span> ktlint 0 violations; lintDebug <strong>0 errors, 14 warnings</strong>, all “newer version available” notices (9 GradleDependency, 5 NewerVersionAvailable), re-run 2026-11-18.</td>
+              <td><span class="pill pill-device">JVM</span> ktlint 0 violations; lintDebug <strong>0 errors, 1 warning</strong> (<code>VisibleForTests</code> on <code>ChatViewModel</code> test <code>SavedStateHandle</code> default).</td>
               <td>ktlintCheck; lint-results-debug.xml</td>
             </tr>
             <tr>
               <td>Physical watch: timing, frames, memory, suite</td>
-              <td><span class="pill pill-hw">Watch</span> Cold start <strong>723 ms</strong> median on 2026-11-16 (<code>v0.2.1</code>) and <strong>4375.5 ms</strong> on 2026-11-17 (debug <code>main</code>, 4311, 4345, 4406, 4619 ms; earlier written 4373 ms, #65). Scroll: <strong>761 frames, 1.18 % janky</strong>, 50th 8 ms. 20-minute session: PSS <strong>+3.2 MB</strong>, <code>Thermal Status</code> stayed 0. <code>454x454</code> keeps every control at 96 px. Suite per class with <code>pm clear</code>: <strong>38 of 45 passed</strong>, 4 gave no summary (runner teardown crash, #50). No rotary device exists on this unit (#47).</td>
-              <td>adb; issues #47, #50, #65</td>
+              <td><span class="pill pill-hw">Watch</span> Cold start <strong>723 ms</strong> median on 2026-11-16 (<code>v0.2.1</code>) and <strong>4375.5 ms</strong> on 2026-11-17 (debug <code>main</code>, 4311, 4345, 4406, 4619 ms; earlier written 4373 ms, #65). Scroll: <strong>761 frames, 1.18 % janky</strong>, 50th 8 ms. 20-minute session: PSS <strong>+3.2 MB</strong>, <code>Thermal Status</code> stayed 0. <code>454x454</code> keeps every control at 96 px. Suite per class with <code>pm clear</code>: <strong>38 of 45 passed</strong>, 4 gave no summary (runner teardown crash, reconciled under #84 after closed #50). No rotary device exists on this unit (#47).</td>
+              <td>adb; issues #47, #65, #84</td>
             </tr>
             <tr>
               <td>Still unverified — no evidence exists</td>
@@ -3191,8 +3191,8 @@ adb install -r app-release.apk</pre>
         </div>
 
         <p class="status-note">
-          Every figure is read from a result file, not from memory: <code>303 tests / 49 suites</code> and
-          lint <code>0 errors / 14 dependency notices</code> from the 2026-11-18 re-run, the watch numbers
+          Every figure is read from a result file, not from memory: <code>316 tests / 51 suites</code> and
+          lint <code>0 errors / 1 warning</code> from the current release build, the watch numbers
           from <code>adb</code> output quoted in the issues. Both hardware passes ran
           <code>am instrument</code> per class with <code>pm clear</code> between classes — 25 of 43 on
           2026-11-16 (eleven of those failures were <code>adb: device offline</code>, not test results) and
@@ -5000,7 +5000,7 @@ if (typeof module !== "undefined" && module.exports) {
     if (count) count.textContent = String(Math.round(466 * p));
     /* The complication swaps to two more facts while the hand turns: tests, then the cut. */
     if (p >= 0.45 && chipStep === 0) { chipStep = 1; setChip("1.18% jank"); }
-    if (p >= 0.8 && chipStep === 1) { chipStep = 2; setChip("v0.2.2"); }
+    if (p >= 0.8 && chipStep === 1) { chipStep = 2; setChip("v0.3.0"); }
     if (p < 1) requestAnimationFrame(step);
     else finish();
   }

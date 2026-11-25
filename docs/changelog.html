@@ -127,15 +127,47 @@ p:last-child{margin-bottom:0}
       Every published build, in order, with the numbers that identify it. Each entry records what was
       actually executed for that release — not what was intended.
     </p>
-    <p class="meta">Generated from git history and the NiroWear release API · 2026-11-17</p>
+    <p class="meta">Generated from git history and the NiroWear release API · 2026-11-26</p>
   </div>
+
+  <!-- 0.3.0 -->
+  <article class="release">
+    <div class="rside">
+      <span class="rver">0.3.0</span>
+      <span class="rdate">2026-11-26</span>
+      <span class="rbadge latest">Latest</span>
+    </div>
+    <div class="rbody">
+      <h2>Atomic drafts, incremental Markdown streaming, TalkBack order, and 127-key parity</h2>
+      <p>
+        Exit-saved composer drafts live in Room (<code>ChatDatabase</code> v3) so Back-exit drafts
+        survive process death and <code>Send</code> commits the question while clearing the draft in one
+        transaction (<code>InputResultUiTest</code>).
+      </p>
+      <p>
+        Streaming Markdown parsing adds <code>ResponseParser.needsPreScan</code>,
+        <code>ResponseParser.parseIncremental</code> prefix caching, and single-flight coalescing;
+        the unsaved-answer banner is localized under <code>FailureToken.ANSWER_NOT_SAVED</code>
+        (<strong>127 keys</strong> in English and Indonesian, zero missing), code blocks show a
+        conditional horizontal-pan edge fade cue, and TalkBack traversal visits
+        <code>Menu → Reader → Footer</code> in top-to-bottom order
+        (<code>TalkBackTraversalOrderTest</code>).
+      </p>
+      <p>
+        Verified on this cut: <strong>316 JVM unit tests / 51 suites</strong> (0 failures, 1
+        skipped), <code>lintDebug</code> 0 errors / 1 warning, <code>ktlintCheck</code> 0
+        violations, and Wear OS 5 API 34 AVD (<code>466×466</code>) instrumented suites. Physical
+        Xiaomi Watch 2 checks were skipped for this emulator-first cut; release workflow gates signing
+        on unit tests, lint, ktlint, and release notes.
+      </p>
+    </div>
+  </article>
 
   <!-- 0.2.2 -->
   <article class="release">
     <div class="rside">
       <span class="rver">0.2.2</span>
       <span class="rdate">2026-11-17</span>
-      <span class="rbadge latest">Latest</span>
     </div>
     <div class="rbody">
       <h2>The Stop label sits in the middle of its button</h2>

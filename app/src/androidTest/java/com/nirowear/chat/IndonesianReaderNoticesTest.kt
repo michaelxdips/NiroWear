@@ -347,9 +347,16 @@ class IndonesianReaderNoticesTest {
                         )
                         val failDeadline = SystemClock.uptimeMillis() + 8_000
                         var stillFailingTexts = emptyList<String>()
+                        var scrollDownPhase = false
                         while (SystemClock.uptimeMillis() < failDeadline) {
-                            stillFailingTexts = collectReaderTextsAfterScrolling(downward = false)
+                            stillFailingTexts =
+                                if (scrollDownPhase) {
+                                    collectReaderTextsAfterScrolling(downward = true)
+                                } else {
+                                    collectReaderTextsAfterScrolling(downward = false)
+                                }
                             if (stillFailingTexts.any { it.contains("Masih tidak dapat menyimpan.") }) break
+                            scrollDownPhase = !scrollDownPhase
                             SystemClock.sleep(200)
                         }
                         assertTrue(

@@ -33,8 +33,8 @@ android {
         applicationId = "com.nirowear"
         minSdk = 30
         targetSdk = 37
-        versionCode = 15
-        versionName = "0.2.2"
+        versionCode = 16
+        versionName = "0.3.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         testInstrumentationRunnerArguments["notAnnotation"] = "com.nirowear.HostDrivenGate"
     }

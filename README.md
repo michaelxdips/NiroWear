@@ -78,8 +78,8 @@ It exists because a watch is a bad screen for a good answer. Every other approac
 
 ### Interface
 
-- **Fully localized.** 126 user-visible strings in English and Indonesian (`values/` + `values-in/`, the
-  same 126 keys in both files, none missing, counted 2026-11-26; `v0.2.2` shipped 125 keys and Unreleased localizes the unsaved-answer banner via `FailureToken.ANSWER_NOT_SAVED` / `failure_answer_not_saved`), on top of the renderer's own resource set. The provider screen's hints and provider-type names resolve from resources rather than being formatted in Kotlin, so a sentence cannot leak English into the Indonesian UI (#66).
+- **Fully localized.** 127 user-visible strings in English and Indonesian (`values/` + `values-in/`, the
+  same 127 keys in both files, none missing, counted 2026-11-26; `v0.2.2` shipped 125 keys, PR #83 adds `chat_draft_unavailable`, and `v0.3.0` localizes the unsaved-answer banner via `FailureToken.ANSWER_NOT_SAVED` / `failure_answer_not_saved`), on top of the renderer's own resource set. The provider screen's hints and provider-type names resolve from resources rather than being formatted in Kotlin, so a sentence cannot leak English into the Indonesian UI (#66).
 - **Accessibility that is tested, not asserted.** The link group node is actionable, the composer field carries its own label, credential labels are announced once, and the provider header grows instead of clipping at large font scales. TalkBack *audio* acceptance still needs a real watch — see [Limitations](#known-limitations).
 
 ## Install
@@ -92,7 +92,7 @@ It exists because a watch is a bad screen for a good answer. Every other approac
 Verify what you installed:
 
 ```bash
-aapt2 dump badging app-release.apk | head -3    # versionCode 15, versionName 0.2.2
+aapt2 dump badging app-release.apk | head -3    # versionCode 16, versionName 0.3.0
 sha256sum app-release.apk                       # compare with the hash in the release body
 ```
 
@@ -185,8 +185,8 @@ Every number below came from a command run on this tree. Anything not measured i
 
 | Check | Result | Source |
 |---|---|---|
-| JVM unit tests | **303 tests, 49 suites, 0 failures, 1 skipped** (the opt-in live provider smoke, skipped without its environment variables) | `app/build/test-results/testDebugUnitTest/*.xml` |
-| Android Lint | **0 errors, 14 warnings** (re-run 2026-11-18) | `app/build/reports/lint-results-debug.xml` |
+| JVM unit tests | **316 tests, 51 suites, 0 failures, 1 skipped** (the opt-in live provider smoke, skipped without its environment variables) | `app/build/test-results/testDebugUnitTest/*.xml` |
+| Android Lint | **0 errors, 1 warning** (`VisibleForTests` on `ChatViewModel` test `SavedStateHandle` default) | `app/build/reports/lint-results-debug.xml` |
 | ktlint | **0 violations** | `:app:ktlintCheck` |
 | Assemblies | `assembleDebug` + `assembleRelease` pass | Gradle output |
 | Instrumented suite (Wear OS 37 AVD, 466×466) — last AVD run 2026-11-09 | **71 tests, 2 failing, 0 errors** | `app/build/outputs/androidTest-results/connected/debug/*.xml` |
@@ -203,7 +203,7 @@ The two remaining failures, read from the result XML of the last recorded AVD ru
 
 - **25 of 43 classes passed on the first pass.** Eleven of the eighteen failures were `adb: device offline`, not test results: this watch drops the ADB transport when it sleeps, and a wake keepalive is required.
 - Real defects found on hardware: the rotary crown does not move the reader at all (#47), table rows are absent from the semantics tree on API 34 (#48), and Arabic-Indic digits appear inside an English plural sentence (#49).
-- `ReaderNavigationTest` exceeded a 600 s timeout and `ProviderSetupUiTest` produced no output across three attempts (#50).
+- `ReaderNavigationTest` exceeded a 600 s timeout and `ProviderSetupUiTest` produced no output across three attempts (#50, reconciled in #84).
 - After `pm clear`, 11 of 17 rerun classes passed; the remaining three are #47, #48 and #49.
 
 Fixed and now passing, after failing on the previous cut: `ReaderNavigationTest#editAndRetryInvalidateRemovedContinuationThroughRealTouch` (a trailing `Retry response` row could sit below the fold), `StoppedStatusUiTest#persistedStatusAndRetryRemainReachableAtBothScales`, and five new `ErrorTextTest` methods that prove a stored failure renders in the reader's language.
@@ -221,12 +221,12 @@ Three published figures have been wrong and are corrected rather than quietly dr
 - **454 × 454 override** (`wm size 454x454`, then `reset`): the reader took `[0,96][454,250]` and the three controls stayed 96 × 96 px (48 dp) at `[71,262][167,358]`, `[179,262][275,358]`, `[287,262][383,358]` — no clipping, no scale change.
 - **"Stop" label centring, measured and fixed:** the label sat at `Rect(189,344,243,380)` inside a button at `Rect(161,314,305,410)` — **17 px left of centre**, which is the owner's report. Wear Material 3 pads a button for an optional leading icon; with `contentPadding = PaddingValues(0.dp)` the label moved to the left edge (45 px off), and the fix that holds is a full-width label with `TextAlign.Center`, measured `Rect(161,344,305,380)` against `Rect(161,314,305,410)`: **dx = 0, dy = 0** (`StopButtonCenterTest`, `OK (1 test)`).
 - **#52, second send through the app button:** keys typed for real, keyboard dismissed with one BACK press (**ESCAPE and a swipe-down do not dismiss Gboard Wear — measured**), then `ACTION_CLICK` on Send. Drafts stored unchanged (`Ping`, `Pong`); on `nirowear-b` (API 34), cancelling composer with no send preserves the exact first-row reading position (`index=2->2, offset=102->102`, `anchor='Sent from the button.' before=Rect(48, 122 - 418, 166) after=Rect(48, 122 - 418, 166)`), and sending Turn 2 auto-follows cleanly to settled `anchor='Second answer.' Rect(48, 122 - 418, 166)` (`ComposerSendButtonTest`, `OK (1 test)`; an earlier hardware note listed `Rect(48,114,418,158)`).
-- **#66 fixed and re-measured:** the in-ID provider title now reads `Tambah kompatibel`; the two hint sentences that were formatted in Kotlin moved behind `provider_key_mismatch` / `provider_remote_typing`. `v0.2.2` shipped 125 keys per locale, and Unreleased (`N4`) adds `failure_answer_not_saved` so `values/` and `values-in/` match at **126 keys per locale, zero missing, zero extra** (`IndonesianReaderNoticesTest`, `OK (1 test)`).
+- **#66 fixed and re-measured:** the in-ID provider title now reads `Tambah kompatibel`; the two hint sentences that were formatted in Kotlin moved behind `provider_key_mismatch` / `provider_remote_typing`. `v0.2.2` shipped 125 keys per locale, and `v0.3.0` (`I4` + `N4`) adds `chat_draft_unavailable` and `failure_answer_not_saved` so `values/` and `values-in/` match at **127 keys per locale, zero missing, zero extra** (`IndonesianReaderNoticesTest`, `OK (1 test)`).
 - **20-minute stress session (149 swipe/tap cycles over the stored answers):** `TOTAL PSS 73,642 → 76,949 KB` (**+3.2 MB**), `RSS 151,936 → 158,352 KB`, swap `285 → 108 KB`. `dumpsys thermalservice` reported `Thermal Status: 0` before and after — the device never left the nominal thermal level, so no throttling was reached and none is claimed. Frames during that continuous gesture loop: 927 janky of 1,363 (**68 %**), which is a stress figure, not a scroll-quality figure — the clean 18-swipe scroll above measured **1.18 %**.
 - **Per-class instrumented run with `pm clear` between classes** (45 classes, `am instrument -e class`, `notAnnotation com.nirowear.HostDrivenGate`, 420 s cap per class): **38 passed**, 2 failed, 1 lost the ADB transport, 4 produced no JUnit summary.
   - `PairingUiTest#keyArrivesFromPhoneWithoutTypingOnWatch` fails as designed — no phone browser (#28).
   - `RendererLocalizationTest#hiddenCellNoticesUseLocaleAndQuantity` expected Arabic-Indic digits for `ar`, contradicting the #49 decision (ASCII digits inside the English fallback sentence); the expectation was stale and now follows the decision.
-  - No summary: `ReaderNavigationTest`, `ProviderSetupUiTest`, `StoppedStatusUiTest`, `ProviderValidationRaceTest`. The crash buffer shows the runner dying at teardown with `java.lang.RuntimeException: Error while disconnecting UiAutomation … DeadObjectException` (`Instrumentation.finish`), not a product assertion. #50 keeps tracking the first two.
+  - No summary: `ReaderNavigationTest`, `ProviderSetupUiTest`, `StoppedStatusUiTest`, `ProviderValidationRaceTest`. The crash buffer shows the runner dying at teardown with `java.lang.RuntimeException: Error while disconnecting UiAutomation … DeadObjectException` (`Instrumentation.finish`), not a product assertion; AVD per-class re-runs pass all 7 `ReaderNavigationTest` methods and are tracked/reconciled in #84 (superseding closed #50).
   - `SettingsRecoveryTest` produced no summary in the sweep and **passed (3 tests)** when re-run alone — the sweep's no-summary is not stable evidence.
 
 **Other measured facts**
@@ -251,8 +251,8 @@ Stated plainly, because a README that hides these is useless.
 - **Model switching is per conversation; the crown is not proven.** The rotary crown does not move the reader on the physical watch today (#47).
 - **Every stored failure is a token now.** The eleven sentences that were hardcoded English — history read failures, key cleanup, truncation, refusals, send/save failures and provider-settings failures — resolve at display time in English and Indonesian. Rows written before the tokens keep their original sentence, by design.
 - **Test sources are published.** `app/src/test` and `app/src/androidTest` were ignored by the allowlist until 2026-11-16, which meant every CI run executed **zero** tests while reporting success. Both suites are in git now and the `jvm` job's result check refuses a run that produced no result XML.
-- **The connected suite runs in CI as a named smoke gate.** The job boots a Wear OS 5 (API 34) AVD patched to 466 × 466 @ 320 and runs ten classes the physical-watch run passed; the full suite is still a hardware/manual gate because two classes never finish (#50). Every class in the gate was green locally first.
-- **Hardware-only defects are filed, not hidden:** #47 rotary, #48 table semantics on API 34, #50 two classes that do not finish on hardware. #49 (Arabic-Indic digits inside an English sentence) is fixed and verified on the watch: the hidden-cell note formats its count with `Locale.ENGLISH`, and `RendererArPluralTest` now asserts that helper instead of the platform formatter.
+- **The connected suite runs in CI as a named smoke gate.** The job boots a Wear OS 5 (API 34) AVD patched to 466 × 466 @ 320 and runs ten classes the physical-watch run passed; the full suite is still a hardware/manual gate where physical watch logcat for the four teardown-crash classes is tracked under #84 (reconciling closed #50). Every class in the gate was green locally first.
+- **Hardware-only defects are filed, not hidden:** #47 rotary, #48 table semantics on API 34, #84 physical watch logcat for the four teardown-crash classes (reconciling closed #50). #49 (Arabic-Indic digits inside an English sentence) is fixed and verified on the watch: the hidden-cell note formats its count with `Locale.ENGLISH`, and `RendererArPluralTest` now asserts that helper instead of the platform formatter.
 - **The Send tap was a keyboard tap (#52), and that is fixed.** With the composer open the IME covers the whole 466 px dial (measured: `mIsInputViewShown=true`, screenshot shows no app pixels), so the app's own Send button at `[197,340][270,376]` sits under the letter row: tapping it typed `v` and the draft became `hellov` instead of being sent. The reachable control is the IME's own Send key, and it did not work either — `BasicTextField` defaulted to multi-line, so the field reported `inputType=0x28001` (TYPE_TEXT_FLAG_MULTI_LINE) with `imeOptions=0x2000004` (`IME_FLAG_NO_ENTER_ACTION`) and Enter appended `\n`. With `singleLine = true` the same key sends: measured `OK (1 test)` for `ComposerSendReachabilityTest#enterDoesNotInsertNewline`, and a typed `ping` sent from the IME produced `Streaming…`, then `Pong—I'm reachable.` from `gpt-6-luna` with the keyboard closed.
 - **#62 is not claimed fixed.** The composer now round-trips a full `TextFieldValue`, which is the contract a text field needs, but the reported "the composer loses the earlier words" could not be reproduced through real typing on this hardware (identical taps keep both words on the pre-change build too). The issue stays open with the measured evidence and the two reproduction routes that would settle it.
 - **Math limits.** Rendering is cached in memory, so a formula does not flash its raw LaTeX when it scrolls back. A formula wider than the bitmap bound is typeset once at a smaller size — never below half — before falling back to readable source text. File-inclusion macros, macro definitions, unbalanced braces and oversized `\rule` dimensions are refused outright.
@@ -267,7 +267,7 @@ Remaining gaps are filed rather than described:
 - **#47** Rotary crown does not move the reader on the physical watch
 - **#48** Table rows are absent from the semantics tree on API 34 hardware
 - **#49** Arabic digits appear inside the English plural fallback sentence
-- **#50** Two instrumented classes do not complete on hardware
+- **#84** Reconcile closed #50 with physical watch logcat for the four teardown-crash classes
 - **#51** Pairing UX: tap-to-pair with NFC HCE (QR cannot be verified on this machine)
 - **#30** CI never compiles the instrumented tests, so they rot invisibly
 

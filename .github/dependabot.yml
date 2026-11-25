@@ -4,7 +4,7 @@ version: 2
 #
 # Nine open dependabot PRs (2026-10-26 → 2026-11-02) were closed rather than merged: this app's
 # reader depends on the Markdown/LaTeX parser's exact behaviour, and its Compose/Kotlin combination is
-# pinned to a verified watch build. CI runs the published 303-test JVM suite and the 10-class
+# pinned to a verified watch build. CI runs the published 316-test JVM suite and the 10-class
 # Wear OS AVD smoke gate, but full 45-class hardware rendering and real watch timings still require
 # a device verification pass. Bumps land after device verification, not on a schedule.
 updates:
