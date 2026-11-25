@@ -526,7 +526,59 @@ object ResponseParser {
         return dropped
     }
 
+    /**
+     * Zero-allocation fast-path guard for [parse]: returns `true` only when [source] contains a
+     * construct that requires the line-by-line pre-scanner (`$$`, `\[`, fenced code, or a line with
+     * at least [MAX_CONTAINER_DEPTH] container markers). Clean Markdown prose, headings, lists,
+     * quotes, links, and tables skip the `split('\n')` + `StringBuilder` copy completely.
+     */
+    private fun needsPreScan(source: String): Boolean {
+        if (source.indexOf("$$") >= 0 ||
+            source.indexOf("\\[") >= 0 ||
+            source.indexOf("```") >= 0 ||
+            source.indexOf("~~~") >= 0
+        ) {
+            return true
+        }
+        var pos = 0
+        while (pos < source.length) {
+            val ch = source[pos]
+            if (ch == ' ' || ch == '>' || ch == '-' || ch == '*' || ch == '+' || ch in '0'..'9') {
+                var depth = 0
+                var cursor = pos
+                while (cursor < source.length && depth < MAX_CONTAINER_DEPTH) {
+                    val c = source[cursor]
+                    val isContainerChar =
+                        c == ' ' || c == '>' || c == '-' || c == '*' ||
+                            c == '+' || c == '.' || c == ')' || c in '0'..'9'
+                    if (isContainerChar) {
+                        if (c == '>' || c == '-' || c == '*' || c == '+' || c == '.' || c == ')') {
+                            depth++
+                        } else {
+                            while (cursor + 1 < source.length && source[cursor + 1] in '0'..'9') cursor++
+                            if (c != ' ') depth++
+                        }
+                        cursor++
+                    } else {
+                        break
+                    }
+                }
+                if (depth >= MAX_CONTAINER_DEPTH) return true
+            }
+            val nl = source.indexOf('\n', pos)
+            if (nl < 0) break
+            pos = nl + 1
+        }
+        return false
+    }
+
     fun parse(source: String): List<ContentBlock> {
+        val normalized = if (source.indexOf('\r') >= 0) source.replace("\r\n", "\n") else source
+        if (!needsPreScan(normalized)) {
+            val fastBlocks = ArrayList<ContentBlock>()
+            appendBlocks(parser.parse(normalized), fastBlocks, scanTableOverflow(normalized))
+            return fastBlocks
+        }
         val blocks = mutableListOf<ContentBlock>()
         val markdown = StringBuilder()
         var math: StringBuilder? = null
@@ -606,7 +658,6 @@ object ResponseParser {
             val leading = line.length - line.trimStart(' ').length
             return if (leading >= mathDedent) line.substring(mathDedent) else line
         }
-        val normalized = if (source.indexOf('\r') >= 0) source.replace("\r\n", "\n") else source
         for (line in normalized.split('\n')) {
             // Bound nesting before the Markdown library recurses on it.
             val bounded = capContainers(line)
@@ -862,15 +913,15 @@ object ResponseParser {
     /**
      * Streaming-aware entrypoint: reuses [previous]'s already-parsed [IncrementalParseState.prefixBlocks]
      * whenever [source] extends [IncrementalParseState.prefix] across a verified non-continuable
-     * top-level blank-line boundary with no link reference definitions. Always falls back to full
-     * [parse] when any ambiguity exists.
+     * top-level boundary (`\n\n` or plain column-0 `- <word>` bullet) with no link reference
+     * definitions. Always falls back to full [parse] when any ambiguity exists.
      */
     internal fun parseIncremental(
         previous: IncrementalParseState?,
         source: String,
     ): Pair<IncrementalParseState?, List<ContentBlock>> {
         val normalized = if (source.indexOf('\r') >= 0) source.replace("\r\n", "\n") else source
-        if (normalized.length < MIN_INCREMENTAL_PREFIX_CHARS || normalized.contains("]:")) {
+        if (normalized.length < MIN_INCREMENTAL_PREFIX_CHARS || normalized.indexOf("]:") >= 0) {
             return null to parse(normalized)
         }
         val base =
@@ -878,7 +929,7 @@ object ResponseParser {
                 previous.prefix.isNotEmpty() &&
                 normalized.length > previous.prefix.length &&
                 normalized.startsWith(previous.prefix) &&
-                isSafeContinuationStart(normalized[previous.prefix.length])
+                isSafeIncrementalBoundary(previous.prefix, normalized)
             ) {
                 previous
             } else {
@@ -907,10 +958,32 @@ object ResponseParser {
         ch != '\n' && ch != ' ' && ch != '\t' && ch != '>' && ch != '-' && ch != '*' &&
             ch != '+' && ch != '=' && ch != '|' && ch != '<' && ch !in '0'..'9'
 
+    private fun isTopLevelPlainBulletStart(
+        source: String,
+        pos: Int,
+    ): Boolean =
+        pos + 2 < source.length &&
+            source[pos] == '-' &&
+            source[pos + 1] == ' ' &&
+            source[pos + 2].isLetterOrDigit()
+
+    private fun isSafeIncrementalBoundary(
+        prefix: String,
+        normalized: String,
+    ): Boolean {
+        val pos = prefix.length
+        return if (prefix.endsWith("\n\n")) {
+            isSafeContinuationStart(normalized[pos]) || isTopLevelPlainBulletStart(normalized, pos)
+        } else {
+            isTopLevelPlainBulletStart(normalized, pos)
+        }
+    }
+
     /**
-     * Returns the character index right after the last blank line `\n\n` where CommonMark and
-     * [ResponseParser] state are strictly top-level clean (no open fence/math/HTML/list/quote/table)
-     * and the following line cannot lazily continue or alter any preceding block; 0 if none exists.
+     * Returns the character index right after the last top-level block boundary (`\n\n` after a
+     * closed paragraph, heading, top-level fence, top-level display math, or top-level table, or a
+     * `\n` before a single-line plain `- ` top-level bullet) where CommonMark and [ResponseParser]
+     * state are clean and the following line cannot lazily continue or alter preceding blocks.
      */
     private fun findSafePrefixCut(source: String): Int {
         var lineStart = 0
@@ -920,8 +993,9 @@ object ResponseParser {
         var fenceNested = false
         var mathClosing: String? = null
         var listIndent = 0
-        var paragraphTopClean = true
+        var blockDirty = false
         var seenNonBlankInBlock = false
+        var inTopDashBullet = false
 
         while (lineStart < source.length) {
             val nl = source.indexOf('\n', lineStart)
@@ -930,11 +1004,14 @@ object ResponseParser {
             val nextStart = if (nl < 0) source.length else nl + 1
 
             if (mathClosing != null) {
-                if (closingIndex(raw, mathClosing, 0) >= 0) {
+                val closeIdx = closingIndex(raw, mathClosing, 0)
+                if (closeIdx >= 0) {
+                    val trailing = raw.substring(closeIdx + mathClosing.length)
                     mathClosing = null
+                    if (trailing.isNotBlank()) blockDirty = true
                 }
-                paragraphTopClean = false
                 seenNonBlankInBlock = true
+                inTopDashBullet = false
             } else if (fence != null) {
                 val contentLeading = leadingSpaceCount(raw)
                 val check = if (listIndent > 0 && contentLeading >= listIndent) raw.substring(listIndent) else raw
@@ -946,20 +1023,40 @@ object ResponseParser {
                         fenceNested = false
                     }
                 }
-                paragraphTopClean = false
                 seenNonBlankInBlock = true
+                inTopDashBullet = false
             } else if (raw.isEmpty()) {
+                val canCutAfterBlock = seenNonBlankInBlock && !blockDirty
                 listIndent = 0
-                if (seenNonBlankInBlock &&
-                    paragraphTopClean &&
+                blockDirty = false
+                seenNonBlankInBlock = false
+                inTopDashBullet = false
+                if (canCutAfterBlock &&
                     nextStart < source.length &&
-                    isSafeContinuationStart(source[nextStart])
+                    (isSafeContinuationStart(source[nextStart]) || isTopLevelPlainBulletStart(source, nextStart))
                 ) {
                     lastCut = nextStart
                 }
-                paragraphTopClean = true
-                seenNonBlankInBlock = false
+            } else if (
+                listIndent <= 2 &&
+                (!seenNonBlankInBlock || inTopDashBullet) &&
+                isTopLevelPlainBulletStart(source, lineStart) &&
+                raw.indexOf("$$") < 0 &&
+                raw.indexOf("\\[") < 0 &&
+                raw.indexOf("```") < 0 &&
+                raw.indexOf("~~~") < 0 &&
+                raw.indexOf('<') < 0 &&
+                raw.indexOf('|') < 0
+            ) {
+                if (inTopDashBullet) {
+                    lastCut = lineStart
+                }
+                inTopDashBullet = true
+                listIndent = 2
+                blockDirty = true
+                seenNonBlankInBlock = true
             } else {
+                inTopDashBullet = false
                 seenNonBlankInBlock = true
                 val container = uncontainer(raw)
                 val leading = leadingSpaceCount(container)
@@ -976,7 +1073,9 @@ object ResponseParser {
                     fence = opener.groupValues[1].first()
                     fenceLen = opener.groupValues[1].length
                     fenceNested = uncontainer(raw) != raw
-                    paragraphTopClean = false
+                    if (fenceNested || rawLeading >= 4 || raw.startsWith('\t') || listIndent != 0) {
+                        blockDirty = true
+                    }
                 } else if (raw.indexOf('<') >= 0 && HTML_BLOCK.find(container) != null) {
                     // HTML blocks (e.g. <pre>, <!--) can span blank lines, so disable incremental split.
                     return lastCut
@@ -991,26 +1090,30 @@ object ResponseParser {
                             else -> null
                         }
                     if (openTok != null) {
+                        val topLevelMath =
+                            rawLeading == 0 && container == raw && listIndent == 0 && !raw.startsWith('\t')
+                        if (!topLevelMath) blockDirty = true
                         val after = container.substring(trim + openTok.first.length)
-                        if (closingIndex(after, openTok.second, 0) < 0) {
+                        val sameLineClose = closingIndex(after, openTok.second, 0)
+                        if (sameLineClose < 0) {
                             mathClosing = openTok.second
+                        } else if (after.substring(sameLineClose + openTok.second.length).isNotBlank()) {
+                            blockDirty = true
                         }
-                        paragraphTopClean = false
                     } else if (raw.contains("$$")) {
                         val mid = findMidlineDisplay(container)
                         if (mid >= 0 && closingIndex(container, "$$", mid + 2) < 0) {
                             mathClosing = "$$"
                         }
-                        paragraphTopClean = false
+                        blockDirty = true
                     } else if (
                         rawLeading > 0 ||
                         container != raw ||
                         markerIndent != null ||
                         listIndent != 0 ||
-                        raw.startsWith('\t') ||
-                        raw.indexOf('|') >= 0
+                        raw.startsWith('\t')
                     ) {
-                        paragraphTopClean = false
+                        blockDirty = true
                     }
                 }
             }

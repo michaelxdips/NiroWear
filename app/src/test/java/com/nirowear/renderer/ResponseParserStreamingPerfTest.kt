@@ -52,6 +52,55 @@ class ResponseParserStreamingPerfTest {
     }
 
     @Test
+    fun mixedDocWithTableAndConsecutiveBulletsAdvancesPrefixAndMatchesFullParse() {
+        val mixedCore =
+            buildString {
+                append("## Architectural Summary\n\n")
+                append("Streaming Markdown uses CommonMark plus \$E=mc^2\$ and links [NiroWear](https://nirowear.example).\n\n")
+                append(
+                    "```kotlin\nfun streamTick(bytes: Int): Long {\n    val t0 = System.nanoTime()\n" +
+                        "    return (bytes * 16L) + t0\n}\n```\n\n",
+                )
+                append("$$\n\\sum_{k=1}^{n} \\frac{1}{k^2} = \\frac{\\pi^2}{6}\n$$\n\n")
+                append("| Stage | Cost | Owner | ExtraColumn |\n|---|---|---|---|\n")
+                append("| Pre-scan | low | parser | alpha-cell |\n")
+                append("| CommonMark | mid | library | beta-cell | clamped |\n")
+                append("| Overflow | check | table | gamma-cell |\n\n")
+                var i = 0
+                while (length < 4096) {
+                    append("- Item ${i++}: observed streaming chunk behaviour with **bold** and `inline` spans.\n")
+                }
+            }
+        val doc = mixedCore.take(4096)
+        assertStreamingParity("docMixed-32", doc, 32)
+        var state: ResponseParser.IncrementalParseState? = null
+        var pos = 0
+        while (pos < doc.length) {
+            pos = (pos + 32).coerceAtMost(doc.length)
+            val (nextState, blocks) = ResponseParser.parseIncremental(state, doc.substring(0, pos))
+            state = nextState
+            assertEquals(ResponseParser.parse(doc.substring(0, pos)), blocks)
+        }
+        assertTrue(
+            "Expected incremental prefix >3000 chars, got ${state?.prefix?.length}",
+            (state?.prefix?.length ?: 0) > 3000,
+        )
+    }
+
+    @Test
+    fun adversarialBulletsOrderedListsAndDeepContainersStayExact() {
+        val doc =
+            buildString {
+                append("- Top bullet zero\n  indented continuation line\n- Top bullet one\n- ---\n- - nested bullet\n")
+                append("- > quoted inside bullet\n- Item math \$\$x=1\$\$\n- Last plain item\n\n")
+                append("1. Ordered alpha\n2. Ordered beta\n3. Ordered gamma\n\n")
+                append(">".repeat(60) + " deep container tail")
+            }
+        assertStreamingParity("adversarial-edges", doc, 17)
+        assertEquals(ResponseParser.parse(doc), ResponseParser.parseIncremental(null, doc).second)
+    }
+
+    @Test
     fun lateReferenceLinkDefinitionsPreserveBitExactParity() {
         val doc =
             buildString {
