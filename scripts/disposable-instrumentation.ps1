@@ -1,6 +1,26 @@
-param([string]$Serial = 'emulator-5560', [string]$Class = '', [string]$Name = 'full')
+param(
+    [string]$Serial = 'emulator-5572',
+    [string]$Class = '',
+    [string]$Name = 'full',
+    [string]$ExpectedAvd = 'nirowear-b'
+)
 $ErrorActionPreference = 'Stop'
-if ($Serial -eq 'emulator-5554' -or ((& adb -s $Serial emu avd name) -join "`n") -notmatch '^NiroWear_Harmony_Disposable') { throw 'Wrong AVD; no install permitted.' }
+
+# Guard against protected emulators and hardware devices before any install/test mutation.
+$protectedAvds = @('NiroWear_Harmony_Disposable', 'NiroWear_466')
+if ($Serial -eq 'emulator-5554' -or $ExpectedAvd -in $protectedAvds -or $ExpectedAvd -notmatch '^nirowear-[ab]$') {
+    throw "Refusing protected or non-disposable target (Serial=$Serial, ExpectedAvd=$ExpectedAvd); no install permitted."
+}
+$qemu = ((& adb -s $Serial shell getprop ro.kernel.qemu) -join "`n").Trim()
+if ($qemu -ne '1') {
+    throw "Refusing non-emulator target (ro.kernel.qemu='$qemu'); no install permitted."
+}
+$avdLines = @(& adb -s $Serial emu avd name)
+$avdName = if ($avdLines.Count -gt 0) { $avdLines[0].Trim() } else { '' }
+if ($avdName -in $protectedAvds -or $avdName -ne $ExpectedAvd) {
+    throw "Wrong AVD '$avdName' (expected '$ExpectedAvd'); no install permitted."
+}
+
 $out = "artifacts/software-rc-2026-10-09/$Name"
 New-Item -ItemType Directory -Force $out | Out-Null
 $analyzer = "$env:LOCALAPPDATA/Android/Sdk/cmdline-tools/latest/bin/apkanalyzer.bat"

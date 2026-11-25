@@ -76,7 +76,7 @@ p:last-child{margin-bottom:0}
 .gate th{text-align:left;font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--steel);font-weight:400;padding:0 12px 7px 0;border-bottom:1px solid var(--ink)}
 .gate td{padding:8px 12px 8px 0;border-bottom:1px solid var(--hair-soft);vertical-align:top}
 .gate td:first-child{color:var(--steel)}
-.gate td:last-child{text-align:right;color:var(--ink);font-variant-numeric:tabular-nums;white-space:nowrap}
+.gate td:last-child{text-align:right;color:var(--ink);font-variant-numeric:tabular-nums;white-space:normal;overflow-wrap:anywhere}
 .gate tr:last-child td{border-bottom:0}
 
 .note{margin-top:18px;font-family:var(--util);font-size:11px;line-height:1.7;color:var(--steel);border-left:2px solid var(--brass);padding-left:12px;max-width:70ch}
@@ -127,15 +127,47 @@ p:last-child{margin-bottom:0}
       Every published build, in order, with the numbers that identify it. Each entry records what was
       actually executed for that release — not what was intended.
     </p>
-    <p class="meta">Generated from git history and the NiroWear release API · 2026-11-17</p>
+    <p class="meta">Generated from git history and the NiroWear release API · 2026-11-26</p>
   </div>
+
+  <!-- 0.3.0 -->
+  <article class="release">
+    <div class="rside">
+      <span class="rver">0.3.0</span>
+      <span class="rdate">2026-11-26</span>
+      <span class="rbadge latest">Latest</span>
+    </div>
+    <div class="rbody">
+      <h2>Atomic drafts, incremental Markdown streaming, TalkBack order, and 127-key parity</h2>
+      <p>
+        Exit-saved composer drafts live in Room (<code>ChatDatabase</code> v3) so Back-exit drafts
+        survive process death and <code>Send</code> commits the question while clearing the draft in one
+        transaction (<code>InputResultUiTest</code>).
+      </p>
+      <p>
+        Streaming Markdown parsing adds <code>ResponseParser.needsPreScan</code>,
+        <code>ResponseParser.parseIncremental</code> prefix caching, and single-flight coalescing;
+        the unsaved-answer banner is localized under <code>FailureToken.ANSWER_NOT_SAVED</code>
+        (<strong>127 keys</strong> in English and Indonesian, zero missing), code blocks show a
+        conditional horizontal-pan edge fade cue, and TalkBack traversal visits
+        <code>Menu → Reader → Footer</code> in top-to-bottom order
+        (<code>TalkBackTraversalOrderTest</code>).
+      </p>
+      <p>
+        Verified on this cut: <strong>316 JVM unit tests / 51 suites</strong> (0 failures, 1
+        skipped), <code>lintDebug</code> 0 errors / 1 warning, <code>ktlintCheck</code> 0
+        violations, and Wear OS 5 API 34 AVD (<code>466×466</code>) instrumented suites. Physical
+        Xiaomi Watch 2 checks were skipped for this emulator-first cut; release workflow gates signing
+        on unit tests, lint, ktlint, and release notes.
+      </p>
+    </div>
+  </article>
 
   <!-- 0.2.2 -->
   <article class="release">
     <div class="rside">
       <span class="rver">0.2.2</span>
       <span class="rdate">2026-11-17</span>
-      <span class="rbadge latest">Latest</span>
     </div>
     <div class="rbody">
       <h2>The Stop label sits in the middle of its button</h2>
@@ -154,13 +186,13 @@ p:last-child{margin-bottom:0}
       <p>
         The in-ID title read <code>Tambah compatible</code> because the type name was hard-coded
         English; it reads <code>Tambah kompatibel</code> now, and the two provider-screen hints moved
-        out of Kotlin into resources (124 keys in each locale, zero missing). The composer also keeps a
+        out of Kotlin into resources (125 keys in each locale, zero missing). The composer also keeps a
         full <code>TextFieldValue</code> — text, selection and composition — after the editor was
         measured handing the app <code>composition=(0,2)</code> while only the text was retained.
       </p>
       <p>
         Full suite per class on the watch with <code>pm clear</code> between classes: 38 of 45 passed;
-        cold start 4373 ms median (#65); scroll 761 frames, 1.18 % janky. Not tested for this cut:
+        cold start 4375.5 ms median (4311, 4345, 4406, 4619 ms debug; earlier written 4373 ms, #65); scroll 761 frames, 1.18 % janky. Not tested for this cut:
         battery, thermals, TalkBack audio, phone pairing.
       </p>
     </div>

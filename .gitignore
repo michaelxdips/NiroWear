@@ -33,8 +33,8 @@
 !.github/PULL_REQUEST_TEMPLATE.md
 !SECURITY.md
 !CODEOWNERS
-# The pre-push gate (#30) is published on purpose: the instrumented sources are gitignored, so this
-# hook is the only compile check they get, and a guard nobody can read is not a guard. Wire it with
+# The pre-push gate (#30) is published on purpose: it catches a broken instrumented compile
+# locally before pushing to CI. Wire it with
 # `git config core.hooksPath .githooks` (CONTRIBUTING.md).
 !.githooks/
 !.githooks/pre-push
@@ -111,6 +111,8 @@ scripts/*
 # stdlib-only (re, sys, xml.etree, pathlib), holds no paths and no credentials, and without it the
 # published gate runner fails on any clone. The rest of scripts/ stays local on purpose.
 !scripts/instrumentation-xml.py
+# HTML balance checker for docs/*.html (stdlib-only Node, no local paths or secrets).
+!scripts/check-html-balance.js
 .private/
 build/
 .gradle/

@@ -83,6 +83,18 @@ class ErrorTextTest {
             "the in-ID resource set did not apply; the assertion below would be meaningless"
         }
         assertEquals(indonesian, errorText(localized("in-ID"), FailureToken.TRUNCATED))
+
+        val enUnsaved = english.getString(R.string.failure_answer_not_saved)
+        val idUnsaved = localized("in-ID").getString(R.string.failure_answer_not_saved)
+        assert(idUnsaved != enUnsaved) { "in-ID unsaved banner must differ from en-US" }
+        assertEquals(enUnsaved, errorText(english, FailureToken.ANSWER_NOT_SAVED))
+        assertEquals(idUnsaved, errorText(localized("in-ID"), FailureToken.ANSWER_NOT_SAVED))
+
+        val enStillFailing = english.getString(R.string.failure_save_still_failing)
+        val idStillFailing = localized("in-ID").getString(R.string.failure_save_still_failing)
+        assert(idStillFailing != enStillFailing) { "in-ID save_still_failing must differ from en-US" }
+        assertEquals(enStillFailing, errorText(english, FailureToken.SAVE_STILL_FAILING))
+        assertEquals(idStillFailing, errorText(localized("in-ID"), FailureToken.SAVE_STILL_FAILING))
     }
 
     @Test

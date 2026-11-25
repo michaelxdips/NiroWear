@@ -7,8 +7,8 @@ plugins {
     id("org.jlleitschuh.gradle.ktlint")
 }
 
-// Enforcing, scoped to what is actually published. Test sources are gitignored by policy and
-// never published, so their violations cannot ship and are not gated on here; main and debug are.
+// Enforcing on main and debug sources; test sources are compiled and executed in CI,
+// while ktlint scopes style checks to shipping application code.
 //
 // standard:function-naming is disabled deliberately, not to make a number green. All seven hits
 // are @Composable functions (DocumentBlock, RichText, ...), and PascalCase is the documented
@@ -33,8 +33,8 @@ android {
         applicationId = "com.nirowear"
         minSdk = 30
         targetSdk = 37
-        versionCode = 15
-        versionName = "0.2.2"
+        versionCode = 16
+        versionName = "0.3.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         testInstrumentationRunnerArguments["notAnnotation"] = "com.nirowear.HostDrivenGate"
     }

@@ -87,5 +87,18 @@ internal fun mergeParsed(
     open: String?,
 ): Pair<Map<StoredMessage, List<Pair<Long, ContentBlock>>>, List<String>> {
     val next = nextRecency(recent, open)
-    return evictStaleConversations(previous + parsed, next) to next
+    // StoredMessage includes rawContent and status, so streaming checkpoints and linear edits create
+    // new keys for the same message ID. Drop superseded (conversationId, id) entries and any removed
+    // rows from the active conversation whenever parsed carries a fresh pass.
+    val supersededIds = parsed.keys.mapTo(HashSet()) { it.conversationId to it.id }
+    val prunedPrevious =
+        if (supersededIds.isEmpty()) {
+            previous
+        } else {
+            previous.filterKeys { entry ->
+                (entry.conversationId to entry.id) !in supersededIds &&
+                    (open == null || entry.conversationId != open)
+            }
+        }
+    return evictStaleConversations(prunedPrevious + parsed, next) to next
 }

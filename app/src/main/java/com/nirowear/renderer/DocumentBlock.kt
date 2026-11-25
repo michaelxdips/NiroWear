@@ -28,6 +28,10 @@ import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -52,6 +56,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
@@ -208,13 +213,7 @@ fun DocumentBlock(
         is ContentBlock.Code -> {
             Column {
                 if (block.language.isNotEmpty()) Text(block.language, fontSize = 12.sp, color = Color(0xFFAACCCC))
-                Text(
-                    block.source,
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 14.sp,
-                    lineHeight = 20.sp,
-                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 6.dp),
-                )
+                CodeBlockScrollable(block.source)
             }
         }
 
@@ -278,6 +277,71 @@ fun DocumentBlock(
     }
 }
 
+/** Renders horizontally scrollable code with edge fades and slate cue bars only along directions that can pan. */
+@Composable
+private fun CodeBlockScrollable(code: String) {
+    val scroll = rememberScrollState()
+    val cueColor = Color(0xFF99AABB)
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .drawWithContent {
+                drawContent()
+                val isRtl = layoutDirection == LayoutDirection.Rtl
+                val hasRightCue = if (isRtl) scroll.canScrollBackward else scroll.canScrollForward
+                val hasLeftCue = if (isRtl) scroll.canScrollForward else scroll.canScrollBackward
+                val barWidth = 2.dp.toPx()
+                val fadeWidth = 18.dp.toPx().coerceAtMost(size.width / 3f)
+                val insetY = 6.dp.toPx()
+                val barHeight = (size.height - insetY * 2f).coerceAtLeast(0f)
+                if (hasRightCue && barHeight > 0f) {
+                    drawRect(
+                        brush =
+                            Brush.horizontalGradient(
+                                colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f)),
+                                startX = size.width - fadeWidth,
+                                endX = size.width,
+                            ),
+                        topLeft = Offset(size.width - fadeWidth, 0f),
+                        size = Size(fadeWidth, size.height),
+                    )
+                    drawRect(
+                        color = cueColor,
+                        topLeft = Offset(size.width - barWidth, insetY),
+                        size = Size(barWidth, barHeight),
+                    )
+                }
+                if (hasLeftCue && barHeight > 0f) {
+                    drawRect(
+                        brush =
+                            Brush.horizontalGradient(
+                                colors = listOf(Color.Black.copy(alpha = 0.85f), Color.Transparent),
+                                startX = 0f,
+                                endX = fadeWidth,
+                            ),
+                        topLeft = Offset.Zero,
+                        size = Size(fadeWidth, size.height),
+                    )
+                    drawRect(
+                        color = cueColor,
+                        topLeft = Offset(0f, insetY),
+                        size = Size(barWidth, barHeight),
+                    )
+                }
+            },
+    ) {
+        Text(
+            code,
+            fontFamily = FontFamily.Monospace,
+            fontSize = 14.sp,
+            lineHeight = 20.sp,
+            // Horizontal scroll per chunk, not per fence: a 5000-line fence would otherwise
+            // put one scroll state and one huge measured node back into a single item.
+            modifier = Modifier.fillMaxWidth().horizontalScroll(scroll).padding(vertical = 6.dp),
+        )
+    }
+}
+
 /**
  * Renders one [RenderUnit].
  *
@@ -297,15 +361,7 @@ internal fun RenderUnitView(
         is RenderUnit.CodeChunk -> {
             Column {
                 unit.language?.let { Text(it, fontSize = 12.sp, color = Color(0xFFAACCCC)) }
-                Text(
-                    unit.lines.joinToString("\n"),
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 14.sp,
-                    lineHeight = 20.sp,
-                    // Horizontal scroll per chunk, not per fence: a 5000-line fence would otherwise
-                    // put one scroll state and one huge measured node back into a single item.
-                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 6.dp),
-                )
+                CodeBlockScrollable(unit.lines.joinToString("\n"))
             }
         }
 

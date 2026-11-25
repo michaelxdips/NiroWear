@@ -40,6 +40,11 @@ internal class ProviderHttp(
      * can be tested in milliseconds instead of two minutes.
      */
     private val streamIdleTimeoutMs: Long = 120_000L,
+    /**
+     * Monotonic nanosecond clock for progress deadlines so NTP steps or manual wall-clock shifts never
+     * spuriously trip or extend the SSE idle timeout.
+     */
+    private val nanoClock: () -> Long = System::nanoTime,
 ) {
     // Native completion repeats accepted text; JSON escaping can use six wire bytes per unit.
     private val maxFrameBytes = 6L * MAX_RESPONSE_CHARS + 256 * 1024
@@ -176,13 +181,13 @@ internal class ProviderHttp(
                                         // frame DECODES to at least one event: `: ping` comments and
                                         // `{"type":"ping"}` data frames both carry no content, and
                                         // resetting on the raw bytes made this bound dead.
-                                        var lastFrameAt = System.currentTimeMillis()
+                                        var lastFrameAtNs = nanoClock()
 
                                         suspend fun dispatch(): Boolean {
                                             if (frame.isEmpty()) return false
                                             val events = decode(frame.toString().removeSuffix("\n"))
                                             frame.clear()
-                                            if (events.isNotEmpty()) lastFrameAt = System.currentTimeMillis()
+                                            if (events.isNotEmpty()) lastFrameAtNs = nanoClock()
                                             for (event in events) {
                                                 if (event is StreamEvent.TextDelta) {
                                                     if (event.text.length > MAX_RESPONSE_CHARS - visibleChars) {
@@ -247,7 +252,7 @@ internal class ProviderHttp(
                                             //   payload the adapter ignores, keeps the socket and the watch
                                             //   radio alive while the answer makes no progress; that is the
                                             //   case this deadline exists to stop.
-                                            if (System.currentTimeMillis() - lastFrameAt > streamIdleTimeoutMs) {
+                                            if ((nanoClock() - lastFrameAtNs) / 1_000_000L > streamIdleTimeoutMs) {
                                                 throw SafeProviderException(ProviderError.TIMEOUT)
                                             }
                                         }

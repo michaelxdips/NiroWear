@@ -14,7 +14,7 @@
     <string name="chat_voice_prompt">Tanya NiroWear</string>
     <string name="chat_voice_unavailable">Pengenalan suara tidak tersedia. Pakai keyboard.</string>
     <string name="chat_voice_blocked">Pengenalan suara diblokir. Pakai keyboard.</string>
-    <string name="chat_header_add_provider">Tambahkan provider · Menu</string>
+    <string name="chat_header_add_provider">Tambah provider · Menu</string>
     <string name="chat_ask_anything">Tanya apa saja</string>
     <string name="chat_empty_add_provider">Tambahkan provider dari menu.</string>
     <string name="chat_empty_start">Pakai keyboard atau suara untuk mulai.</string>
@@ -131,6 +131,7 @@
     <string name="failure_message_gone">Pesan itu sudah tidak ada di chat ini. Kirim ulang.</string>
     <string name="failure_nothing_to_retry">Tidak ada yang bisa diulang di chat ini.</string>
     <string name="failure_send_failed">Tidak dapat mengirim. Periksa penyiapan provider atau penyimpanan lokal.</string>
+    <string name="failure_answer_not_saved">Jawaban belum tersimpan. Biarkan aplikasi terbuka; Salin jawaban belum tersimpan atau Coba simpan lagi. Chat baru/kirim diblokir sampai tersimpan.</string>
     <string name="failure_save_still_failing">Masih tidak dapat menyimpan. Biarkan aplikasi terbuka dan salin jawaban yang belum tersimpan.</string>
     <string name="failure_settings_unreadable">Pengaturan provider tidak dapat dibaca. Riwayat dan key tersimpan dipertahankan; perubahan penyiapan diblokir.</string>
     <string name="failure_settings_unavailable">Pengaturan provider tidak tersedia. Riwayat dan key tersimpan dipertahankan; perubahan penyiapan diblokir.</string>

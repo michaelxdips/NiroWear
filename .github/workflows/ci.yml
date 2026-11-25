@@ -93,12 +93,13 @@ jobs:
           sources=${sources:-0}
           results=${results:-0}
           echo "test sources: $sources   result XML files: $results"
-          if [ "$sources" -gt 0 ] && [ "$results" -eq 0 ]; then
-            echo "::error::$sources test sources exist but no results were produced"
+          if [ "$sources" -eq 0 ]; then
+            echo "::error::No test sources found under app/src/test"
             exit 1
           fi
-          if [ "$sources" -eq 0 ]; then
-            echo "::warning::No test sources are published, so this job ran no tests. Build, lint and style are the real gate."
+          if [ "$results" -eq 0 ]; then
+            echo "::error::$sources test sources exist but no results were produced"
+            exit 1
           fi
           exit 0
 
