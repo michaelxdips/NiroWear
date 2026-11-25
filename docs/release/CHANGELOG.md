@@ -5,6 +5,9 @@ Notable changes to NiroWear. Versions follow the published APK releases at
 
 ## Unreleased
 
+- Localize the unsaved-answer banner behind `FailureToken.ANSWER_NOT_SAVED` (`failure_answer_not_saved`) so English/Indonesian resource parity matches at **126 keys per locale** (`IndonesianReaderNoticesTest`).
+- Strengthen `ComposerSendButtonTest` to prove like-for-like cancel zero-shift (`index=2->2, offset=102->102`, `Rect(48, 122 - 418, 166)`) plus settled Turn 2 follow on `nirowear-b`.
+- Optimize streaming Markdown parsing (`ResponseParser.needsPreScan`, `ResponseParser.parseIncremental` prefix caching, single-flight `parseDispatcher`), reducing debug-AVD 4 KB parse P95 from `90.948 ms` to `11.735 ms` (pipe-free) and `48.184 ms` to `12.077 ms` (mixed), and same-process coalesced mixed burst total parse CPU from `79.503 ms` to `21.880 ms` (`P95 1.080 ms`).
 - Startup rule: never add animation or delay to mask a slow launch. Measure startup using a release build. (#82)
 - CI instrumented smoke runner passes the 10-class filter directly to `AndroidJUnitRunner` and isolates status bundles in `scripts/instrumentation-xml.py` (#80, #81).
 
