@@ -9,7 +9,7 @@ Single Android application module, `:app`. Gradle wrapper 9.6.0 (`gradle/wrapper
 .\gradlew.bat :app:testDebugUnitTest :app:ktlintCheck :app:assembleDebug :app:assembleDebugAndroidTest :app:assembleRelease :app:lintDebug
 ```
 
-`app/src/test` and `app/src/androidTest` are gitignored by policy (`.gitignore:83-84`), so on a fresh clone `:app:testDebugUnitTest` reports NO-SOURCE and `:app:assembleDebugAndroidTest` has nothing to compile. `.github/workflows/ci.yml` runs that unit-test step anyway and comments the NO-SOURCE case rather than treating it as proof; its real gates are `assembleDebug`, `assembleRelease`, `lintDebug` and `ktlintCheck`.
+`app/src/test` (49 files) and `app/src/androidTest` (47 files: 46 test classes plus `HostDrivenGate.kt`) are tracked in git (`.gitignore:51-52`), so on a fresh clone `.github/workflows/ci.yml` executes `:app:testDebugUnitTest` (303 unit tests across 49 suites, failing if result XML is absent), `lintDebug`, `ktlintCheck`, `assembleDebug`, and `assembleRelease` in the `jvm` job, and runs the 10-class (27-test) instrumented smoke subset on a 466×466 API 34 Wear OS AVD in the `instrumented` job; only the four `@HostDrivenGate` PowerShell scripts under `scripts/` remain gitignored by `.gitignore:104`.
 
 Release signing is environment-driven (`app/build.gradle.kts:55-65`): `NIROWEAR_KEYSTORE`, `NIROWEAR_KEYSTORE_PASSWORD`, `NIROWEAR_KEY_ALIAS`, `NIROWEAR_KEY_PASSWORD`. `.github/workflows/release.yml` decodes the keystore from the `NIROWEAR_KEYSTORE_BASE64` secret, signs, verifies `certificate DN: CN=NiroWear Release`, then deletes the keystore before any upload step. With no keystore in the environment the same task produces `app/build/outputs/apk/release/app-release-unsigned.apk`. No keystore or password is committed, and the signing identity must not be changed to manufacture a release.
 
@@ -18,7 +18,7 @@ Release signing is environment-driven (`app/build.gradle.kts:55-65`): `NIROWEAR_
 1. Create a new credential-free Wear OS AVD. Do not copy protected userdata or snapshots.
 2. Run `adb devices -l`, then `adb -s <serial> emu avd name`. Verify actual runtime name before every operation.
 3. Install/test only on that new AVD. Avoid unscoped Gradle connected tests; attached protected devices must never receive instrumentation.
-4. Existing scripts assume their documented disposable AVD. Do not run destructive helpers on either `NiroWear_466` or `NiroWear_Harmony_Disposable`: both now contain protected data.
+4. `scripts/disposable-instrumentation.ps1` targets disposable `nirowear-b` (`-Serial emulator-5572`, `-ExpectedAvd nirowear-b`) and refuses `NiroWear_466` or `NiroWear_Harmony_Disposable`: both protected AVDs hold owner data.
 
 No destructive testing required for documentation-only changes. A local fingerprint identifies nothing a
 shipped artifact can be matched to; the tag and the workflow run do (see Acceptance identity). Native
@@ -30,7 +30,7 @@ debug math tests do not establish native release behavior.
 - Before future production edits, create a new verified source-only recovery ZIP. Exclude secrets, signing keys, local.properties, emulator data and authenticated logs.
 - Do not uninstall or clear an installation holding valuable conversations/credentials. APK rollback may need database-version compatibility; verify on a fresh AVD first and obtain separate data-loss authorization if required.
 - Keys use device-bound Android Keystore encryption and backup is disabled. Broken/inaccessible keys require normal masked re-entry; no plaintext fallback or key extraction.
-- The workspace is a Git clone of `https://github.com/michaelxdips/NiroWear.git`; released tags are `v0.1.0`, `v0.1.1`, `v0.1.2`, `v0.2.0`, `v0.2.1`. Provenance for a shipped artifact is its tag, the workflow run that built it and the APK SHA-256 that run printed — not a local file fingerprint.
+- The workspace is a Git clone of `https://github.com/michaelxdips/NiroWear.git`; released tags are `v0.1.0`, `v0.1.1`, `v0.1.2`, `v0.2.0`, `v0.2.1`, `v0.2.2`. Provenance for a shipped artifact is its tag, the workflow run that built it and the APK SHA-256 that run printed — not a local file fingerprint.
 
 ## Acceptance identity
 

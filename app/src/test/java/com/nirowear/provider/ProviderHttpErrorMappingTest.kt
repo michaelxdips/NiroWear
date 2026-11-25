@@ -12,6 +12,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Error mapping and the progress bound, measured on the wire.
@@ -340,6 +341,35 @@ class ProviderHttpErrorMappingTest {
                     "content frames are progress; the stream ends at EOF, not at the idle bound",
                     StreamEvent.Failure(ProviderError.PROTOCOL),
                     events.last(),
+                )
+            }
+        }
+
+    @Test
+    fun monotonicIdleDeadlineFiresIndependentlyOfWallClock() =
+        runBlocking {
+            MockWebServer().use { server ->
+                server.start()
+                server.enqueue(
+                    MockResponse()
+                        .setHeader("Content-Type", "text/event-stream")
+                        .setBody("data: {\"type\":\"ping\"}\n\n".repeat(4)),
+                )
+                // Simulate a monotonic clock advancing 250 ms per check while a 400 ms budget is set.
+                val monotonicNs = AtomicLong(5_000_000_000_000L)
+                val events =
+                    ProviderHttp(
+                        client = providerHttpClient(),
+                        streamIdleTimeoutMs = 400L,
+                        nanoClock = { monotonicNs.getAndAdd(250_000_000L) },
+                    ).stream(
+                        request(server.url("/v1/messages").toString()),
+                        decode = { emptyList() },
+                    ).toList()
+
+                assertEquals(
+                    listOf(StreamEvent.Failure(ProviderError.TIMEOUT)),
+                    events,
                 )
             }
         }

@@ -1,6 +1,8 @@
 {
   "candidate_sha256": "8b29475e2f75550ae16177107870bc8f28ee0fd3db226d4bcc801b775d94af72",
   "alterations": "None; byte-identical uncropped copies",
+  "total_bytes": 145035,
+  "capture_note": "Five gallery captures are from non-debuggable candidate 8b29475e2f75550ae16177107870bc8f28ee0fd3db226d4bcc801b775d94af72; streaming-stop.png was recaptured on nirowear-b using debug APK ae91c03394c93541dfb8cb1690f0911c9a2b1ee817c5dd1e6907cba0e8642120 built from 3c5a60b237bad4d6c6bc13e9557f897cc4a13aa6 (after Stop label centering, dx=0, dy=0).",
   "screenshots": [
     {
       "file": "chat-home.png",
@@ -24,13 +26,18 @@
     },
     {
       "file": "streaming-stop.png",
-      "source": "artifacts/software-rc-2026-10-09/autonomous-closure/live-final/T7-video-025.png",
-      "sha256": "93a97f29ebf48f8d640e18a2516a9e7ce736f0d311ba2518655fc7b94c4c72bc",
+      "source": ".private/a3-avd-a/streaming-stop.png",
+      "sha256": "0b2685858f92bf4c001b0743bc988c287a5be8f337bc2372af58ab6683325d58",
       "dimensions": [
         466,
         466
       ],
-      "bytes": 43093
+      "bytes": 28854,
+      "build_type": "debug",
+      "apk_sha256": "ae91c03394c93541dfb8cb1690f0911c9a2b1ee817c5dd1e6907cba0e8642120",
+      "captured_on": "2026-11-23",
+      "device": "nirowear-b (emulator-5572, API 34, 466x466, 320dpi)",
+      "stop_label_centering": "dx=0, dy=0"
     },
     {
       "file": "table-record.png",

@@ -3,6 +3,14 @@
 Notable changes to NiroWear. Versions follow the published APK releases at
 [NiroWear releases](https://github.com/michaelxdips/NiroWear/releases).
 
+## Unreleased
+
+- Localize the unsaved-answer banner behind `FailureToken.ANSWER_NOT_SAVED` (`failure_answer_not_saved`) so English/Indonesian resource parity matches at **126 keys per locale** (`IndonesianReaderNoticesTest`).
+- Strengthen `ComposerSendButtonTest` to prove like-for-like cancel zero-shift (`index=2->2, offset=102->102`, `Rect(48, 122 - 418, 166)`) plus settled Turn 2 follow on `nirowear-b`.
+- Optimize streaming Markdown parsing (`ResponseParser.needsPreScan`, `ResponseParser.parseIncremental` prefix caching, single-flight `parseDispatcher`), reducing debug-AVD 4 KB parse P95 from `90.948 ms` to `11.735 ms` (pipe-free) and `48.184 ms` to `12.077 ms` (mixed), and same-process coalesced mixed burst total parse CPU from `79.503 ms` to `21.880 ms` (`P95 1.080 ms`).
+- Startup rule: never add animation or delay to mask a slow launch. Measure startup using a release build. (#82)
+- CI instrumented smoke runner passes the 10-class filter directly to `AndroidJUnitRunner` and isolates status bundles in `scripts/instrumentation-xml.py` (#80, #81).
+
 ## 0.2.2 — 2026-11-17
 
 Fixed from measurements on the physical watch, with the numbers kept next to each claim:
@@ -14,14 +22,10 @@ Fixed from measurements on the physical watch, with the numbers kept next to eac
   edit body; the editor was measured handing the app `composition=(0,2)` while only the text was kept.
   The lost-word symptom in #62 did not reproduce through real typing and stays open with that evidence.
 - **Provider screen fully localized (#66):** `Tambah compatible` → `Tambah kompatibel`; the key-shape
-  advisory and the remote-typing tip are resources now. 124 keys per locale, zero missing.
+  advisory and the remote-typing tip are resources now. 125 keys per locale, zero missing.
 - **`RendererLocalizationTest`** no longer expects Arabic-Indic digits inside the English fallback
   sentence, matching the #49 decision.
 - Release notes: `docs/release/RELEASE_NOTES_0.2.2.md`.
-
-## Unreleased
-
-- Startup rule: never add animation or delay to mask a slow launch. Measure startup using a release build.
 
 ### Tests actually run in CI
 

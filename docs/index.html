@@ -11,14 +11,14 @@
 <meta name="color-scheme" content="light dark">
 <link rel="canonical" href="https://michaelxdips.github.io/NiroWear/">
 <meta property="og:url" content="https://michaelxdips.github.io/NiroWear/">
-<meta property="og:image" content="https://michaelxdips.github.io/NiroWear/screenshots/chat-home.png">
-<meta property="og:image:width" content="466">
-<meta property="og:image:height" content="466">
-<meta property="og:image:alt" content="The NiroWear reader on a 466-pixel round watch face: a user question and a streamed answer.">
+<meta property="og:image" content="https://michaelxdips.github.io/NiroWear/branding/og-card.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="NiroWear 1200x630 specification card showing the Thread mark, BYOK summary, and semantic reader inside a 466-pixel round watch face.">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="NiroWear — the whole answer, inside a 466-pixel circle">
 <meta name="twitter:description" content="A Wear OS chat client that treats the watch as the primary device. BYOK, MIT licensed.">
-<meta name="twitter:image" content="https://michaelxdips.github.io/NiroWear/screenshots/chat-home.png">
+<meta name="twitter:image" content="https://michaelxdips.github.io/NiroWear/branding/og-card.png">
 <link rel="icon" href="branding/nirowear-mark.svg">
 <style>
 /* ============================================================
@@ -2195,7 +2195,7 @@ html[data-theme="dark"] .pill-hw{color:#C79BFF}
   .ruler,.masthead,.modes,.actions,.lb,.bench-tools,.story-dial{display:none !important}
   .sheet{padding-left:0}
   body{background:#fff;color:#000}
-  .sec{break-inside:avoid}
+  .sec,.faq-item,.limit,.plate,.status tr,.d-record{break-inside:avoid;page-break-inside:avoid}
 }
 
 /* ---------- intro: the 466 dial draws itself, once per session ---------- */
@@ -3151,7 +3151,7 @@ adb install -r app-release.apk</pre>
             </tr>
             <tr>
               <td>Localized end to end, failures included</td>
-              <td><span class="pill pill-source">Source</span> <strong>124 keys</strong> in <code>values/</code> and <strong>124</strong> in <code>values-in/</code>, zero missing (counted 2026-11-17). Type names and provider hints resolve from resources (<code>Tambah kompatibel</code>). A stored failure is a token resolved at display time, so an old row re-reads in the current language.</td>
+              <td><span class="pill pill-source">Source</span> <strong>126 keys</strong> in <code>values/</code> and <strong>126</strong> in <code>values-in/</code>, zero missing (counted 2026-11-26; v0.2.2 shipped 125 and Unreleased adds <code>failure_answer_not_saved</code>). Type names and provider hints resolve from resources (<code>Tambah kompatibel</code>). A stored failure is a token resolved at display time, so an old row re-reads in the current language.</td>
               <td>strings.xml ×2; ProviderErrorMessageTest (5); ErrorTextTest</td>
             </tr>
             <tr>
@@ -3171,7 +3171,7 @@ adb install -r app-release.apk</pre>
             </tr>
             <tr>
               <td>Physical watch: timing, frames, memory, suite</td>
-              <td><span class="pill pill-hw">Watch</span> Cold start <strong>723 ms</strong> median on 2026-11-16 (<code>v0.2.1</code>) and <strong>4373 ms</strong> on 2026-11-17 (debug <code>main</code>, 4311–4619 ms, #65). Scroll: <strong>761 frames, 1.18 % janky</strong>, 50th 8 ms. 20-minute session: PSS <strong>+3.2 MB</strong>, <code>Thermal Status</code> stayed 0. <code>454x454</code> keeps every control at 96 px. Suite per class with <code>pm clear</code>: <strong>38 of 45 passed</strong>, 4 gave no summary (runner teardown crash, #50). No rotary device exists on this unit (#47).</td>
+              <td><span class="pill pill-hw">Watch</span> Cold start <strong>723 ms</strong> median on 2026-11-16 (<code>v0.2.1</code>) and <strong>4375.5 ms</strong> on 2026-11-17 (debug <code>main</code>, 4311, 4345, 4406, 4619 ms; earlier written 4373 ms, #65). Scroll: <strong>761 frames, 1.18 % janky</strong>, 50th 8 ms. 20-minute session: PSS <strong>+3.2 MB</strong>, <code>Thermal Status</code> stayed 0. <code>454x454</code> keeps every control at 96 px. Suite per class with <code>pm clear</code>: <strong>38 of 45 passed</strong>, 4 gave no summary (runner teardown crash, #50). No rotary device exists on this unit (#47).</td>
               <td>adb; issues #47, #50, #65</td>
             </tr>
             <tr>
@@ -3246,7 +3246,7 @@ adb install -r app-release.apk</pre>
   </div>
 </footer>
 
-<div class="lb" id="lb" role="dialog" aria-modal="true" aria-label="Enlarged screenshot">
+<div class="lb" id="lb" role="dialog" aria-modal="true" aria-label="Enlarged screenshot" tabindex="-1">
   <img alt="">
 </div>
 
@@ -4479,11 +4479,11 @@ if (typeof module !== "undefined" && module.exports) {
     });
   }
 
-  Array.prototype.slice.call(document.querySelectorAll(".preset")).forEach(function (btn) {
+  Array.prototype.slice.call(document.querySelectorAll("[data-preset]")).forEach(function (btn) {
     btn.addEventListener("click", function () {
       var idx = +btn.getAttribute("data-preset");
       src.value = PRESETS[idx];
-      Array.prototype.slice.call(document.querySelectorAll(".preset")).forEach(function (b) {
+      Array.prototype.slice.call(document.querySelectorAll("[data-preset]")).forEach(function (b) {
         b.setAttribute("aria-pressed", b === btn ? "true" : "false");
       });
       stopStream();
@@ -4856,22 +4856,49 @@ if (typeof module !== "undefined" && module.exports) {
 
   var lb = document.getElementById("lb");
   var lbImg = lb ? lb.querySelector("img") : null;
+  var lbOpener = null;
+
+  function openLb(img) {
+    if (!lb || !lbImg) return;
+    lbOpener = img;
+    lbImg.src = img.src;
+    lbImg.alt = img.alt;
+    lb.classList.add("on");
+    lb.focus();
+  }
+
+  function closeLb() {
+    if (!lb || !lb.classList.contains("on")) return;
+    lb.classList.remove("on");
+    if (lbOpener && typeof lbOpener.focus === "function") lbOpener.focus();
+    lbOpener = null;
+  }
 
   Array.prototype.slice.call(document.querySelectorAll(".plate img")).forEach(function (img) {
-    img.addEventListener("click", function () {
-      if (!lb || !lbImg) return;
-      lbImg.src = img.src;
-      lbImg.alt = img.alt;
-      lb.classList.add("on");
+    img.setAttribute("tabindex", "0");
+    img.setAttribute("role", "button");
+    img.addEventListener("click", function () { openLb(img); });
+    img.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        openLb(img);
+      }
     });
   });
 
   if (lb) {
-    lb.addEventListener("click", function () { lb.classList.remove("on"); });
+    lb.addEventListener("click", closeLb);
   }
 
   document.addEventListener("keydown", function (e) {
-    if (e.key === "Escape" && lb) lb.classList.remove("on");
+    if (!lb || !lb.classList.contains("on")) return;
+    if (e.key === "Escape") {
+      e.preventDefault();
+      closeLb();
+    } else if (e.key === "Tab") {
+      e.preventDefault();
+      lb.focus();
+    }
   });
 
   /* ============================================================
@@ -4911,8 +4938,11 @@ if (typeof module !== "undefined" && module.exports) {
    against finishing twice. */
 (function () {
   var root = document.documentElement;
-  if (!root.classList.contains("boot-pending")) return;
   var boot = document.getElementById("boot");
+  if (!root.classList.contains("boot-pending")) {
+    if (boot && boot.parentNode) boot.parentNode.removeChild(boot);
+    return;
+  }
   var count = document.getElementById("bootCount");
   var chip = document.getElementById("bootChip");
 
@@ -4947,20 +4977,21 @@ if (typeof module !== "undefined" && module.exports) {
     if (chip && chip.textContent !== text) chip.textContent = text;
   }
 
-  function finish() {
+  function finish(immediate) {
     if (done) return;
     done = true;
     try { sessionStorage.setItem("nirowear-intro", "1"); } catch (e) {}
     root.style.overflow = "";
-    root.classList.add("boot-leaving");
-    if (boot) {
-      window.setTimeout(function () {
-        root.classList.remove("boot-pending", "boot-leaving");
-        if (boot.parentNode) boot.parentNode.removeChild(boot);
-      }, 240);
-    } else {
+    if (immediate || !boot) {
       root.classList.remove("boot-pending", "boot-leaving");
+      if (boot && boot.parentNode) boot.parentNode.removeChild(boot);
+      return;
     }
+    root.classList.add("boot-leaving");
+    window.setTimeout(function () {
+      root.classList.remove("boot-pending", "boot-leaving");
+      if (boot.parentNode) boot.parentNode.removeChild(boot);
+    }, 240);
   }
 
   function step(now) {
@@ -4976,7 +5007,10 @@ if (typeof module !== "undefined" && module.exports) {
   requestAnimationFrame(step);
 
   ["click", "keydown", "wheel", "touchstart"].forEach(function (ev) {
-    window.addEventListener(ev, function () { finish(); }, { once: true, passive: true });
+    window.addEventListener(ev, function () { finish(false); }, { once: true, passive: true });
+  });
+  document.addEventListener("visibilitychange", function () {
+    if (document.hidden || document.visibilityState === "hidden") finish(true);
   });
 })();
 </script>

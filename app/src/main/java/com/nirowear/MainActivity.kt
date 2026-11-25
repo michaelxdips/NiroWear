@@ -280,6 +280,14 @@ private fun ChatReader(
     // Survives effect restarts, which is what turns the coalescing delay into a throttle rather
     // than a debounce. See the parse effect below.
     var lastParseAt by remember { mutableLongStateOf(0L) }
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    val parseDispatcher =
+        remember {
+            kotlinx.coroutines.Dispatchers.Default
+                .limitedParallelism(1)
+        }
+    val streamPrefixCache = remember { HashMap<Long, ResponseParser.IncrementalParseState>() }
     var footerHeight by remember { androidx.compose.runtime.mutableIntStateOf(0) }
     val renderedHistory = historyBlocks
     val historyKeys = remember(renderedHistory) { historyKeysFor(renderedHistory) }
@@ -343,6 +351,7 @@ private fun ChatReader(
             lastLocaleTag = localeTag
             // Every memoised block carries resolved text, so they are all stale now.
             parsedRows = emptyMap()
+            streamPrefixCache.clear()
         }
         val messages = storedMessages
         val previous = evictStaleConversations(parsedRows, recentConversations + listOfNotNull(id))
@@ -369,7 +378,9 @@ private fun ChatReader(
         }
 
         val rows =
-            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            kotlinx.coroutines.withContext(parseDispatcher) {
+                val activeIds = messages.mapNotNull { if (it.conversationId == id) it.id else null }.toSet()
+                streamPrefixCache.keys.retainAll(activeIds)
                 messages.filter { it.conversationId == id }.associateWith { message ->
                     previous[message] ?: run {
                         val label =
@@ -383,8 +394,22 @@ private fun ChatReader(
                                     .joinToString(" · ")
                                     .ifBlank { answerLabel }
                             }
+                        val parsedBlocks =
+                            if (message.status == "STREAMING") {
+                                val (nextPrefix, blocks) =
+                                    ResponseParser.parseIncremental(streamPrefixCache[message.id], message.rawContent)
+                                if (nextPrefix != null) {
+                                    streamPrefixCache[message.id] = nextPrefix
+                                } else {
+                                    streamPrefixCache.remove(message.id)
+                                }
+                                blocks
+                            } else {
+                                streamPrefixCache.remove(message.id)
+                                ResponseParser.parse(message.rawContent)
+                            }
                         listOf(message.id to ContentBlock.Heading(4, listOf(InlineContent(label)))) +
-                            ResponseParser.parse(message.rawContent).map { message.id to it } +
+                            parsedBlocks.map { message.id to it } +
                             if (message.status == "STOPPED" ||
                                 message.error != null
                             ) {
@@ -803,9 +828,11 @@ private fun ChatReader(
             ) { mutableStateOf<List<ContentBlock>>(emptyList()) }
             LaunchedEffect(source, renderLab, section, chatState.conversationId) {
                 blocks =
-                    kotlinx.coroutines.withContext(
-                        kotlinx.coroutines.Dispatchers.Default,
-                    ) { ResponseParser.parse(source) }
+                    if (source.isEmpty()) {
+                        emptyList()
+                    } else {
+                        kotlinx.coroutines.withContext(parseDispatcher) { ResponseParser.parse(source) }
+                    }
             }
             // Keyed by the list's own stable key string, not by the block value. `ContentBlock.Paragraph`
             // is a data class holding the whole inline run, so a value key hashed the entire streaming
@@ -1265,10 +1292,10 @@ private fun ChatReader(
             Box(
                 Modifier
                     .align(Alignment.TopCenter)
-                    // Bounds are MINIMUMS, not fixed sizes: a fixed 130 dp box with maxLines = 1
-                    // clipped the provider name to "Add prov…" at a 2.0x font scale with no way to
-                    // read the rest. Growing up to 300 dp keeps it inside the dial's safe band.
-                    .widthIn(min = 130.dp, max = 300.dp)
+                    // Bounds keep the 48 dp touch target while capping width + top/side inset so
+                    // two-line wrapped headers (e.g. Indonesian "Tambah provider · Menu") remain
+                    // strictly inside the 466 px circular dial chord without bezel clipping.
+                    .widthIn(min = 130.dp, max = 148.dp)
                     .heightIn(min = 48.dp)
                     .semantics { contentDescription = menuLabel }
                     .clickable(role = Role.Button) {
@@ -1286,10 +1313,12 @@ private fun ChatReader(
                     },
                     modifier =
                         Modifier
-                            .heightIn(min = 42.dp)
-                            .wrapContentHeight(Alignment.Bottom)
-                            .padding(bottom = 6.dp),
+                            .heightIn(min = 48.dp)
+                            .padding(start = 18.dp, top = 16.dp, end = 18.dp, bottom = 4.dp)
+                            .wrapContentHeight(Alignment.CenterVertically),
                     fontSize = 12.sp,
+                    lineHeight = 14.sp,
+                    textAlign = TextAlign.Center,
                     // Two lines at 2.0x instead of one clipped line. The parent's contentDescription
                     // still carries the full text for TalkBack, so nothing is lost if it wraps.
                     maxLines = 2,

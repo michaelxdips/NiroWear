@@ -107,7 +107,8 @@ class ReaderNavigationTest {
      * ACTION_CLICK is the only host-side path that stays valid with the keyboard up.
      */
     private fun clickNode(label: String): Boolean {
-        repeat(20) {
+        repeat(25) {
+            if (android.os.Build.VERSION.SDK_INT >= 33) i.uiAutomation.clearCache()
             var n = find(label)
             while (n != null) {
                 if (n.isClickable) return n.performAction(AccessibilityNodeInfo.ACTION_CLICK)
