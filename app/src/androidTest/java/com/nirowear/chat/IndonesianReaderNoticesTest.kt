@@ -251,7 +251,17 @@ class IndonesianReaderNoticesTest {
                         clickableOwner(awaitNode("Kirim") { norm(it.text) == "Kirim" })
                             .performAction(AccessibilityNodeInfo.ACTION_CLICK)
 
-                        awaitNode("Unsaved copy button", timeoutMs = 15_000) {
+                        awaitNode("Unsaved banner or copy button", timeoutMs = 15_000) {
+                            val t = norm(it.text)
+                            t.contains("Jawaban belum tersimpan.") ||
+                                t.contains("Answer not saved.") ||
+                                t == "Salin jawaban belum tersimpan"
+                        }
+                        assertTrue(
+                            "Expected localized 'Salin jawaban belum tersimpan' after scrolling",
+                            scrollToText("Salin jawaban belum tersimpan", exact = true) != null,
+                        )
+                        awaitNode("Unsaved copy button", timeoutMs = 5_000) {
                             norm(it.text) == "Salin jawaban belum tersimpan"
                         }
                         scrollToText("Coba simpan lagi", exact = true)
