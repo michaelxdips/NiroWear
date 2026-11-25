@@ -34,6 +34,13 @@ data class StoredOpenAiPhases(
     val phases: String,
 )
 
+@Entity(tableName = "composer_draft")
+data class StoredComposerDraft(
+    val text: String,
+    val revision: String,
+    @PrimaryKey val id: Int = 1,
+)
+
 @Entity(tableName = "conversations")
 data class Conversation(
     @PrimaryKey val id: String,
@@ -119,6 +126,26 @@ fun ChatDatabase.searchMessages(
 
 @Dao
 interface ChatDao {
+    @Query("SELECT * FROM composer_draft WHERE id = 1")
+    suspend fun composerDraft(): StoredComposerDraft?
+
+    suspend fun readComposerDraft(): String? = composerDraft()?.text?.takeIf { it.isNotEmpty() }
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun putComposerDraft(draft: StoredComposerDraft)
+
+    // Keep the new revision even when the slot is empty, so an older task cannot replay sent text.
+    @Query("UPDATE composer_draft SET text = '', revision = lower(hex(randomblob(16))) WHERE id = 1")
+    suspend fun clearComposerDraft()
+
+    suspend fun saveComposerDraft(
+        text: String,
+        revision: String =
+            java.util.UUID
+                .randomUUID()
+                .toString(),
+    ) = putComposerDraft(StoredComposerDraft(text, revision))
+
     @Query("SELECT * FROM conversations ORDER BY updatedAt DESC")
     fun conversations(): Flow<List<Conversation>>
 
@@ -257,6 +284,7 @@ interface ChatDao {
         profile: com.nirowear.provider.ProviderProfile?,
         error: String?,
         status: String = "ERROR",
+        consumeComposerDraft: Boolean = false,
     ) {
         // No duplicate check on the prompt. This function runs only when `admit()` never ran
         // (ChatViewModel gates it on assistantId == null), and admit is what writes the USER row — so
@@ -280,6 +308,7 @@ interface ChatDao {
             ),
         )
         touch(conversationId, System.currentTimeMillis())
+        if (prompt != null && consumeComposerDraft) clearComposerDraft()
     }
 
     @Query("DELETE FROM messages WHERE conversationId = :conversationId AND id > :id")
@@ -329,11 +358,11 @@ interface ChatDao {
         conversationId: String,
         prompt: String?,
         profile: com.nirowear.provider.ProviderProfile,
+        consumeComposerDraft: Boolean = false,
     ): Long {
-        if (prompt !=
-            null
-        ) {
+        if (prompt != null) {
             insertMessage(StoredMessage(conversationId = conversationId, role = "USER", rawContent = prompt))
+            if (consumeComposerDraft) clearComposerDraft()
         }
         touch(conversationId, System.currentTimeMillis())
         return insertMessage(
@@ -351,14 +380,24 @@ interface ChatDao {
 }
 
 @Database(
-    entities = [Conversation::class, StoredMessage::class, StoredOpenAiPhases::class],
-    version = 2,
+    entities = [Conversation::class, StoredMessage::class, StoredOpenAiPhases::class, StoredComposerDraft::class],
+    version = 3,
     exportSchema = true,
 )
 abstract class ChatDatabase : RoomDatabase() {
     abstract fun chats(): ChatDao
 
     companion object {
+        val MIGRATION_2_3 =
+            object : Migration(2, 3) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL(
+                        "CREATE TABLE IF NOT EXISTS composer_draft " +
+                            "(text TEXT NOT NULL, revision TEXT NOT NULL, id INTEGER NOT NULL PRIMARY KEY)",
+                    )
+                }
+            }
+
         val MIGRATION_1_2 =
             object : Migration(1, 2) {
                 override fun migrate(db: SupportSQLiteDatabase) {

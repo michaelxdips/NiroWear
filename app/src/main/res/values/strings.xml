@@ -20,6 +20,7 @@
     <string name="chat_empty_start">Use keyboard or voice to start.</string>
     <string name="chat_copy_unsaved">Copy unsaved answer</string>
     <string name="chat_retry_saving">Retry saving</string>
+    <string name="chat_draft_not_saved">Draft not saved. Try again.</string>
     <string name="chat_unsaved_copied">Unsaved answer copied as sensitive. Clipboard still holds plain text.</string>
     <string name="chat_edit_message">Edit message</string>
     <string name="chat_menu">Menu</string>
