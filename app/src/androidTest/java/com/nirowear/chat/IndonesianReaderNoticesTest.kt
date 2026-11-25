@@ -3,6 +3,7 @@ package com.nirowear.chat
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.graphics.Rect
 import android.os.Bundle
 import android.os.ParcelFileDescriptor
 import android.os.SystemClock
@@ -326,11 +327,31 @@ class IndonesianReaderNoticesTest {
                         assertEquals("Respons n4 belum tersimpan.", copiedClip)
 
                         // Retry saving while storage failure still fires -> localized SAVE_STILL_FAILING notice, 1 HTTP request total.
-                        scrollToText("Coba simpan lagi", exact = true)
-                        clickableOwner(awaitNode("Retry saving while failing") { norm(it.text) == "Coba simpan lagi" })
-                            .performAction(AccessibilityNodeInfo.ACTION_CLICK)
-                        SystemClock.sleep(500)
-                        val stillFailingTexts = collectReaderTextsAfterScrolling(downward = false)
+                        assertTrue(
+                            "Expected 'Coba simpan lagi' button after copy",
+                            scrollToText("Coba simpan lagi", exact = true) != null,
+                        )
+                        scrollDownSmall()
+                        val retryFailBtn =
+                            clickableOwner(
+                                awaitNode("Retry saving while failing") {
+                                    norm(it.text) == "Coba simpan lagi" && it.isEnabled
+                                },
+                            )
+                        println(
+                            "N4_RETRY_FAIL_CLICK bounds=${Rect().also(retryFailBtn::getBoundsInScreen)} enabled=${retryFailBtn.isEnabled}",
+                        )
+                        assertTrue(
+                            "Retry saving click must succeed",
+                            retryFailBtn.performAction(AccessibilityNodeInfo.ACTION_CLICK),
+                        )
+                        val failDeadline = SystemClock.uptimeMillis() + 8_000
+                        var stillFailingTexts = emptyList<String>()
+                        while (SystemClock.uptimeMillis() < failDeadline) {
+                            stillFailingTexts = collectReaderTextsAfterScrolling(downward = false)
+                            if (stillFailingTexts.any { it.contains("Masih tidak dapat menyimpan.") }) break
+                            SystemClock.sleep(200)
+                        }
                         assertTrue(
                             "Expected localized SAVE_STILL_FAILING notice, got=$stillFailingTexts",
                             stillFailingTexts.any { it.contains("Masih tidak dapat menyimpan.") },
@@ -339,9 +360,21 @@ class IndonesianReaderNoticesTest {
 
                         // Clear fault injection and retry saving -> persists cleanly without HTTP replay.
                         ChatStorageProbe.beforeFinish = null
-                        scrollToText("Coba simpan lagi", exact = true)
-                        clickableOwner(awaitNode("Retry saving success") { norm(it.text) == "Coba simpan lagi" })
-                            .performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                        assertTrue(
+                            "Expected 'Coba simpan lagi' button for recovery",
+                            scrollToText("Coba simpan lagi", exact = true) != null,
+                        )
+                        scrollDownSmall()
+                        val retryRecoverBtn =
+                            clickableOwner(
+                                awaitNode("Retry saving success") {
+                                    norm(it.text) == "Coba simpan lagi" && it.isEnabled
+                                },
+                            )
+                        assertTrue(
+                            "Retry saving recovery click must succeed",
+                            retryRecoverBtn.performAction(AccessibilityNodeInfo.ACTION_CLICK),
+                        )
 
                         val end = SystemClock.uptimeMillis() + 10_000
                         while (SystemClock.uptimeMillis() < end) {
