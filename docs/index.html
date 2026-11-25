@@ -2195,7 +2195,7 @@ html[data-theme="dark"] .pill-hw{color:#C79BFF}
   .ruler,.masthead,.modes,.actions,.lb,.bench-tools,.story-dial{display:none !important}
   .sheet{padding-left:0}
   body{background:#fff;color:#000}
-  .sec,.faq-item,.limit,.plate,.status tr,.d-record{break-inside:avoid;page-break-inside:avoid}
+  .sec,.faq-item,.limit,.plate,.status tr,.d-record,.record{break-inside:avoid;page-break-inside:avoid}
 }
 
 /* ---------- intro: the 466 dial draws itself, once per session ---------- */
@@ -3136,7 +3136,7 @@ adb install -r app-release.apk</pre>
           <tbody>
             <tr>
               <td>Signed release identity</td>
-              <td><span class="pill pill-device">JVM</span> <code>apksigner</code> on published assets reads <code>CN=NiroWear Release</code> / <code>0dc50fc0…86543e</code>; current release cut <code>0.3.0</code> uses <code>versionCode 16</code> (SHA-256 printed in the release body by the workflow that signs it; prior <code>v0.2.2</code> 2026-11-17 was <strong>3,761,661 B</strong>, SHA-256 <code>1ba0fa8c…802322771</code>). A 0.1.0 install used the debug lineage and needs an uninstall first.</td>
+              <td><span class="pill pill-device">JVM</span> <code>apksigner</code> on published assets reads <code>CN=NiroWear Release</code> / <code>0dc50fc0…86543e</code>; <code>v0.3.0</code> (2026-11-26, <code>versionCode 16</code>): <strong>3,779,197 B</strong>, SHA-256 <code>d94a5af3…23e040ca2</code> (full digest <code>d94a5af3755b1c3d86257525cd643042db4cf64d7f755cbcdcab5ea23e040ca2</code>); prior <code>v0.2.2</code> (2026-11-17) was <strong>3,761,661 B</strong>, SHA-256 <code>1ba0fa8c…802322771</code>, asserted by the workflow before publishing. A 0.1.0 install used the debug lineage and needs an uninstall first.</td>
               <td>release.yml; release body</td>
             </tr>
             <tr>
