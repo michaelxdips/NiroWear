@@ -730,10 +730,6 @@ class ChatViewModel(
                                     consumeComposerDraft = onDraftSaved != null,
                                 )
                                 if (onDraftSaved != null) composerCommitted()
-                                if (mutableState.value.conversationId == null) {
-                                    mutableState.value = mutableState.value.copy(conversationId = recordingId)
-                                    observe(recordingId)
-                                }
                             }
                         }
                         liveAnswer.value =
