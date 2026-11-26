@@ -9,7 +9,6 @@ import org.commonmark.node.BlockQuote
 import org.commonmark.node.BulletList
 import org.commonmark.node.Code
 import org.commonmark.node.CustomNode
-import org.commonmark.node.Document
 import org.commonmark.node.Emphasis
 import org.commonmark.node.FencedCodeBlock
 import org.commonmark.node.HardLineBreak
