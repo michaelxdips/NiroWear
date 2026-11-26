@@ -69,8 +69,8 @@ object ResponseParser {
                                     }
                                     break
                                 }
-                                if (scanner.next('\\') && dollar) {
-                                    if (scanner.hasNext()) scanner.next()
+                                if (dollar && scanner.next('\\')) {
+                                    if (scanner.hasNext() && scanner.peek() != '\n') scanner.next()
                                 } else {
                                     scanner.next()
                                 }
@@ -658,7 +658,6 @@ object ResponseParser {
             return if (leading >= mathDedent) line.substring(mathDedent) else line
         }
         for (line in normalized.split('\n')) {
-            // Bound nesting before the Markdown library recurses on it.
             val bounded = capContainers(line)
             // A display may close mid-line; whatever follows is ordinary content again, so the
             // remainder is rescanned instead of being swallowed into the equation.
@@ -721,7 +720,6 @@ object ResponseParser {
                     listContentIndent = markerIndent
                     mathDedent = 0
                 } else if (container.isNotBlank() && contentLeading < listContentIndent) {
-                    // A less-indented content line ends the list.
                     listContentIndent = 0
                     mathDedent = 0
                 }

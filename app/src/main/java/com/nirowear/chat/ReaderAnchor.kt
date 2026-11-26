@@ -4,7 +4,6 @@ package com.nirowear.chat
 data class ReaderAnchor(
     val messageId: Long,
     val block: Int,
-    val index: Int,
     val offset: Int,
     val contentHash: Int,
     val following: Boolean,

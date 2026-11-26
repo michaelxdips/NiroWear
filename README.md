@@ -13,7 +13,7 @@
 
 [Install](#install) · [Capabilities](#capabilities) · [Providers](#provider-setup) · [Architecture](#architecture) · [Build](#build-from-source) · [Evidence](#testing-and-evidence) · [Limitations](#known-limitations)
 
-[michaelxdips.github.io/NiroWear](https://michaelxdips.github.io/NiroWear/) · [Release 0.3.0 notes](docs/release/RELEASE_NOTES_0.3.0.md)
+[michaelxdips.github.io/NiroWear](https://michaelxdips.github.io/NiroWear/) · [Release 0.3.1 notes](docs/release/RELEASE_NOTES_0.3.1.md)
 
 </div>
 
@@ -45,14 +45,14 @@ Assistant answers render as a scrollable document inside a `466 x 466 px` circul
 
 Needs Wear OS 3+ (minSdk 30), 32- or 64-bit ARM, 3.6 MB of storage, and a provider key you own, typed on the watch or sent from a phone on the same Wi-Fi. No account, no relay, no server of ours.
 
-Verify the `0.3.0` (`versionCode 16`, `3,779,197 B`) release APK before installing:
+Verify the `0.3.1` (`versionCode 17`, `3,778,802 B`) release APK before installing:
 
 ```bash
-aapt2 dump badging app-release.apk | head -3    # versionCode=16, versionName=0.3.0
-sha256sum app-release.apk                       # d94a5af3755b1c3d86257525cd643042db4cf64d7f755cbcdcab5ea23e040ca2
+aapt2 dump badging app-release.apk | head -3    # versionCode=17, versionName=0.3.1
+sha256sum app-release.apk                       # f623a168eb1696f8c5378c72a478b6d0616c9a447505b2e4ed82d92122fc2127
 ```
 
-Releases `0.1.1` through `0.3.0` share the `CN=NiroWear Release` signing certificate and upgrade in place. Earlier `0.1.0` builds used `CN=Android Debug` and must be uninstalled first, which clears device-bound keys and chats.
+Releases `0.1.1` through `0.3.1` share the `CN=NiroWear Release` signing certificate and upgrade in place. Earlier `0.1.0` builds used `CN=Android Debug` and must be uninstalled first, which clears device-bound keys and chats.
 
 ## Capabilities
 
@@ -137,21 +137,28 @@ Release signing keys come solely from environment variables (`NIROWEAR_KEYSTORE`
 
 Every figure below comes directly from recorded test XML, Gradle reports, and AVD/watch logs on this tree. Emulator checks ran on Wear OS 5 (`nirowear-b`, API 34, `466 x 466 px @ 320 dpi`, headless SwiftShader); dated Xiaomi Watch 2 hardware measurements sit in their own collapsible table below.
 
-### Release v0.3.0 and post-cut verification summary
+### Release v0.3.1 and post-cut verification summary
 
 | Gate | Result | Scope | Source |
 |---|---|---|---|
-| **JVM unit suite** | **`v0.3.0`: 315 passed, 1 skipped** (316 tests / 51 suites); **post-cut `main`: 316 passed, 1 skipped** (317 tests / 51 suites, `LiveProviderSmokeTest` opt-in) | Host JVM (`-Xss1m`) | `app/build/test-results/testDebugUnitTest/*.xml` |
-| **Lint & ktlint** | `lintDebug`: **0 errors, 0 code warnings** (14 dependency-update advisories); `ktlintCheck`: **0 violations** | Host | `app/build/reports/lint-results-debug.xml` |
+| **JVM unit suite** | **`v0.3.1`: 316 passed, 1 skipped** (317 tests / 51 suites); **post-cut `main`: 319 passed, 1 skipped** (320 tests / 51 suites, `LiveProviderSmokeTest` opt-in) | Host JVM (`-Xss1m`) | `app/build/test-results/testDebugUnitTest/*.xml` |
+| **Lint & ktlint** | `lintDebug`: **0 errors, 0 code warnings** (7 pinned dependency-update advisories); `ktlintCheck`: **0 violations** | Host | `app/build/reports/lint-results-debug.xml` |
 | **Locale parity** | **127 matching keys** (`values/` == `values-in/`), 0 missing/extra | Host + AVD (`nirowear-b`) | `IndonesianReaderNoticesTest`, `IndonesianHeaderAndInputTest` |
 | **CI instrumented smoke** | **10/10 classes** green, enforced on `main` | GitHub CI AVD (API 34) | `.github/workflows/ci.yml` |
-| **AVD closeout gate** | **11/11 classes (`19` tests, `0` failures)** | `nirowear-b` (API 34) | `app/src/androidTest/` |
-| **Signed `v0.3.0` release** | Cold **549 ms**, first frame **365.993 ms**, warm **37 ms**, scroll **2.92%** (`377` frames), PSS **30,836 KB** | `nirowear-b` (`versionCode 16`) | `.private/v030-release-avd/` |
+| **Signed `v0.3.1` on Watch 2** | Cold **694 ms** (`683-818 ms`), warm **71 ms** (`64-81 ms`), **PSS 31,575 KB**, `Thermal Status: 0`, `D5` rotary absent, `D4` HCE routed, `D3` services present | `Xiaomi Watch 2` (`versionCode 17`) | `.private/watch2-v031/` |
+| **AVD closeout baseline (`v0.3.0`)** | **11/11 classes (`19` tests, `0` failures)**; signed release cold **549 ms**, first frame **365.993 ms**, warm **37 ms**, scroll **2.92%** (`377` frames), PSS **30,836 KB** | `nirowear-b` (`versionCode 16`) | `.private/v030-release-avd/` |
 | **`O4` 5,000-msg upgrade** | Room v2->v3 (**200 convs / 5,000 msgs**) in **286.48 ms** | `nirowear-b` (schema probe) | Recorded AVD probe run (`nirowear-b`, local `feat/avd-gap-probes`) |
 | **`J5` / `J2` / `J4` probes** | Search **0.53 ms** med / **4.15 ms** P95, History scroll **2.23%** (`494` frames); torture debug scroll **6.09%** (`460` frames); 4 KB stream P95 **1.080 ms** | `nirowear-b` (debug + SwiftShader) | Recorded AVD probe run (`nirowear-b`), `ResponseParserStreamingPerfTest` |
 
 <details>
-<summary>v0.3.0 AVD probe breakdown (J1, J2, J3, J4, J5, O4, and host-driven gates)</summary>
+<summary>v0.3.1 signed release Watch 2 & v0.3.0 AVD probe breakdown</summary>
+
+#### Signed `v0.3.1` on Xiaomi Watch 2 (`axolotlaxie`, API 34, `466 x 466 px @ 320 dpi`, `armeabi-v7a`, `3,778,802 B`, SHA-256 `f623a168eb1696f8c5378c72a478b6d0616c9a447505b2e4ed82d92122fc2127`)
+
+- Cold start median **694 ms** (`818, 683, 689, 736, 694 ms`; `WaitTime` median **705 ms**); warm `HOT` median **71 ms** (`71, 80, 69, 64, 81 ms`).
+- Memory measured **TOTAL PSS 31,575 KB** (`RSS 119,780 KB`, `SwapPss 324 KB`). Idle 18-swipe `gfxinfo`: `54` frames (`15 ms` P50, `25 ms` P95, `0` legacy jank, `22` deadline-missed / 1 GPU `4950 ms` outlier).
+- Battery `level: 23 -> 78` while USB powered; `Thermal Status: 0`. Hardware probes confirmed `D5` rotary absent (`/dev/input/event2` `slate-spi` mapped as `KEYBOARD`, zero `ROTARY_ENCODER` source), `D4` HCE `NfcPairingService` registered as `*DEFAULT* ApduService` (`android.hardware.nfc=false`, `android.hardware.nfc.hce=true`, `AID_D2760000850101` in routing table), and `D3` `RECOGNIZE_SPEECH` (`WearRemoteInputActivity` / `GoogleTTSRecognitionService`) + TalkBack (`com.google.android.marvin.talkback`) installed.
+- Debug `c092887d` on Watch 2: **20** non-MockWebServer UI/renderer classes (`18` quick classes including `ReaderSemanticsTest`, `QuoteSemanticsTest`, `ComposerImeCommitTest`, `RendererTapAndPanTest`, plus `16` additional UI/renderer classes) and `ReaderNavigationTest#measuredAnswersKeepBeginningAndReachFinalLineAndRetry` PASSED (`9/9` measured cases). Failures: `PairingUiTest` replay `SSLHandshakeException`, `ComposerSendButtonTest` Turn 2 (`Cannot reach provider`), `InputResultUiTest` `6/8` (`No editable field` / `Missing Draft not saved`), 4 MockWebServer `ReaderNavigationTest` methods, and 2 wireless-ADB TLS drops.
 
 #### Signed `v0.3.0` release on `nirowear-b` (API 34, `3,779,197 B`, SHA-256 `d94a5af3755b1c3d86257525cd643042db4cf64d7f755cbcdcab5ea23e040ca2`)
 
@@ -171,26 +178,27 @@ Every figure below comes directly from recorded test XML, Gradle reports, and AV
 </details>
 
 <details>
-<summary>Historical Xiaomi Watch 2 hardware runs (2026-11-16 and 2026-11-17)</summary>
+<summary>Xiaomi Watch 2 hardware runs (2026-11-16 through 2026-11-26)</summary>
 
-Physical watch testing was skipped for `v0.3.0` (tracked under `#27`, `#65`, `#89`). Prior measurements recorded on Xiaomi Watch 2 (`axolotlaxie`, API 34, `466 x 466 px @ 320 dpi`, `armeabi-v7a`):
+Measurements recorded on physical Xiaomi Watch 2 (`axolotlaxie`, API 34, `466 x 466 px @ 320 dpi`, `armeabi-v7a`):
 
 | Date & Build | Cold Start | Scroll / Render | Memory / Thermal | Suite & Defects |
 |---|---|---|---|---|
 | **2026-11-16 (`v0.2.1` signed release, `armeabi-v7a`)** | **723 ms** median (5 runs, `720-1,105 ms`; first `1,174 ms`) | NOT_RECORDED | NOT_RECORDED | **25/43** per-class (`11` `adb: device offline` drops); filed `#47` crown absent, `#48` API 34 table semantics (closed 2026-11-17), `#49` Arabic digits in English text (fixed), `#50` superseded by `#84` |
 | **2026-11-17 (`23efc01` debug build)** | **4375.5 ms** median (`4311, 4345, 4406, 4619 ms`; `#65`, 4.5 KB fixture read on debug main thread) | Adreno scroll **761 frames, 9 janky (1.18%)** across 18 swipes (P50 `8 ms`, P95 `25 ms`, GPU `2 ms / 9 ms` @ P99); `454 x 454` no clipping; `Stop` centered (`dx = 0, dy = 0`) | 20-min stress **PSS 73,642 -> 76,949 KB (+3.2 MB)**, `Thermal Status: 0` | **38/45** per-class instrumented sweep (`4` teardown `UiAutomation` crashes reconciled in `#84` superseding closed `#50`) |
+| **2026-11-26 (`v0.3.1` signed release & `c092887d` debug)** | **694 ms** median (`683-818 ms`; warm HOT **71 ms** median) | Idle `gfxinfo` `54` frames (`15 ms` P50, `25 ms` P95, `0` legacy jank, `22` deadline-missed / 1 GPU `4950 ms` spike) | **PSS 31,575 KB**, `RSS 119,780 KB`; battery `23 -> 78`; `Thermal Status: 0` | `20` non-MockWebServer UI/renderer classes + `measuredAnswers...` PASS; `#47`, `#65`, `#89` verified & closed; `PairingUiTest` replay / `MockWebServer` / `InputResultUiTest` 6/8 & ADB drops stay tracked |
 
 </details>
 
 ## Known limitations
 
-Physical watch checks were skipped on `v0.3.0`: battery drain percentage, sustained thermal levels above `Thermal Status: 0`, TalkBack spoken audio on watch speakers, voice dictation accuracy, real Gboard hardware taps (`I1`/`I2`), rotary crown scrolling (`#47`), and real phone-to-watch certificate click-through (`#28`) remain unverified on `v0.3.0` hardware.
+Physical Watch 2 signed `v0.3.1` startup/warm timings, `D5` rotary absence (`#47`), `D4` HCE routing registration, and `D3` speech/TalkBack registration are now measured. What remains open on physical hardware: sustained thermal load above `Thermal Status: 0`, human TalkBack speaker audio verification (`#27`), live voice dictation accuracy (`#27`), phone-to-watch Chrome self-signed certificate click-through (`#28`), and physical-watch harness failures on `PairingUiTest` replay `SSLHandshakeException`, `MockWebServer` (`Cannot reach provider`), `InputResultUiTest` (`6/8`), and wireless ADB TLS drops (`#62`, `#84`).
 
 On the shipping release APK, `allowBackup="false"` and `debuggable=false` block injecting a pre-populated v2 database directly onto disk without root (`O4` schema migration `2.json` -> `3.json` ran on `nirowear-b`).
 
 `NativeMathRenderer` caps memory and bitmap bounds, refusing file-inclusion macros, macro definitions, and unbalanced braces by rendering readable LaTeX source. Nested code fences inside blockquotes or tables wider than their header row degrade safely while keeping prior content intact.
 
-Open tracked issues: `#27` (physical watch acceptance), `#28` (phone pairing certificate click-through), `#47` (rotary absence), `#62` (composer lost-word trace), `#65` / `#89` (release watch timings), `#84` (hardware teardown-crash logcat superseding closed `#50`).
+Open tracked issues: `#27` (physical watch human audio/dictation acceptance), `#28` (phone pairing certificate click-through), `#62` (composer trace & hardware Gboard/MockWebServer), `#84` (Watch 2 hardware instrumented logcat). (Closed with Watch 2 `v0.3.1` evidence: `#47`, `#65`, `#89`.)
 
 ## Security and license
 

@@ -13,8 +13,6 @@ import org.junit.Test
  * Every test here failed before its fix.
  */
 class DecoderRobustnessTest {
-    // ---- Chat Completions: [DONE] is the documented terminator -------------------------------
-
     @Test
     fun doneAfterTextIsSuccessNotProtocolError() {
         val decoder = CompatibleStreamDecoder()
@@ -37,8 +35,6 @@ class DecoderRobustnessTest {
             events,
         )
     }
-
-    // ---- Chat Completions: explicit JSON nulls are legal -------------------------------------
 
     @Test
     fun explicitNullToolCallsDoesNotKillTheStream() {
@@ -77,7 +73,6 @@ class DecoderRobustnessTest {
             """{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"hmm"}}""",
         )
         decoder.accept("""{"type":"content_block_stop","index":0}""")
-        // Then the real text.
         decoder.accept(
             """{"type":"content_block_start","index":1,"content_block":{"type":"text","text":""}}""",
         )
@@ -112,12 +107,22 @@ class DecoderRobustnessTest {
         )
     }
 
-    // ---- JsonNull is not Kotlin null ---------------------------------------------------------
-
     @Test
     fun jsonNullIsDistinctFromKotlinNull() {
-        // Documents the exact confusion that caused the tool_calls crash.
         assertFalse(JsonNull == null)
         assertTrue(JsonNull is kotlinx.serialization.json.JsonElement)
+    }
+
+    @Test
+    fun compatibleDecoderIgnoresExplicitJsonNullErrorAndMapsRateLimit() {
+        val okDecoder = CompatibleStreamDecoder()
+        val delta = okDecoder.accept("""{"error":null,"choices":[{"delta":{"content":"Hi"}}]}""")
+        val done = okDecoder.accept("[DONE]")
+        assertEquals(listOf(StreamEvent.TextDelta("Hi")), delta)
+        assertEquals(listOf(StreamEvent.Completed), done)
+
+        val errDecoder = CompatibleStreamDecoder()
+        val failed = errDecoder.accept("""{"error":{"code":"rate_limit_exceeded"}}""")
+        assertEquals(listOf(StreamEvent.Failure(ProviderError.RATE_LIMITED)), failed)
     }
 }

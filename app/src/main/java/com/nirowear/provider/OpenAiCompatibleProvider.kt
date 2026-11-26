@@ -177,51 +177,47 @@ class CompatibleStreamDecoder {
                 )
             } else {
                 val root = Json.parseToJsonElement(payload).jsonObject
-                if (root["error"] != null) return listOf(StreamEvent.Failure(ProviderError.HTTP))
+                val error = root["error"]
+                if (error != null && error != JsonNull) return listOf(StreamEvent.Failure(openAiError(error)))
                 val choices = root.getValue("choices").jsonArray
                 if (choices.isEmpty()) {
                     emptyList()
                 } else {
-                    // Arbitrary BYOK endpoints may emit several choices; only index 0 is rendered.
+                    var choice0: JsonObject? = null
                     choices.forEach { entry ->
-                        val index = (entry as? JsonObject)?.get("index")
+                        val obj = entry.jsonObject
+                        val index = obj["index"]
                         require(
                             index == null || index == JsonNull ||
                                 (index is JsonPrimitive && !index.isString && index.intOrNull != null),
                         )
+                        if (choice0 == null && (index as? JsonPrimitive)?.intOrNull == 0) choice0 = obj
                     }
-                    val choice =
-                        choices
-                            .map { it.jsonObject }
-                            .firstOrNull { (it["index"] as? JsonPrimitive)?.intOrNull == 0 }
-                            ?: choices.first().jsonObject
-                    // `delta` is an OPTIONAL member of the streaming choice. A final
-                    // finish_reason-only chunk (`{"choices":[{"finish_reason":"stop"}]}`) and a
-                    // gateway that serialises an absent delta as JSON null are both legal.
-                    // getValue() threw on them, so the terminal chunk decoded to PROTOCOL and a
-                    // complete answer was saved as "Stream interrupted" with no terminal evidence
-                    // left for EOF to find. Only a delta of the wrong JSON TYPE is a framing fault.
+                    val choice = choice0 ?: choices[0].jsonObject
                     val rawDelta = choice["delta"]
                     require(rawDelta == null || rawDelta == JsonNull || rawDelta is JsonObject)
                     val delta = (rawDelta as? JsonObject) ?: JsonObject(emptyMap())
-                    // JsonNull is not Kotlin null. A gateway that serialises absent optionals as
-                    // explicit nulls (`"tool_calls": null`) is emitting legal JSON, but the old
-                    // `== null` check threw on the very first chunk and turned the whole answer
-                    // into "Stream interrupted". The next require already used the right form.
+                    val toolCalls = delta["tool_calls"]
+                    val functionCall = delta["function_call"]
+                    val noToolCalls =
+                        toolCalls == null ||
+                            toolCalls == JsonNull ||
+                            (toolCalls as? JsonArray)?.isEmpty() == true
+                    val noFunctionCall =
+                        functionCall == null ||
+                            functionCall == JsonNull ||
+                            (functionCall as? JsonArray)?.isEmpty() == true
+                    require(noToolCalls && noFunctionCall)
+                    val contentEl = delta["content"]
+                    val refusalEl = delta["refusal"]
+                    val finishEl = choice["finish_reason"]
                     require(
-                        // An empty array is legal JSON for "no tool call"; only a non-empty one is
-                        // genuinely unrenderable here.
-                        listOf(delta["tool_calls"], delta["function_call"]).all {
-                            it == null || it == JsonNull || (it as? JsonArray)?.isEmpty() == true
-                        },
+                        (contentEl == null || contentEl == JsonNull || contentEl.stringOrNull() != null) &&
+                            (refusalEl == null || refusalEl == JsonNull || refusalEl.stringOrNull() != null) &&
+                            (finishEl == null || finishEl == JsonNull || finishEl.stringOrNull() != null),
                     )
-                    require(
-                        listOf(delta["content"], delta["refusal"], choice["finish_reason"]).all {
-                            it == null || it == JsonNull || it.stringOrNull() != null
-                        },
-                    )
-                    val text = delta["content"].stringOrNull() ?: delta["refusal"].stringOrNull()
-                    val finish = choice["finish_reason"].stringOrNull()
+                    val text = contentEl.stringOrNull() ?: refusalEl.stringOrNull()
+                    val finish = finishEl.stringOrNull()
                     if (!text.isNullOrEmpty()) hasText = true
                     buildList {
                         if (!text.isNullOrEmpty()) add(StreamEvent.TextDelta(text))
