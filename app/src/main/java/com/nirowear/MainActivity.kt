@@ -908,7 +908,6 @@ private fun ChatReader(
                 answerId,
                 chatState.error,
                 chatState.interrupted,
-                notice,
                 // Trailing rows are appended AFTER the answer's last unit. They were not keys, so a
                 // newly visible Retry/streaming row never re-ran the follow decision and could sit
                 // entirely below the fold.
@@ -984,6 +983,12 @@ private fun ChatReader(
                             listState.scrollToItem((count - 1).coerceAtLeast(0))
                         }
                     }
+                }
+            }
+            LaunchedEffect(notice) {
+                if (notice.isNotEmpty() && !sectionMenu && !renderLab && !editing) {
+                    following = false
+                    listState.scrollToItem(0)
                 }
             }
             val rotaryScope = rememberCoroutineScope()
@@ -1183,7 +1188,18 @@ private fun ChatReader(
                         }
                     }
                 } else {
-                    if (noticeRowShown) item { Text(notice, fontSize = 14.sp) }
+                    if (noticeRowShown) {
+                        item {
+                            Text(
+                                notice,
+                                fontSize = 14.sp,
+                                modifier =
+                                    Modifier.semantics {
+                                        liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite
+                                    },
+                            )
+                        }
+                    }
                     // The newest USER row is already rendered from Room. Painting the composer
                     // prompt again as a second copy ("You · hold to edit" heading plus this line)
                     // showed every question twice.

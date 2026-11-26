@@ -324,9 +324,9 @@ class PairingUiTest {
                 scrollTo("Saved securely.")
                 await("Saved securely.")
                 // One-shot by construction: the successful arrival closes the socket, so a second attempt
-                // cannot even connect. Refused-connection and an explicit 4xx both prove the same thing.
-                // Anything else — a 2xx, or a failure that is not a refusal — must fail this assertion,
-                // so the check cannot pass by accident.
+                // cannot even connect, or fails mid-handshake if the connection races ServerSocket.close().
+                // Refused-connection, mid-close socket/handshake resets, and an explicit 4xx all prove
+                // no second payload is accepted.
                 val replayOutcome =
                     try {
                         val (replayCode, _) =
@@ -341,12 +341,22 @@ class PairingUiTest {
                         "status $replayCode"
                     } catch (e: java.net.ConnectException) {
                         "refused"
+                    } catch (e: java.net.SocketException) {
+                        "refused"
+                    } catch (e: javax.net.ssl.SSLHandshakeException) {
+                        "refused"
+                    } catch (e: java.io.EOFException) {
+                        "refused"
                     } catch (e: java.io.IOException) {
                         "unexpected ${e.javaClass.simpleName}: ${e.message}"
                     }
                 assertTrue(
                     "Pairing session accepted a second key (outcome: $replayOutcome)",
                     replayOutcome == "refused" || Regex("^status 4\\d\\d$").matches(replayOutcome),
+                )
+                assertTrue(
+                    "Second pairing profile should not be persisted",
+                    app.settings.state.first().profiles.none { it.displayName == "Second" },
                 )
             } finally {
                 instrumentation.runOnMainSync { activity.finish() }

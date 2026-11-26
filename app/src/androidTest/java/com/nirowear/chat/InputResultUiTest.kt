@@ -83,7 +83,10 @@ class InputResultUiTest {
         i.startActivitySync(
             Intent(i.targetContext, MainActivity::class.java)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK),
-        )
+        ).also {
+            // Wait for WearShellTransitionRunner's ~550 ms OPEN transition so the first raw `input tap` is not dropped.
+            SystemClock.sleep(800)
+        }
 
     @Test fun unsentKeyboardDraftSurvivesBackAndReentry() {
         // Snapshot whatever this device already had; the draft is durable, so this test must not
