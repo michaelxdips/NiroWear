@@ -44,7 +44,7 @@
   --stage-accent:#7EE6CC;
   --stage-accent-ink:#081412;
   --stage-signal:#F2B45A;
-  --stage-border:#5B6670;
+  --stage-border:#66737F;
   --stage-hairline:#26303B;
 
   --font-display:"Fraunces",Georgia,"Times New Roman",serif;
@@ -68,7 +68,7 @@ html[data-theme="dark"]{
   --accent-hover:#9EEEDD;
   --accent-ink:#081412;
   --signal:#F2B45A;
-  --border:#5B6670;
+  --border:#66737F;
   --hairline:#26303B;
 }
 
@@ -105,10 +105,11 @@ p:last-child{margin-bottom:0}
 
 a{color:var(--accent);text-decoration:underline;text-underline-offset:3px;text-decoration-thickness:1px}
 a:hover{color:var(--accent-hover)}
-a[href],button,summary,input,label[for]{cursor:pointer}
+a[href],button,summary,input,textarea,label[for]{cursor:pointer}
+textarea,input[type="search"]{cursor:text}
 button:disabled,input:disabled{cursor:not-allowed;opacity:.55}
 
-:where(a,button,summary,input,[tabindex]):focus-visible{
+:where(a,button,summary,input,textarea,[tabindex]):focus-visible{
   outline:2px solid var(--accent);
   outline-offset:3px;
 }
@@ -131,16 +132,15 @@ button:disabled,input:disabled{cursor:not-allowed;opacity:.55}
 /* Masthead */
 .masthead{
   position:sticky;top:0;z-index:80;
-  background:color-mix(in srgb,var(--bg) 94%,transparent);
-  backdrop-filter:blur(10px);
+  background:var(--bg);
   border-bottom:1px solid var(--hairline);
 }
 .masthead-in{
   max-width:1180px;margin:0 auto;padding:0 28px;
-  min-height:62px;display:flex;align-items:center;gap:18px;
+  min-height:62px;display:flex;align-items:center;gap:16px;
 }
 .brand{
-  display:inline-flex;align-items:center;gap:10px;
+  display:inline-flex;align-items:center;gap:10px;min-height:44px;
   text-decoration:none;color:var(--ink);
   font-family:var(--font-display);font-weight:700;font-size:19px;letter-spacing:-.02em;
   flex-shrink:0;padding:6px 0;
@@ -149,11 +149,11 @@ button:disabled,input:disabled{cursor:not-allowed;opacity:.55}
 .brand img{border-radius:7px}
 
 .nav-primary{
-  display:flex;align-items:center;gap:4px;margin-left:10px;
+  display:flex;align-items:center;gap:2px;margin-left:8px;
 }
 .nav-primary a{
   color:var(--muted);text-decoration:none;font-size:14px;font-weight:500;
-  padding:9px 11px;border-radius:var(--r-sm);white-space:nowrap;
+  padding:9px 10px;border-radius:var(--r-sm);white-space:nowrap;
   transition:color .15s var(--ease),background-color .15s var(--ease);
 }
 .nav-primary a:hover{color:var(--ink);background:var(--surface)}
@@ -199,7 +199,7 @@ button:disabled,input:disabled{cursor:not-allowed;opacity:.55}
 }
 .mobile-drawer a:hover{border-color:var(--accent)}
 
-@media (max-width:960px){
+@media (max-width:1020px){
   .nav-primary,.nav-cta{display:none}
   .menu-btn{display:inline-flex;align-items:center}
   .masthead-in{padding:0 18px;gap:10px}
@@ -217,6 +217,10 @@ button:disabled,input:disabled{cursor:not-allowed;opacity:.55}
 .kicker{
   font-family:var(--font-mono);font-size:12.5px;font-weight:500;
   color:var(--muted);margin:0 0 14px;
+  display:flex;align-items:center;gap:10px;
+}
+.kicker::before{
+  content:"";width:22px;height:1px;background:var(--border);display:inline-block;flex-shrink:0;
 }
 .hero h1{
   font-size:clamp(34px,4.8vw,60px);
@@ -256,20 +260,25 @@ button:disabled,input:disabled{cursor:not-allowed;opacity:.55}
 .hero-ledger dt{font-family:var(--font-mono);font-size:11.5px;color:var(--muted);margin-bottom:3px}
 .hero-ledger dd{margin:0;font-size:14.5px;font-weight:700;color:var(--ink)}
 
-/* Focal Watch Frame in Hero */
+/* Focal Watch Frame in Hero + Precision Bezel Index Ring */
 .hero-watch-col{display:flex;flex-direction:column;align-items:center;gap:16px;min-width:0}
 .watch-hardware{
-  position:relative;width:min(380px,84vw);aspect-ratio:1/1;
-  border-radius:50%;background:#090B0E;padding:12px;
+  position:relative;width:min(384px,84vw);aspect-ratio:1/1;
+  border-radius:50%;background:#090B0E;padding:18px;
   border:2px solid #2A333E;
   box-shadow:0 24px 52px -20px rgba(10,13,17,.45);
 }
 .watch-hardware img{
   width:100%;height:100%;border-radius:50%;object-fit:cover;
+  position:relative;z-index:1;border:1px solid #1C232B;
+}
+.bezel-ticks{
+  position:absolute;inset:0;width:100%;height:100%;
+  pointer-events:none;z-index:2;
 }
 .safe-ring{
-  position:absolute;inset:24px;border-radius:50%;
-  border:2px dashed #7EE6CC;pointer-events:none;opacity:0;
+  position:absolute;inset:28px;border-radius:50%;
+  border:2px dashed #7EE6CC;pointer-events:none;opacity:0;z-index:3;
   transition:opacity .18s var(--ease);
 }
 .safe-ring.on{opacity:1}
@@ -311,17 +320,22 @@ button:disabled,input:disabled{cursor:not-allowed;opacity:.55}
 }
 .band-head{margin-bottom:clamp(24px,3.2vw,36px);max-width:68ch}
 .chapter-label{
-  display:block;font-family:var(--font-mono);font-size:12.5px;font-weight:500;
+  display:inline-flex;align-items:center;gap:10px;
+  font-family:var(--font-mono);font-size:12.5px;font-weight:500;
   color:var(--muted);margin-bottom:8px;
 }
+.chapter-label::before{
+  content:"";width:18px;height:1px;background:var(--border);display:inline-block;
+}
 .band-dark .chapter-label{color:var(--stage-muted)}
+.band-dark .chapter-label::before{background:var(--stage-border)}
 .band h2,.band-dark h2{font-size:clamp(26px,3.2vw,40px);margin-bottom:12px}
 .sub{color:var(--muted);font-size:clamp(15px,1.2vw,17px)}
 .band-dark .sub{color:var(--stage-muted)}
 
 /* Dark stage control tokens */
 .band-dark a{color:var(--stage-accent)}
-.band-dark :where(a,button,summary,[tabindex]):focus-visible{outline-color:var(--stage-accent)}
+.band-dark :where(a,button,summary,textarea,[tabindex]):focus-visible{outline-color:var(--stage-accent)}
 
 /* Chapter 2: Workbench (Obsidian Studio) */
 .wb-grid{
@@ -330,35 +344,45 @@ button:disabled,input:disabled{cursor:not-allowed;opacity:.55}
 }
 .dial-column{display:flex;flex-direction:column;align-items:center;gap:14px;min-width:0}
 .dial-shell{
-  width:min(380px,84vw);height:min(380px,84vw);
+  width:min(384px,84vw);height:min(384px,84vw);
   border-radius:50%;background:#090B0E;border:2px solid #2C3540;
   position:relative;overflow:hidden;
   transition:width .22s var(--ease),height .22s var(--ease);
   box-shadow:0 24px 56px -18px rgba(0,0,0,.65);
 }
-.dial-shell.is-384{width:min(314px,74vw);height:min(314px,74vw)}
+.dial-shell.is-384{width:min(318px,74vw);height:min(318px,74vw)}
 .dial-scroll{
-  position:absolute;inset:0;overflow-y:auto;padding:54px 48px 54px;
-  scrollbar-width:thin;scrollbar-color:#4B5663 transparent;
-  font-size:14px;line-height:1.5;color:#EEF2F0;
+  position:absolute;inset:0;overflow-y:auto;padding:60px 60px 68px;
+  scrollbar-width:none;-ms-overflow-style:none;
+  font-size:14px;line-height:1.5;color:#EEF2F0;z-index:1;
 }
-.dial-shell.is-384 .dial-scroll{padding:44px 38px 46px;font-size:13px}
+.dial-scroll::-webkit-scrollbar{display:none}
+.dial-shell.is-384 .dial-scroll{padding:50px 48px 58px;font-size:13px}
 .dial-topbar{
-  position:absolute;top:16px;left:0;right:0;text-align:center;
+  position:absolute;top:0;left:0;right:0;padding:15px 40px 10px;text-align:center;
   font-family:var(--font-mono);font-size:10.5px;color:var(--stage-muted);
-  pointer-events:none;letter-spacing:.03em;
+  background:linear-gradient(180deg,#090B0E 65%,rgba(9,11,14,0));
+  pointer-events:none;letter-spacing:.03em;z-index:3;
 }
 .dial-footer{
-  position:absolute;bottom:14px;left:0;right:0;
-  display:flex;justify-content:center;gap:18px;
-  font-family:var(--font-mono);font-size:10.5px;color:var(--stage-muted);
-  pointer-events:none;
+  position:absolute;bottom:0;left:0;right:0;padding:12px 24px 12px;
+  display:flex;justify-content:center;gap:10px;z-index:4;pointer-events:none;
+  background:linear-gradient(0deg,#090B0E 60%,rgba(9,11,14,0));
+}
+.dial-foot-btn{
+  pointer-events:auto;appearance:none;background:#131A22;color:#C6D0D8;
+  border:1px solid #66737F;border-radius:var(--r-pill);padding:4px 12px;
+  font-family:var(--font-mono);font-size:10.5px;font-weight:500;cursor:pointer;
+  transition:border-color .15s var(--ease),color .15s var(--ease),background-color .15s var(--ease);
+}
+.dial-foot-btn:hover,.dial-foot-btn[aria-pressed="true"]{
+  border-color:var(--stage-accent);color:var(--stage-accent);background:#172329;
 }
 .dial-jump{
-  position:absolute;bottom:34px;left:50%;transform:translateX(-50%);
+  position:absolute;bottom:38px;left:50%;transform:translateX(-50%);
   appearance:none;background:var(--stage-accent);color:var(--stage-accent-ink);
   border:0;border-radius:var(--r-pill);padding:10px 16px;min-height:44px;
-  font-family:var(--font-mono);font-size:11.5px;font-weight:700;
+  font-family:var(--font-mono);font-size:11.5px;font-weight:700;z-index:5;
 }
 .dial-jump[hidden]{display:none}
 .dial-controls-bar{
@@ -366,24 +390,82 @@ button:disabled,input:disabled{cursor:not-allowed;opacity:.55}
 }
 
 /* Rendered watch inner blocks */
-.w-h{font-family:var(--font-sans);font-size:15px;font-weight:700;color:#EEF2F0;margin:0 0 8px}
-.w-p{font-size:13.5px;line-height:1.48;color:#DDE4E1;margin:0 0 10px}
-.w-math{
-  background:#121820;border:1px solid #2A3542;border-radius:6px;
-  padding:8px 10px;margin:0 0 10px;overflow-x:auto;white-space:nowrap;
-  font-family:var(--font-mono);font-size:12.5px;color:var(--stage-accent);
+.w-h{font-family:var(--font-sans);font-size:14.5px;font-weight:700;color:#EEF2F0;margin:0 0 8px}
+.w-p{font-size:13px;line-height:1.48;color:#DDE4E1;margin:0 0 10px}
+.w-pan-card{
+  background:#11171F;border:1px solid #2A3542;border-radius:8px;
+  margin:0 0 10px;overflow:hidden;
 }
+.w-math-scroll,.w-code-scroll{
+  overflow-x:auto;padding:10px 12px;white-space:nowrap;cursor:grab;
+  scrollbar-width:none;-ms-overflow-style:none;
+}
+.w-math-scroll::-webkit-scrollbar,.w-code-scroll::-webkit-scrollbar{display:none}
+.w-math-scroll:active,.w-code-scroll:active{cursor:grabbing}
+.w-math-expr{
+  display:inline-flex;align-items:center;gap:6px;
+  font-family:Georgia,"Times New Roman",serif;font-size:15px;line-height:1.3;
+  color:#EEF2F0;padding-right:10px;
+}
+.mvar{font-style:italic;color:#EEF2F0}
+.mop{font-style:normal;color:var(--stage-accent);font-weight:600}
+.msym{font-style:normal;color:#C4D0DA}
+.mmeta{font-family:var(--font-mono);font-size:11px;color:var(--stage-muted);padding-left:6px}
+.mmat{
+  display:inline-grid;grid-template-columns:auto auto;gap:3px 12px;
+  padding:3px 8px;border-left:1.5px solid var(--stage-accent);
+  border-right:1.5px solid var(--stage-accent);border-radius:4px;
+  font-size:13.5px;line-height:1.25;text-align:center;
+}
+.mcol{
+  display:inline-grid;grid-template-columns:auto;gap:3px;
+  padding:3px 7px;border-left:1.5px solid #89A0B3;
+  border-right:1.5px solid #89A0B3;border-radius:4px;
+  font-size:13.5px;line-height:1.25;text-align:center;
+}
+.mfrac{
+  display:inline-flex;flex-direction:column;align-items:center;
+  font-size:12px;line-height:1.1;margin:0 2px;
+}
+.mfrac span:first-child{border-bottom:1px solid #9FB0BE;padding:0 3px 1px}
+.mfrac span:last-child{padding:1px 3px 0}
+.mcases{
+  display:inline-grid;grid-template-columns:auto auto;gap:5px 14px;align-items:center;
+  padding:4px 8px 4px 10px;border-left:2px solid var(--stage-accent);
+  border-radius:8px 0 0 8px;font-size:13px;line-height:1.35;text-align:left;
+}
+.mcond{font-family:var(--font-mono);font-size:11px;color:var(--stage-muted)}
+.w-pan-bar{
+  display:flex;justify-content:space-between;align-items:center;gap:8px;
+  border-top:1px solid #1E2833;padding:4px 10px;background:#0C1117;
+  font-family:var(--font-mono);font-size:10px;color:var(--stage-muted);
+}
+.w-pan-btn{
+  appearance:none;background:transparent;border:0;padding:2px 4px;
+  font-family:var(--font-mono);font-size:10.5px;font-weight:600;
+  color:var(--stage-accent);cursor:pointer;
+}
+.w-pan-btn:hover{text-decoration:underline}
 .w-math-refused{
   background:#22160A;border:1px solid var(--stage-signal);border-radius:6px;
   padding:8px 10px;margin:0 0 10px;font-family:var(--font-mono);font-size:12px;
-  color:var(--stage-signal);
+  color:var(--stage-signal);word-break:break-word;
 }
-.w-code-wrap{
-  position:relative;background:#121820;border:1px solid #2A3542;border-radius:6px;
-  padding:8px 10px;margin:0 0 10px;overflow-x:auto;
+.w-code-scroll pre{margin:0;font-family:var(--font-mono);font-size:11.5px;line-height:1.5;color:#EEF2F0}
+.w-composer{
+  margin-top:14px;padding:12px;border-radius:var(--r-sm);
+  background:#0D1218;border:1px solid var(--stage-border);
 }
-.w-code-wrap pre{margin:0;font-family:var(--font-mono);font-size:11.5px;line-height:1.5;color:#EEF2F0}
-.w-code-cue{font-family:var(--font-mono);font-size:10.5px;color:var(--stage-accent);margin-top:4px}
+.w-composer[hidden]{display:none}
+.w-composer-label{
+  display:block;font-family:var(--font-mono);font-size:11.5px;color:var(--stage-accent);margin-bottom:8px;
+}
+.w-composer textarea{
+  width:100%;min-height:66px;resize:vertical;padding:8px 10px;margin-bottom:8px;
+  background:#121922;color:var(--stage-ink);border:1px solid var(--stage-border);
+  border-radius:var(--r-sm);font-family:var(--font-mono);font-size:12.5px;line-height:1.45;
+}
+.w-composer-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .w-record{
   background:#121820;border:1px solid #2A3542;border-radius:6px;
   padding:8px 10px;margin:0 0 8px;font-size:12px;
@@ -418,10 +500,17 @@ button:disabled,input:disabled{cursor:not-allowed;opacity:.55}
 .dbtn-primary:hover{background:#9EEEDD;border-color:#9EEEDD;color:var(--stage-accent-ink)}
 .wb-panel[hidden]{display:none}
 .btn-group{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+.view-mode-bar{
+  display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;
+  padding:10px 0 12px;border-top:1px solid var(--stage-hairline);
+}
+.view-mode-label{font-family:var(--font-mono);font-size:11.5px;color:var(--stage-muted)}
+.view-mode-btns{display:flex;flex-wrap:wrap;gap:6px}
 .deck-readout{
   background:#0D1218;border:1px solid var(--stage-hairline);border-radius:var(--r-sm);
-  padding:14px;font-size:13.5px;color:var(--stage-ink);margin-top:12px;
+  padding:14px;font-size:13.5px;color:var(--stage-ink);margin-top:4px;
 }
+.deck-readout[hidden]{display:none}
 .deck-readout p{margin:0 0 8px;max-width:none}
 .deck-readout p:last-child{margin:0}
 .deck-kv{
@@ -430,6 +519,21 @@ button:disabled,input:disabled{cursor:not-allowed;opacity:.55}
 }
 .deck-kv dt{font-family:var(--font-mono);font-size:11px;color:var(--stage-muted)}
 .deck-kv dd{margin:2px 0 0;font-family:var(--font-mono);font-size:13px;font-weight:600;color:var(--stage-ink)}
+.room-source-panel{
+  background:#0A0E13;border:1px solid var(--stage-hairline);border-radius:var(--r-sm);
+  overflow:hidden;margin-top:4px;
+}
+.room-source-panel[hidden]{display:none}
+.room-source-head{
+  display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;
+  padding:8px 12px;background:#10161E;border-bottom:1px solid var(--stage-hairline);
+  font-family:var(--font-mono);font-size:11.5px;color:var(--stage-muted);
+}
+.room-source-head strong{color:var(--stage-accent);font-weight:600}
+.room-source-pre{
+  margin:0;padding:12px 14px;font-family:var(--font-mono);font-size:12px;line-height:1.55;
+  color:#EEF2F0;white-space:pre-wrap;word-break:break-word;max-height:240px;overflow-y:auto;
+}
 .wire-banner{
   margin-top:10px;padding:12px;border-radius:var(--r-sm);
   background:#11171F;border:1px solid var(--stage-hairline);
@@ -506,13 +610,69 @@ button:disabled,input:disabled{cursor:not-allowed;opacity:.55}
 .lb-bar{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
 .lb-btn{
   appearance:none;background:#1B222C;color:#EEF2F0;
-  border:1px solid #5B6670;border-radius:var(--r-sm);
+  border:1px solid #66737F;border-radius:var(--r-sm);
   padding:10px 16px;min-height:44px;font-family:var(--font-mono);font-size:13px;font-weight:600;
 }
 .lb-btn:hover{background:#283240;border-color:#EEF2F0}
 .lb-btn:focus-visible{outline:2px solid #7EE6CC;outline-offset:3px}
 
-/* Chapter 4: Providers & Security */
+/* Chapter 4: 6-Stage Architecture Pipeline (band-tint) */
+.pipe-rail{
+  display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;
+  margin-bottom:20px;
+}
+.pipe-step{
+  appearance:none;background:var(--card);color:var(--ink);
+  border:1px solid var(--border);border-radius:var(--r-md);
+  padding:12px 12px 13px;text-align:left;min-height:74px;
+  display:flex;flex-direction:column;gap:4px;
+  transition:border-color .15s var(--ease),background-color .15s var(--ease);
+}
+.pipe-step:hover{background:var(--bg);border-color:var(--ink)}
+.pipe-step[aria-selected="true"]{
+  background:var(--accent);color:var(--accent-ink);border-color:var(--accent);
+}
+.pipe-num{
+  font-family:var(--font-mono);font-size:11px;font-weight:600;
+  color:var(--muted);
+}
+.pipe-step[aria-selected="true"] .pipe-num{color:var(--accent-ink)}
+.pipe-name{font-size:14.5px;font-weight:700;line-height:1.2}
+.pipe-sub{font-family:var(--font-mono);font-size:11px;color:var(--muted);line-height:1.3}
+.pipe-step[aria-selected="true"] .pipe-sub{color:var(--accent-ink)}
+
+.pipe-spec{
+  background:var(--card);border:1px solid var(--hairline);border-radius:var(--r-lg);
+  padding:22px 24px;
+  display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,.8fr);gap:24px;align-items:start;
+}
+.pipe-spec-main h3{font-size:22px;margin-bottom:8px}
+.pipe-spec-main p{font-size:15px;color:var(--muted);margin-bottom:14px}
+.symbol-row{display:flex;flex-wrap:wrap;gap:7px}
+.symbol-tag{
+  font-family:var(--font-mono);font-size:12px;font-weight:500;
+  padding:4px 9px;border-radius:var(--r-sm);
+  background:var(--surface);color:var(--ink);border:1px solid var(--hairline);
+}
+.pipe-kv{
+  margin:0;border-left:1px solid var(--hairline);padding-left:22px;
+  display:grid;gap:12px;
+}
+.pipe-kv div{display:grid;gap:2px}
+.pipe-kv dt{font-family:var(--font-mono);font-size:11.5px;color:var(--muted)}
+.pipe-kv dd{margin:0;font-family:var(--font-mono);font-size:13px;font-weight:600;color:var(--ink)}
+
+@media (max-width:960px){
+  .pipe-rail{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .pipe-spec{grid-template-columns:1fr;gap:18px}
+  .pipe-kv{border-left:0;border-top:1px solid var(--hairline);padding-left:0;padding-top:16px;grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+@media (max-width:640px){
+  .pipe-rail{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .pipe-kv{grid-template-columns:1fr}
+}
+
+/* Chapter 5: Providers, Pairing Walkthrough & Security */
 .table-scroll{
   overflow-x:auto;background:var(--card);border:1px solid var(--hairline);
   border-radius:var(--r-lg);margin-bottom:32px;
@@ -530,8 +690,8 @@ button:disabled,input:disabled{cursor:not-allowed;opacity:.55}
 .proto-table tbody tr:last-child td,.evidence-table tbody tr:last-child td{border-bottom:0}
 
 .prose-pair{
-  display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);
-  gap:28px;border-top:1px solid var(--hairline);padding-top:28px;
+  display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr);
+  gap:28px;border-top:1px solid var(--hairline);padding-top:28px;align-items:start;
 }
 .prose-col{min-width:0}
 .prose-col + .prose-col{border-left:1px solid var(--hairline);padding-left:28px}
@@ -541,12 +701,45 @@ button:disabled,input:disabled{cursor:not-allowed;opacity:.55}
   font-family:var(--font-mono);font-size:12.5px;color:var(--ink);
   padding:10px 12px;background:var(--card);border:1px solid var(--hairline);border-radius:var(--r-sm);
 }
-@media (max-width:860px){
+
+.pair-steps{
+  display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin:14px 0 12px;
+}
+.pair-step-btn{
+  appearance:none;background:var(--card);color:var(--ink);
+  border:1px solid var(--border);border-radius:var(--r-sm);
+  padding:8px 10px;min-height:44px;text-align:left;
+  font-family:var(--font-mono);font-size:11.5px;font-weight:600;line-height:1.3;
+}
+.pair-step-btn:hover{background:var(--surface);border-color:var(--ink)}
+.pair-step-btn[aria-selected="true"]{
+  background:var(--accent);color:var(--accent-ink);border-color:var(--accent);
+}
+.pair-panel{
+  background:var(--card);border:1px solid var(--hairline);border-radius:var(--r-md);
+  padding:16px;
+}
+.pair-panel h4{
+  font-family:var(--font-sans);font-size:15.5px;font-weight:700;margin:0 0 6px;color:var(--ink);
+}
+.pair-panel p{font-size:14.5px;color:var(--muted);margin:0 0 12px}
+.pair-kv{
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;
+  border-top:1px solid var(--hairline);padding-top:10px;margin:0;
+}
+.pair-kv dt{font-family:var(--font-mono);font-size:11px;color:var(--muted)}
+.pair-kv dd{margin:2px 0 0;font-family:var(--font-mono);font-size:12.5px;font-weight:600;color:var(--ink)}
+
+@media (max-width:900px){
   .prose-pair{grid-template-columns:1fr}
   .prose-col + .prose-col{border-left:0;border-top:1px solid var(--hairline);padding-left:0;padding-top:24px}
 }
+@media (max-width:640px){
+  .pair-steps{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .pair-kv{grid-template-columns:1fr}
+}
 
-/* Chapter 5: Evidence Filter + Install */
+/* Chapter 6: Evidence Filter + Install */
 .ev-controls{
   display:flex;flex-wrap:wrap;gap:12px;align-items:end;justify-content:space-between;
   margin-bottom:16px;
@@ -605,7 +798,7 @@ button:disabled,input:disabled{cursor:not-allowed;opacity:.55}
 }
 .code-box pre{margin:0;padding:12px 14px;font-size:12.5px;line-height:1.55;overflow-x:auto}
 .copy-btn{
-  appearance:none;background:#1B222C;color:#EEF2F0;border:1px solid #5B6670;border-radius:var(--r-sm);
+  appearance:none;background:#1B222C;color:#EEF2F0;border:1px solid #66737F;border-radius:var(--r-sm);
   padding:8px 12px;min-height:44px;min-width:56px;font-family:var(--font-mono);font-size:11.5px;font-weight:600;
 }
 .copy-btn:hover{border-color:#7EE6CC}
@@ -635,8 +828,8 @@ button:disabled,input:disabled{cursor:not-allowed;opacity:.55}
   border-top:1px solid var(--hairline);padding:34px 0 46px;font-size:14px;color:var(--muted);
 }
 .colo-top{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:16px;margin-bottom:14px}
-.colo-links{display:flex;flex-wrap:wrap;gap:16px}
-.colo-links a{color:var(--ink);text-decoration:none;padding:6px 0}
+.colo-links{display:flex;flex-wrap:wrap;gap:8px}
+.colo-links a{display:inline-flex;align-items:center;justify-content:center;min-height:44px;min-width:44px;padding:8px 8px;color:var(--ink);text-decoration:none}
 .colo-links a:hover{color:var(--accent);text-decoration:underline}
 </style>
 </head>
@@ -653,6 +846,7 @@ button:disabled,input:disabled{cursor:not-allowed;opacity:.55}
     <nav class="nav-primary" aria-label="Primary">
       <a href="#workbench">Workbench</a>
       <a href="#captures">Captures</a>
+      <a href="#pipeline">Pipeline</a>
       <a href="#providers">Providers</a>
       <a href="#evidence">Evidence</a>
       <a href="#install">Install</a>
@@ -661,7 +855,7 @@ button:disabled,input:disabled{cursor:not-allowed;opacity:.55}
 
     <div class="nav-actions">
       <button class="tbtn" id="themeBtn" type="button" aria-pressed="false">Dark mode</button>
-      <a class="nav-cta" href="#install">Install v0.3.0</a>
+      <a class="nav-cta" href="#install">Install v0.3.1</a>
       <button class="menu-btn" id="menuBtn" type="button" aria-expanded="false" aria-controls="mobileNav">Menu</button>
     </div>
   </div>
@@ -669,9 +863,10 @@ button:disabled,input:disabled{cursor:not-allowed;opacity:.55}
   <nav class="mobile-drawer" id="mobileNav" aria-label="Mobile navigation" hidden>
     <a href="#workbench">Watch workbench</a>
     <a href="#captures">Watch captures</a>
+    <a href="#pipeline">Architecture pipeline</a>
     <a href="#providers">Providers &amp; pairing</a>
     <a href="#evidence">Verification ledger</a>
-    <a href="#install">Install v0.3.0</a>
+    <a href="#install">Install v0.3.1</a>
     <a href="changelog.html">Changelog</a>
   </nav>
 </header>
@@ -688,12 +883,12 @@ button:disabled,input:disabled{cursor:not-allowed;opacity:.55}
             NiroWear is a standalone bring-your-own-key chat client built for circular Wear OS screens. Connect directly to OpenAI, Gemini, Anthropic, or compatible endpoints with encrypted on-device keys and zero truncation tricks.
           </p>
           <div class="hero-cta-row">
-            <a class="btn-primary" href="#install">Install v0.3.0 APK</a>
+            <a class="btn-primary" href="#install">Install v0.3.1 APK</a>
             <a class="btn-secondary" href="#workbench">Try the watch workbench</a>
           </div>
 
           <dl class="hero-ledger">
-            <div><dt>Release APK</dt><dd class="tnum">3.6 MB (v0.3.0)</dd></div>
+            <div><dt>Release APK</dt><dd class="tnum">3.6 MB (v0.3.1)</dd></div>
             <div><dt>Protocols</dt><dd>4 SSE adapters</dd></div>
             <div><dt>Localization</dt><dd class="tnum">127 EN / ID keys</dd></div>
             <div><dt>Key storage</dt><dd>Keystore AES-GCM</dd></div>
@@ -702,6 +897,19 @@ button:disabled,input:disabled{cursor:not-allowed;opacity:.55}
 
         <div class="hero-watch-col">
           <div class="watch-hardware">
+            <svg class="bezel-ticks" viewBox="0 0 400 400" aria-hidden="true">
+              <circle cx="200" cy="200" r="191" fill="none" stroke="#242C36" stroke-width="1"/>
+              <g stroke="#5E6A76" stroke-width="1.2">
+                <line x1="200" y1="4" x2="200" y2="11"/><line x1="200" y1="389" x2="200" y2="396"/>
+                <line x1="4" y1="200" x2="11" y2="200"/><line x1="389" y1="200" x2="396" y2="200"/>
+              </g>
+              <g stroke="#3A4552" stroke-width="1">
+                <line x1="298" y1="30" x2="295" y2="36"/><line x1="370" y1="102" x2="364" y2="105"/>
+                <line x1="370" y1="298" x2="364" y2="295"/><line x1="298" y1="370" x2="295" y2="364"/>
+                <line x1="102" y1="370" x2="105" y2="364"/><line x1="30" y1="298" x2="36" y2="295"/>
+                <line x1="30" y1="102" x2="36" y2="105"/><line x1="102" y1="30" x2="105" y2="36"/>
+              </g>
+            </svg>
             <img id="heroWatchImg" src="screenshots/real-response.png" width="466" height="466" fetchpriority="high" alt="NiroWear rendering prose, heading hierarchy, and blocks inside a 466 pixel watch dial">
             <div class="safe-ring" id="heroSafeRing" aria-hidden="true"></div>
           </div>
@@ -723,17 +931,33 @@ button:disabled,input:disabled{cursor:not-allowed;opacity:.55}
         <span class="chapter-label">01 · Watch layout &amp; streaming lab</span>
         <h2>One circular viewport, tested against hard content</h2>
         <p class="sub">
-          Inspect how <code>ResponseParser</code> turns headings, native LaTeX math, tables, code blocks, and refusal fallbacks into lazy circular items, or run the 16 ms coalesced SSE simulator.
+          Inspect how <code>ResponseParser</code> turns headings, native LaTeX math, piecewise cases, tables, code blocks, and refusal fallbacks into lazy circular items, compare Room raw Markdown against dial blocks, or run the 16 ms coalesced SSE simulator.
         </p>
       </div>
 
       <div class="wb-grid">
         <div class="dial-column">
           <div class="dial-shell" id="wbDialShell">
+            <svg class="bezel-ticks" viewBox="0 0 400 400" aria-hidden="true">
+              <circle cx="200" cy="200" r="196" fill="none" stroke="#1E2730" stroke-width="1"/>
+              <g stroke="#66737F" stroke-width="1.2">
+                <line x1="200" y1="2" x2="200" y2="8"/><line x1="200" y1="392" x2="200" y2="398"/>
+                <line x1="2" y1="200" x2="8" y2="200"/><line x1="392" y1="200" x2="398" y2="200"/>
+              </g>
+              <g stroke="#323E4B" stroke-width="1">
+                <line x1="299" y1="28" x2="296" y2="33"/><line x1="372" y1="101" x2="367" y2="104"/>
+                <line x1="372" y1="299" x2="367" y2="296"/><line x1="299" y1="372" x2="296" y2="367"/>
+                <line x1="101" y1="372" x2="104" y2="367"/><line x1="28" y1="299" x2="33" y2="296"/>
+                <line x1="28" y1="101" x2="33" y2="104"/><line x1="101" y1="28" x2="104" y2="33"/>
+              </g>
+            </svg>
             <div class="dial-topbar" aria-hidden="true">NiroWear · <span id="wbDialTag">466 px</span></div>
             <div class="dial-scroll" id="wbDial" tabindex="0" role="region" aria-label="Simulated Wear OS reader viewport"></div>
             <button class="dial-jump" id="wbJumpBtn" type="button" hidden>Jump to latest</button>
-            <div class="dial-footer" aria-hidden="true"><span>Keyboard</span><span>Voice</span></div>
+            <div class="dial-footer" role="group" aria-label="Watch dial quick inputs">
+              <button class="dial-foot-btn" type="button" id="wbKeyBtn" aria-expanded="false">Keyboard</button>
+              <button class="dial-foot-btn" type="button" id="wbVoiceBtn">Voice</button>
+            </div>
           </div>
 
           <div class="dial-controls-bar" role="group" aria-label="Watch viewport size">
@@ -751,13 +975,22 @@ button:disabled,input:disabled{cursor:not-allowed;opacity:.55}
           <div class="wb-panel" id="panelReader" role="tabpanel" aria-labelledby="tabReaderBtn">
             <div class="btn-group" role="group" aria-label="Reader content scenarios">
               <button class="dbtn" type="button" data-scene="math" aria-pressed="true">LaTeX &amp; Matrix</button>
+              <button class="dbtn" type="button" data-scene="cases" aria-pressed="false">Aligned &amp; Cases</button>
               <button class="dbtn" type="button" data-scene="table" aria-pressed="false">Table -&gt; Records</button>
               <button class="dbtn" type="button" data-scene="code" aria-pressed="false">Wide Code Pan</button>
               <button class="dbtn" type="button" data-scene="refused" aria-pressed="false">Blocked Macro</button>
               <button class="dbtn" type="button" data-scene="empty" aria-pressed="false">Empty Chat</button>
             </div>
 
-            <div class="deck-readout" aria-live="polite">
+            <div class="view-mode-bar">
+              <span class="view-mode-label">Inspector view (compare dial vs persisted DB text)</span>
+              <div class="view-mode-btns" role="group" aria-label="Reader inspector mode">
+                <button class="dbtn" type="button" id="readerViewBlocks" data-reader-view="blocks" aria-pressed="true">Watch Blocks</button>
+                <button class="dbtn" type="button" id="readerViewRoom" data-reader-view="room" aria-pressed="false">Raw Markdown (Room)</button>
+              </div>
+            </div>
+
+            <div class="deck-readout" id="readerTelemetryPanel" aria-live="polite">
               <p id="sceneExplain"></p>
               <dl class="deck-kv">
                 <div><dt>Blocks parsed</dt><dd id="sceneBlocks">-</dd></div>
@@ -765,6 +998,28 @@ button:disabled,input:disabled{cursor:not-allowed;opacity:.55}
                 <div><dt>Contract guard</dt><dd id="sceneGuard">-</dd></div>
               </dl>
             </div>
+
+            <div class="room-source-panel" id="readerRoomPanel" hidden aria-live="polite">
+              <div class="room-source-head">
+                <span><strong>ChatDatabase v3</strong> · <code>StoredMessage.rawContent</code></span>
+                <span id="roomBytesLabel">0 B UTF-8</span>
+              </div>
+              <pre class="room-source-pre" id="roomSourcePre"></pre>
+            </div>
+
+            <form class="w-composer" id="wbComposer" hidden>
+              <label class="w-composer-label" for="wbPromptInput">Keyboard prompt (Markdown &amp; list blocks preview)</label>
+              <textarea id="wbPromptInput">## Watch Keystore Rule
+
+Private keys stay hardware-backed; Room stores encrypted token refs.
+
+- AES-256-GCM ciphertext outside Keystore
+- Backups stay disabled (allowBackup=false)</textarea>
+              <div class="w-composer-actions">
+                <button class="dbtn dbtn-primary" type="submit" id="wbRenderBtn">Render on dial</button>
+                <button class="dbtn" type="button" id="wbComposerCloseBtn">Close</button>
+              </div>
+            </form>
           </div>
 
           <div class="wb-panel" id="panelStream" role="tabpanel" aria-labelledby="tabStreamBtn" hidden>
@@ -888,11 +1143,66 @@ button:disabled,input:disabled{cursor:not-allowed;opacity:.55}
     </div>
   </section>
 
-  <!-- CHAPTER 4: PROVIDERS, PAIRING & SECURITY -->
-  <section class="band" id="providers" style="border-top:1px solid var(--hairline)">
+  <!-- CHAPTER 4: INTERACTIVE ARCHITECTURE PIPELINE -->
+  <section class="band band-tint" id="pipeline">
     <div class="wrap">
       <div class="band-head">
-        <span class="chapter-label">03 · Wire protocols &amp; on-device security</span>
+        <span class="chapter-label">03 · Six-stage runtime pipeline</span>
+        <h2>From voice or Gboard tap to a 466 px circular dial</h2>
+        <p class="sub">
+          Inspect each stage of NiroWear's single-module Kotlin architecture, the exact classes enforcing each boundary, and the verified latency and memory budgets.
+        </p>
+      </div>
+
+      <div class="pipe-rail" role="tablist" aria-label="NiroWear signal pipeline stages">
+        <button class="pipe-step" type="button" role="tab" id="pipeTab0" aria-selected="true" aria-controls="pipePanel" data-pipe="0" tabindex="0">
+          <span class="pipe-num">01</span>
+          <span class="pipe-name">Input</span>
+          <span class="pipe-sub">Voice &amp; Gboard</span>
+        </button>
+        <button class="pipe-step" type="button" role="tab" id="pipeTab1" aria-selected="false" aria-controls="pipePanel" data-pipe="1" tabindex="-1">
+          <span class="pipe-num">02</span>
+          <span class="pipe-name">Storage</span>
+          <span class="pipe-sub">Room v3 Draft</span>
+        </button>
+        <button class="pipe-step" type="button" role="tab" id="pipeTab2" aria-selected="false" aria-controls="pipePanel" data-pipe="2" tabindex="-1">
+          <span class="pipe-num">03</span>
+          <span class="pipe-name">Wire</span>
+          <span class="pipe-sub">4 SSE Adapters</span>
+        </button>
+        <button class="pipe-step" type="button" role="tab" id="pipeTab3" aria-selected="false" aria-controls="pipePanel" data-pipe="3" tabindex="-1">
+          <span class="pipe-num">04</span>
+          <span class="pipe-name">Parser</span>
+          <span class="pipe-sub">16 ms + Cache</span>
+        </button>
+        <button class="pipe-step" type="button" role="tab" id="pipeTab4" aria-selected="false" aria-controls="pipePanel" data-pipe="4" tabindex="-1">
+          <span class="pipe-num">05</span>
+          <span class="pipe-name">Renderer</span>
+          <span class="pipe-sub">Lazy RenderUnits</span>
+        </button>
+        <button class="pipe-step" type="button" role="tab" id="pipeTab5" aria-selected="false" aria-controls="pipePanel" data-pipe="5" tabindex="-1">
+          <span class="pipe-num">06</span>
+          <span class="pipe-name">Dial</span>
+          <span class="pipe-sub">466 px Chord</span>
+        </button>
+      </div>
+
+      <div class="pipe-spec" id="pipePanel" role="tabpanel" aria-labelledby="pipeTab0" aria-live="polite">
+        <div class="pipe-spec-main">
+          <h3 id="pipeTitle"></h3>
+          <p id="pipeDesc"></p>
+          <div class="symbol-row" id="pipeSymbols"></div>
+        </div>
+        <dl class="pipe-kv" id="pipeKv"></dl>
+      </div>
+    </div>
+  </section>
+
+  <!-- CHAPTER 5: PROVIDERS, PAIRING & SECURITY -->
+  <section class="band" id="providers">
+    <div class="wrap">
+      <div class="band-head">
+        <span class="chapter-label">04 · Wire protocols &amp; on-device security</span>
         <h2>Explicit adapters, private LAN pairing, and fail-closed keys</h2>
         <p class="sub">
           Model names never choose the wire format. Every profile binds explicitly to one of four streaming SSE adapters and validates protocol terminal events before marking a turn complete.
@@ -945,17 +1255,32 @@ button:disabled,input:disabled{cursor:not-allowed;opacity:.55}
 
       <div class="prose-pair">
         <div class="prose-col">
-          <h3>Phone pairing over local Wi-Fi</h3>
+          <h3>Private-LAN phone pairing walkthrough</h3>
           <p>
-            Typing a 90-character API key on a watch keyboard is slow, so <strong>Set up from phone</strong> opens an ephemeral 120-second <code>https://</code> listener bound strictly to private LAN interfaces (never routed through external relays). Reach it via NFC HCE Type 2 NDEF tag (APDU <code>6A82</code> outside active windows), integer-scaled QR code (330 px at 466, 248 px at 384), or displayed URL. Your phone browser and watch derive an ephemeral ECDH P-256 shared key and encrypt the payload under AES-GCM bound to a 128-bit single-use token.
+            Entering a long API key on a watch keyboard is error-prone. Step through the 4-stage ephemeral local Wi-Fi handshake built in <code>PairingServer</code>, <code>NfcPairingService</code>, and <code>SecretStore</code>.
           </p>
-          <div class="spec-inline">Caps: 16 KiB max body · 8 concurrent threads · compare-and-set single burn</div>
+
+          <div class="pair-steps" role="tablist" aria-label="Phone pairing protocol steps">
+            <button class="pair-step-btn" type="button" role="tab" id="pairTab0" aria-selected="true" aria-controls="pairPanel" data-pair="0" tabindex="0">1. LAN HTTPS</button>
+            <button class="pair-step-btn" type="button" role="tab" id="pairTab1" aria-selected="false" aria-controls="pairPanel" data-pair="1" tabindex="-1">2. ECDH + AAD</button>
+            <button class="pair-step-btn" type="button" role="tab" id="pairTab2" aria-selected="false" aria-controls="pairPanel" data-pair="2" tabindex="-1">3. Keystore</button>
+            <button class="pair-step-btn" type="button" role="tab" id="pairTab3" aria-selected="false" aria-controls="pairPanel" data-pair="3" tabindex="-1">4. Teardown</button>
+          </div>
+
+          <div class="pair-panel" id="pairPanel" role="tabpanel" aria-labelledby="pairTab0" aria-live="polite">
+            <h4 id="pairTitle"></h4>
+            <p id="pairDesc"></p>
+            <dl class="pair-kv" id="pairKv"></dl>
+          </div>
         </div>
 
         <div class="prose-col">
           <h3>Keystore encryption &amp; linear edits</h3>
           <p>
-            Keys are encrypted inside <code>SecretStore</code> with a non-exportable Android Keystore AES-256-GCM key, version byte, 12-byte IV, and credential-reference AAD. Any Keystore invalidation fails closed and prompts re-entry rather than falling back to plaintext; <code>allowBackup="false"</code> and <code>FLAG_SECURE</code> stay enforced. Editing an earlier user message executes one Room transaction replacing that row and deleting all messages after it, keeping history strictly linear.
+            Keys are encrypted inside <code>SecretStore</code> with a non-exportable Android Keystore AES-256-GCM key, version byte <code>1</code>, 12-byte IV, and <code>credentialRef</code> AAD inside <code>noBackupFilesDir</code>. Transient Keystore IPC errors never destroy sibling profiles' keys, while permanent key invalidation fails closed and prompts re-entry rather than falling back to plaintext.
+          </p>
+          <p>
+            Editing an earlier user message executes one Room transaction replacing that row and deleting all messages after it, keeping history strictly linear across switched providers.
           </p>
           <div class="spec-inline">Manifest: allowBackup="false" · usesCleartextTraffic="false" · FLAG_SECURE</div>
         </div>
@@ -963,21 +1288,21 @@ button:disabled,input:disabled{cursor:not-allowed;opacity:.55}
     </div>
   </section>
 
-  <!-- CHAPTER 5: VERIFIED EVIDENCE, HONEST BOUNDARIES & INSTALL -->
+  <!-- CHAPTER 6: VERIFIED EVIDENCE, HONEST BOUNDARIES & INSTALL -->
   <section class="band band-tint" id="evidence">
     <div class="wrap">
       <div class="band-head">
-        <span class="chapter-label">04 · Empirical measurements &amp; boundaries</span>
+        <span class="chapter-label">05 · Empirical measurements &amp; boundaries</span>
         <h2>Verification ledger from Gradle XML and adb logs</h2>
         <p class="sub">
-          Emulator metrics come from Wear OS 5 AVD <code>nirowear-b</code> (466 x 466 px @ 320 dpi, headless SwiftShader); dated physical Xiaomi Watch 2 hardware runs sit separately from emulator rows.
+          Host gates cover the signed <code>v0.3.1</code> cut; emulator metrics come from Wear OS 5 AVD <code>nirowear-b</code> (466 x 466 px @ 320 dpi, headless SwiftShader); dated physical Xiaomi Watch 2 hardware runs sit separately.
         </p>
       </div>
 
       <div class="ev-controls">
         <div class="btn-group" role="group" aria-label="Filter verification scope" style="margin:0">
           <button class="seg-btn" type="button" data-scope="all" aria-pressed="true">All</button>
-          <button class="seg-btn" type="button" data-scope="avd" aria-pressed="false">v0.3.0 AVD</button>
+          <button class="seg-btn" type="button" data-scope="avd" aria-pressed="false">v0.3.1 &amp; AVD</button>
           <button class="seg-btn" type="button" data-scope="host" aria-pressed="false">Host &amp; CI</button>
           <button class="seg-btn" type="button" data-scope="watch" aria-pressed="false">Watch 2 (Historical)</button>
         </div>
@@ -1000,13 +1325,13 @@ button:disabled,input:disabled{cursor:not-allowed;opacity:.55}
           <tbody>
             <tr data-cat="host">
               <td>Release &amp; post-cut JVM suite</td>
-              <td>Host &amp; CI (<code>main</code>)</td>
-              <td><code>v0.3.0</code> tag cut (<code>versionCode 16</code>, <code>3,779,197 B</code>, SHA-256 <code>d94a5af3...040ca2</code>): <strong>315 passed, 1 skipped</strong> (316 tests / 51 suites). Latest post-cut <code>main</code>: <strong>316 passed, 1 skipped</strong> (317 tests / 51 suites, <code>0</code> failures), <code>ktlintCheck</code> <strong>0 violations</strong>, <code>lintDebug</code> <strong>0 errors, 0 code warnings</strong> (14 dependency-update advisories).</td>
+              <td>Host &amp; CI (<code>v0.3.1</code> &amp; <code>main</code>)</td>
+              <td><code>v0.3.1</code> tag cut (<code>versionCode 17</code>, <code>3,778,802 B</code>, SHA-256 <code>f623a168...22fc2127</code>, <code>CN=NiroWear Release</code>): <strong>317</strong> JVM tests / <strong>51</strong> suites (<strong>316 passed, 1 skipped, 0 failures</strong>). Post-cut <code>main</code> hardening/opt pass: <strong>319 passed, 1 skipped, 0 failures</strong> (<strong>320</strong> tests / <strong>51</strong> suites), <code>ktlintCheck</code> <strong>0 violations</strong>, <code>lintDebug</code> <strong>0 errors, 0 source warnings</strong> (<strong>7</strong> pinned dependency-update advisories).</td>
             </tr>
             <tr data-cat="avd">
-              <td>Wear OS 5 closeout &amp; CI smoke</td>
-              <td>AVD 466 px (<code>v0.3.0</code>)</td>
-              <td>CI smoke <strong>10/10 classes</strong> green on Wear OS 5 API 34; closeout gate <strong>11/11 classes (19/19 tests)</strong>; signed <code>v0.2.1 -&gt; v0.3.0</code> upgrade produced <code>0 FATAL</code> logcat lines. Cold start median <strong>549 ms</strong>, first frame <strong>365.993 ms</strong>, warm <strong>37 ms</strong>, signed scroll <strong>2.92% jank</strong> (377 frames), PSS <strong>30,836 KB</strong>.</td>
+              <td>CI instrumented &amp; Wear OS 5 AVD</td>
+              <td>AVD 466 px (<code>v0.3.1</code> / <code>v0.3.0</code>)</td>
+              <td><code>v0.3.1</code> CI instrumented smoke passes <strong>10/10 classes</strong> on Wear OS 5 API 34 (<code>466 x 466</code>), including <code>CompatibleChatTest#retrySavingClearsStaleLiveAnswerError</code>. <code>v0.3.0</code> closeout baseline recorded <strong>11/11 classes (19/19 tests)</strong>, <code>0 FATAL</code> upgrade from <code>v0.2.1</code>, cold start median <strong>549 ms</strong>, first frame <strong>365.993 ms</strong>, warm <strong>37 ms</strong>, signed scroll <strong>2.92% jank</strong> (377 frames), PSS <strong>30,836 KB</strong>.</td>
             </tr>
             <tr data-cat="avd">
               <td>5,000-msg upgrade &amp; search scale</td>
@@ -1014,14 +1339,14 @@ button:disabled,input:disabled{cursor:not-allowed;opacity:.55}
               <td>Room v2 schema (<code>9ae11899...</code>) with <strong>200 chats / 5,000 messages</strong> migrated to v3 in <strong>286.48 ms</strong>; 50 <code>LIKE</code> queries measured <strong>0.53 ms</strong> median (<strong>4.15 ms</strong> P95); 18-swipe History scroll <strong>494 frames / 2.23% jank</strong>; 4,485 B torture fixture <strong>460 frames / 6.09% jank</strong> on SwiftShader debug; 4 KB mixed stream parse P95 <strong>1.080 ms</strong>.</td>
             </tr>
             <tr data-cat="host avd">
-              <td>Localization &amp; TalkBack order</td>
+              <td>Localization, cache &amp; TalkBack order</td>
               <td>Host &amp; AVD 466 px</td>
-              <td>Exact <strong>127 matching keys</strong> in <code>values/strings.xml</code> and <code>values-in/strings.xml</code> (0 missing/extra); TalkBack traversal <code>Menu -&gt; Reader -&gt; Footer</code> verified (<code>TalkBackTraversalOrderTest</code>); code-block right-edge pan cue verified (<code>CodeBlockPanCueTest</code>).</td>
+              <td>Exact <strong>127 matching keys</strong> in <code>values/strings.xml</code> and <code>values-in/strings.xml</code> (0 missing/extra); locale-change <code>streamPrefixCache.clear()</code> confined to <code>parseDispatcher</code>; TalkBack traversal <code>Menu -&gt; Reader -&gt; Footer</code> verified (<code>TalkBackTraversalOrderTest</code>); code-block right-edge pan cue verified (<code>CodeBlockPanCueTest</code>).</td>
             </tr>
             <tr data-cat="watch">
-              <td>Xiaomi Watch 2 (dated runs)</td>
-              <td>Watch 2 HW (2026-11-16/17)</td>
-              <td><code>v0.2.1</code> release cold start median <strong>723 ms</strong> (5 runs). Debug <code>23efc01</code> Adreno scroll: <strong>761 frames / 1.18% jank</strong>; 20-min stress +3.2 MB PSS at <code>Thermal Status: 0</code>; 38/45 instrumented classes + 4 teardown crashes tracked in #84 (cold debug #65 4,375.5 ms). <strong>Physical Watch 2 checks were skipped on <code>v0.3.0</code>.</strong></td>
+              <td>Xiaomi Watch 2 (v0.3.1 + dated runs)</td>
+              <td>Watch 2 HW (<code>armeabi-v7a</code>, API 34)</td>
+              <td>Signed <code>v0.3.1</code> non-<code>DEBUGGABLE</code> release: cold start median <strong>694 ms</strong> (<code>683-818 ms</code>, 5 runs), warm <code>HOT</code> median <strong>71 ms</strong> (<code>64-81 ms</code>), <strong>PSS 31,575 KB</strong> (<code>RSS 119,780 KB</code>), <code>Thermal Status: 0</code>, battery <code>23 -&gt; 78</code> USB powered, idle 18-swipe <code>gfxinfo</code> <strong>54 frames</strong> (<code>15 ms</code> P50 / <code>25 ms</code> P95, 0 legacy jank, 22 deadline-missed / 1 GPU 4,950 ms outlier). Probes confirmed <code>D5</code> rotary absence (<code>slate-spi</code> <code>KEYBOARD</code>), <code>D4</code> HCE <code>NfcPairingService</code> registered (<code>nfc.hce=true</code>), and <code>D3</code> voice/TalkBack installed. Debug <code>c092887d</code>: 20 UI/renderer classes + <code>measuredAnswers...</code> passed; <code>PairingUiTest</code> replay, MockWebServer, and <code>InputResultUiTest</code> 6/8 remain tracked. (Prior <code>23efc01</code> Adreno scroll: 761 frames / 1.18% jank.)</td>
             </tr>
           </tbody>
         </table>
@@ -1033,25 +1358,25 @@ button:disabled,input:disabled{cursor:not-allowed;opacity:.55}
       </div>
 
       <div class="boundaries-box">
-        <h3>Open hardware &amp; policy boundaries on v0.3.0</h3>
+        <h3>Verified Watch 2 baseline &amp; remaining open boundaries</h3>
         <p>
-          Physical Xiaomi Watch 2 verification stays deferred on <code>v0.3.0</code>: battery drain percentage, sustained thermal levels above <code>Thermal Status: 0</code>, TalkBack speaker audio, dictation accuracy, Gboard physical hardware taps, rotary crown absence, and phone browser certificate click-through remain open. Pre-upgrade v2 database injection onto the signed shipping container remains intentionally blocked by <code>allowBackup="false"</code> and <code>debuggable=false</code>.
+          Physical Xiaomi Watch 2 testing on signed <code>v0.3.1</code> closed rotary-absence confirmation (<code>#47</code>), release cold/warm startup and PSS (<code>#65</code>, <code>#89</code>), HCE APDU routing (<code>D4</code>), and speech/TalkBack registration (<code>D3</code>). Open boundaries on physical hardware: replay handshake / MockWebServer / wireless ADB drops in <code>#84</code>, <code>InputResultUiTest</code> 6/8 and Turn 2 trace in <code>#62</code>, human spoken voice accuracy and TalkBack speaker audio in <code>#27</code>, and second-phone Chrome certificate click-through in <code>#28</code>. Pre-upgrade v2 database injection onto the signed container stays blocked by <code>allowBackup="false"</code> and <code>debuggable=false</code>.
         </p>
         <div class="issue-links">
           <a class="issue-link" href="https://github.com/michaelxdips/NiroWear/issues/27">#27 Watch 2 acceptance</a>
           <a class="issue-link" href="https://github.com/michaelxdips/NiroWear/issues/28">#28 Phone LAN cert UX</a>
-          <a class="issue-link" href="https://github.com/michaelxdips/NiroWear/issues/47">#47 Rotary absence</a>
+          <a class="issue-link" href="https://github.com/michaelxdips/NiroWear/issues/47">#47 Rotary absence (closed)</a>
           <a class="issue-link" href="https://github.com/michaelxdips/NiroWear/issues/62">#62 Composer trace</a>
-          <a class="issue-link" href="https://github.com/michaelxdips/NiroWear/issues/65">#65 Debug cold read</a>
+          <a class="issue-link" href="https://github.com/michaelxdips/NiroWear/issues/65">#65 Cold start (closed)</a>
           <a class="issue-link" href="https://github.com/michaelxdips/NiroWear/issues/84">#84 Watch 2 logcat</a>
-          <a class="issue-link" href="https://github.com/michaelxdips/NiroWear/issues/89">#89 Watch 2 v0.3.0 timing</a>
+          <a class="issue-link" href="https://github.com/michaelxdips/NiroWear/issues/89">#89 v0.3.1 timing (closed)</a>
         </div>
       </div>
 
       <!-- INSTALL SECTION (COMBINED INTO CLOSING BAND) -->
       <div class="install-split" id="install">
         <div class="install-box">
-          <span class="chapter-label">05 · Install &amp; verify</span>
+          <span class="chapter-label">06 · Install &amp; verify</span>
           <h2 style="font-size:clamp(24px,2.8vw,34px);margin-bottom:10px">Get NiroWear on your watch</h2>
           <p style="font-size:15px;color:var(--muted);margin-bottom:16px">
             Needs Wear OS 3+ (minSdk 30), 32- or 64-bit ARM, 3.6 MB of storage, and a provider key you own, typed on the watch or sent from a phone on the same Wi-Fi. No account, no relay, no server of ours.
@@ -1064,15 +1389,15 @@ button:disabled,input:disabled{cursor:not-allowed;opacity:.55}
 
           <div class="ipanel" id="ipApk" role="tabpanel" aria-labelledby="itApk">
             <p style="font-size:14px;color:var(--muted)">
-              Download <code>app-release.apk</code> from the latest GitHub Release and verify SHA-256 before installing. Builds <code>0.1.1</code> through <code>0.3.0</code> share <code>CN=NiroWear Release</code> and upgrade in place.
+              Download <code>app-release.apk</code> from the latest GitHub Release and verify SHA-256 before installing. Builds <code>0.1.1</code> through <code>0.3.1</code> share <code>CN=NiroWear Release</code> and upgrade in place.
             </p>
             <div class="code-box">
               <div class="code-bar"><span>Terminal</span><button class="copy-btn" type="button" data-copy="cmdApk">Copy</button></div>
               <pre id="cmdApk">adb install -r app-release.apk
 sha256sum app-release.apk
-# Expected v0.3.0: d94a5af3755b1c3d86257525cd643042db4cf64d7f755cbcdcab5ea23e040ca2</pre>
+# Expected v0.3.1: f623a168eb1696f8c5378c72a478b6d0616c9a447505b2e4ed82d92122fc2127</pre>
             </div>
-            <a class="btn-primary" href="https://github.com/michaelxdips/NiroWear/releases/latest">Download v0.3.0 on GitHub Releases</a>
+            <a class="btn-primary" href="https://github.com/michaelxdips/NiroWear/releases/latest">Download v0.3.1 on GitHub Releases</a>
           </div>
 
           <div class="ipanel" id="ipSrc" role="tabpanel" aria-labelledby="itSrc" hidden>
@@ -1227,6 +1552,7 @@ cd NiroWear
       if (wbDialShell) wbDialShell.classList.toggle("is-384", sz === "384");
       if (wbDialTag) wbDialTag.textContent = sz + " px";
       dialSizeBtns.forEach(function (b) { b.setAttribute("aria-pressed", b === btn ? "true" : "false"); });
+      window.setTimeout(updatePanLabels, 240);
     });
   });
 
@@ -1236,16 +1562,79 @@ cd NiroWear
       blocks: "3 blocks",
       units: "3 lazy units",
       guard: "Half-scale floor enforced",
+      raw: "## Authenticated GCM tag\n\nVerification derives GHASH over associated data before releasing key bytes:\n\n$$\nT = \\mathrm{GHASH}_H(A \\parallel C) \\oplus E_K(J_0) \\quad [\\text{iv: 12B, tag: 16B}]\n$$\n\n$$\n\\begin{pmatrix} a_{11} & a_{12} \\\\ a_{21} & a_{22} \\end{pmatrix}\n\\times\n\\begin{pmatrix} x_1 \\\\ x_2 \\end{pmatrix}\n=\n\\begin{pmatrix} y_1 \\\\ y_2 \\end{pmatrix}\n+ \\frac{\\varepsilon}{2}\n$$",
       html: "<h3 class=\"w-h\">Authenticated GCM tag</h3>" +
         "<p class=\"w-p\">Verification derives GHASH over associated data before releasing key bytes:</p>" +
-        "<div class=\"w-math\">T = GHASH_H(A || C) xor E_K(J_0) &nbsp; [iv: 12B, tag: 16B]</div>" +
-        "<div class=\"w-math\">[a_11 &nbsp; a_12 ; a_21 &nbsp; a_22] * [x_1 ; x_2] = [y_1 ; y_2]</div>"
+        "<div class=\"w-pan-card\">" +
+          "<div class=\"w-math-scroll\" tabindex=\"0\" aria-label=\"Display equation with horizontal pan\">" +
+            "<div class=\"w-math-expr\">" +
+              "<span class=\"mvar\">T</span><span class=\"msym\">=</span>" +
+              "<span class=\"mop\">GHASH<sub><span class=\"mvar\">H</span></sub></span>(<span class=\"mvar\">A</span><span class=\"msym\">&#x2225;</span><span class=\"mvar\">C</span>)" +
+              "<span class=\"mop\">&#x2295;</span><span class=\"mvar\">E<sub>K</sub></span>(<span class=\"mvar\">J<sub>0</sub></span>)" +
+              "<span class=\"mmeta\">[iv: 12B, tag: 16B]</span>" +
+            "</div>" +
+          "</div>" +
+          "<div class=\"w-pan-bar\"><span>Display math · bitmap cached</span><button class=\"w-pan-btn\" type=\"button\" data-pan-box>Pan -&gt;</button></div>" +
+        "</div>" +
+        "<div class=\"w-pan-card\">" +
+          "<div class=\"w-math-scroll\" tabindex=\"0\" aria-label=\"2x2 Matrix multiplication with horizontal pan\">" +
+            "<div class=\"w-math-expr\">" +
+              "<span class=\"mmat\"><span class=\"mvar\">a<sub>11</sub></span><span class=\"mvar\">a<sub>12</sub></span><span class=\"mvar\">a<sub>21</sub></span><span class=\"mvar\">a<sub>22</sub></span></span>" +
+              "<span class=\"mop\">&times;</span>" +
+              "<span class=\"mcol\"><span class=\"mvar\">x<sub>1</sub></span><span class=\"mvar\">x<sub>2</sub></span></span>" +
+              "<span class=\"msym\">=</span>" +
+              "<span class=\"mcol\"><span class=\"mvar\">y<sub>1</sub></span><span class=\"mvar\">y<sub>2</sub></span></span>" +
+              "<span class=\"msym\">+</span>" +
+              "<span class=\"mfrac\"><span><span class=\"mvar\">&epsilon;</span></span><span>2</span></span>" +
+            "</div>" +
+          "</div>" +
+          "<div class=\"w-pan-bar\"><span>2&times;2 matrix · JLaTeXMath</span><button class=\"w-pan-btn\" type=\"button\" data-pan-box>Pan -&gt;</button></div>" +
+        "</div>"
+    },
+    cases: {
+      explain: "Piecewise cases and aligned derivations pan horizontally inside a single bounded bitmap rather than shrinking subscripts below readable wear-screen size.",
+      blocks: "3 blocks",
+      units: "3 lazy units",
+      guard: "Pan before 0.5x scale",
+      raw: "## Coalescer & scale guard\n\nPiecewise delay used by `StreamParse.coalesceDelayMs` and `NativeMathRenderer` aspect ratio bound:\n\n$$\n\\Delta t(\\text{now}, t_0) =\n\\begin{cases}\n0, & \\text{if } \\text{now} - t_0 < 0 \\text{ or } \\text{now} - t_0 \\ge 16 \\\\\n16 - (\\text{now} - t_0), & \\text{otherwise}\n\\end{cases}\n$$\n\n$$\n\\begin{aligned}\nr &= \\min\\!\\left(\\frac{W_{\\max}}{w},\\; \\frac{H_{\\max}}{h},\\; \\sqrt{\\frac{A_{\\max}}{w \\cdot h}}\\right) \\\\\ns_{\\text{next}} &= \\begin{cases} \\text{fallback}, & r \\le 0.5 \\\\ s_0 \\cdot r, & 0.5 < r < 1 \\end{cases}\n\\end{aligned}\n$$",
+      html: "<h3 class=\"w-h\">Coalescer &amp; scale guard</h3>" +
+        "<p class=\"w-p\">Piecewise delay in <code>coalesceDelayMs</code> and <code>NativeMathRenderer</code> aspect bound:</p>" +
+        "<div class=\"w-pan-card\">" +
+          "<div class=\"w-math-scroll\" tabindex=\"0\" aria-label=\"Piecewise cases formula with horizontal pan\">" +
+            "<div class=\"w-math-expr\">" +
+              "<span class=\"msym\">&Delta;<span class=\"mvar\">t</span>(<span class=\"mvar\">now</span>, <span class=\"mvar\">t<sub>0</sub></span>) =</span>" +
+              "<span class=\"mcases\">" +
+                "<span>0</span><span class=\"mcond\">if now - t<sub>0</sub> &lt; 0 or &ge; 16 ms</span>" +
+                "<span>16 - (<span class=\"mvar\">now</span> - <span class=\"mvar\">t<sub>0</sub></span>)</span><span class=\"mcond\">otherwise (throttle)</span>" +
+              "</span>" +
+            "</div>" +
+          "</div>" +
+          "<div class=\"w-pan-bar\"><span>Piecewise cases · 16 ms throttle</span><button class=\"w-pan-btn\" type=\"button\" data-pan-box>Pan -&gt;</button></div>" +
+        "</div>" +
+        "<div class=\"w-pan-card\">" +
+          "<div class=\"w-math-scroll\" tabindex=\"0\" aria-label=\"Aligned math scale floor derivation with horizontal pan\">" +
+            "<div class=\"w-math-expr\">" +
+              "<span class=\"mvar\">r</span><span class=\"msym\">=</span>" +
+              "<span class=\"mop\">min</span>(" +
+              "<span class=\"mfrac\"><span>16384</span><span><span class=\"mvar\">w</span></span></span>," +
+              "<span class=\"mfrac\"><span>1024</span><span><span class=\"mvar\">h</span></span></span>," +
+              "<span class=\"msym\">&radic;(</span><span class=\"mfrac\"><span>3&times;10<sup>6</sup></span><span><span class=\"mvar\">w&middot;h</span></span></span><span class=\"msym\">)</span>" +
+              ") <span class=\"msym\">&rarr;</span> " +
+              "<span class=\"mcases\">" +
+                "<span>source fallback</span><span class=\"mcond\">r &le; 0.5</span>" +
+                "<span><span class=\"mvar\">s<sub>0</sub> &middot; r</span></span><span class=\"mcond\">0.5 &lt; r &lt; 1</span>" +
+              "</span>" +
+            "</div>" +
+          "</div>" +
+          "<div class=\"w-pan-bar\"><span>Aligned guard · MIN_SCALE 0.5f</span><button class=\"w-pan-btn\" type=\"button\" data-pan-box>Pan -&gt;</button></div>" +
+        "</div>"
     },
     table: {
       explain: "A multi-column Markdown table never compresses onto a 28-character chord. RenderUnit emits one lazy vertical record per row with repeated column headers (tested to 120 rows).",
       blocks: "2 blocks",
       units: "4 lazy row units",
       guard: "Verified to 120 rows",
+      raw: "## Adapter summary\n\n| Adapter | Terminal |\n|---|---|\n| OpenAI | response.completed |\n| Anthropic | message_stop |\n| Gemini | finishReason STOP |",
       html: "<h3 class=\"w-h\">Adapter summary</h3>" +
         "<div class=\"w-record\"><div class=\"w-record-row\"><span>Adapter</span><span>OpenAI</span></div><div class=\"w-record-row\"><span>Terminal</span><span>response.completed</span></div></div>" +
         "<div class=\"w-record\"><div class=\"w-record-row\"><span>Adapter</span><span>Anthropic</span></div><div class=\"w-record-row\"><span>Terminal</span><span>message_stop</span></div></div>" +
@@ -1256,14 +1645,19 @@ cd NiroWear
       blocks: "2 blocks",
       units: "2 lazy units",
       guard: "24-line chunk cap",
+      raw: "## Keystore decrypt envelope\n\n```kotlin\nval cipher = Cipher.getInstance(\"AES/GCM/NoPadding\")\ncipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(128, iv))\ncipher.updateAAD(credentialRef.toByteArray(Charsets.UTF_8))\nreturn SecretValue(String(cipher.doFinal(ciphertext)))\n```",
       html: "<h3 class=\"w-h\">Keystore decrypt envelope</h3>" +
-        "<div class=\"w-code-wrap\"><pre>val cipher = Cipher.getInstance(\"AES/GCM/NoPadding\")\ncipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(128, iv))\ncipher.updateAAD(credentialRef.toByteArray(Charsets.UTF_8))\nreturn SecretValue(String(cipher.doFinal(ciphertext)))</pre><div class=\"w-code-cue\">Swipe horizontally for full line -&gt;</div></div>"
+        "<div class=\"w-pan-card\">" +
+          "<div class=\"w-code-scroll\" tabindex=\"0\" aria-label=\"Kotlin snippet with horizontal pan\"><pre>val cipher = Cipher.getInstance(\"AES/GCM/NoPadding\")\ncipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(128, iv))\ncipher.updateAAD(credentialRef.toByteArray(Charsets.UTF_8))\nreturn SecretValue(String(cipher.doFinal(ciphertext)))</pre></div>" +
+          "<div class=\"w-pan-bar\"><span>Kotlin · 24-line unit</span><button class=\"w-pan-btn\" type=\"button\" data-pan-box>Pan -&gt;</button></div>" +
+        "</div>"
     },
     refused: {
       explain: "Error state (R-27): NativeMathGuard rejects file-inclusion macros (\\input), macro definitions (\\def), and unbalanced braces, falling back to readable source text rather than throwing.",
       blocks: "2 blocks",
       units: "2 lazy units",
       guard: "Macro refused safely",
+      raw: "## Guard fallback\n\nBlocked macro sequence detected before JLaTeXMath parse:\n\n$$\n\\input{/etc/passwd}\n$$",
       html: "<h3 class=\"w-h\">Guard fallback</h3>" +
         "<p class=\"w-p\">Blocked macro sequence detected before JLaTeXMath parse:</p>" +
         "<div class=\"w-math-refused\">\\input{/etc/passwd} &nbsp; -&gt; &nbsp; rendered as plain text source</div>"
@@ -1273,6 +1667,7 @@ cd NiroWear
       blocks: "0 blocks",
       units: "Empty state slot",
       guard: "Keyboard & Voice ready",
+      raw: "(Room messages table has 0 rows for active conversation)",
       html: "<div class=\"w-empty\"><strong>Use keyboard or voice to start.</strong><span>Open Menu -&gt; Providers / model if no API key is configured.</span></div>"
     }
   };
@@ -1282,6 +1677,33 @@ cd NiroWear
   var sceneBlocks = document.getElementById("sceneBlocks");
   var sceneUnits = document.getElementById("sceneUnits");
   var sceneGuard = document.getElementById("sceneGuard");
+  var readerViewBlocks = document.getElementById("readerViewBlocks");
+  var readerViewRoom = document.getElementById("readerViewRoom");
+  var readerTelemetryPanel = document.getElementById("readerTelemetryPanel");
+  var readerRoomPanel = document.getElementById("readerRoomPanel");
+  var roomSourcePre = document.getElementById("roomSourcePre");
+  var roomBytesLabel = document.getElementById("roomBytesLabel");
+  var currentRawMarkdown = SCENES.math.raw;
+  var currentReaderView = "blocks";
+
+  function syncRoomSourceView(rawText) {
+    currentRawMarkdown = rawText || "";
+    if (roomSourcePre) roomSourcePre.textContent = currentRawMarkdown;
+    if (roomBytesLabel) {
+      var byteCount = typeof TextEncoder !== "undefined" ? new TextEncoder().encode(currentRawMarkdown).length : currentRawMarkdown.length;
+      roomBytesLabel.textContent = byteCount + " B UTF-8";
+    }
+  }
+
+  function setReaderView(mode) {
+    currentReaderView = mode === "room" ? "room" : "blocks";
+    if (readerViewBlocks) readerViewBlocks.setAttribute("aria-pressed", currentReaderView === "blocks" ? "true" : "false");
+    if (readerViewRoom) readerViewRoom.setAttribute("aria-pressed", currentReaderView === "room" ? "true" : "false");
+    if (readerTelemetryPanel) readerTelemetryPanel.hidden = currentReaderView !== "blocks";
+    if (readerRoomPanel) readerRoomPanel.hidden = currentReaderView !== "room";
+  }
+  if (readerViewBlocks) readerViewBlocks.addEventListener("click", function () { setReaderView("blocks"); });
+  if (readerViewRoom) readerViewRoom.addEventListener("click", function () { setReaderView("room"); });
 
   function renderScene(key) {
     var s = SCENES[key] || SCENES.math;
@@ -1291,12 +1713,73 @@ cd NiroWear
     if (sceneBlocks) sceneBlocks.textContent = s.blocks;
     if (sceneUnits) sceneUnits.textContent = s.units;
     if (sceneGuard) sceneGuard.textContent = s.guard;
+    syncRoomSourceView(s.raw);
     sceneBtns.forEach(function (b) { b.setAttribute("aria-pressed", b.getAttribute("data-scene") === key ? "true" : "false"); });
+    if (typeof updatePanLabels === "function") window.setTimeout(updatePanLabels, 10);
   }
   sceneBtns.forEach(function (b) {
     b.addEventListener("click", function () { renderScene(b.getAttribute("data-scene")); });
   });
   renderScene("math");
+
+  var wbKeyBtn = document.getElementById("wbKeyBtn");
+  var wbVoiceBtn = document.getElementById("wbVoiceBtn");
+  var wbComposer = document.getElementById("wbComposer");
+  var wbPromptInput = document.getElementById("wbPromptInput");
+  var wbComposerCloseBtn = document.getElementById("wbComposerCloseBtn");
+
+  function renderCustomMarkdown(md) {
+    var raw = (md || "").trim();
+    if (!raw) { renderScene("empty"); return; }
+    var html = simpleBlocksHtml(raw);
+    if (wbDial) { wbDial.innerHTML = html; wbDial.scrollTop = 0; }
+    if (wbJumpBtn) wbJumpBtn.hidden = true;
+    var chunks = raw.split(/\n\n+/).filter(Boolean).length;
+    if (sceneExplain) sceneExplain.textContent = "Custom Keyboard preview rendered directly into semantic watch dial blocks inside the safe chord.";
+    if (sceneBlocks) sceneBlocks.textContent = chunks + (chunks === 1 ? " block" : " blocks");
+    if (sceneUnits) sceneUnits.textContent = chunks + " lazy units";
+    if (sceneGuard) sceneGuard.textContent = "Chord padding active";
+    syncRoomSourceView(raw);
+    sceneBtns.forEach(function (b) { b.setAttribute("aria-pressed", "false"); });
+  }
+
+  if (wbKeyBtn && wbComposer) {
+    wbKeyBtn.addEventListener("click", function () {
+      var readerTab = document.getElementById("tabReaderBtn");
+      if (readerTab && readerTab.getAttribute("aria-selected") !== "true") activateWbTab(readerTab, false);
+      var openNow = wbComposer.hidden;
+      wbComposer.hidden = !openNow;
+      wbKeyBtn.setAttribute("aria-pressed", openNow ? "true" : "false");
+      wbKeyBtn.setAttribute("aria-expanded", openNow ? "true" : "false");
+      if (openNow && wbPromptInput) {
+        renderCustomMarkdown(wbPromptInput.value);
+        wbPromptInput.focus();
+      }
+    });
+  }
+  if (wbComposerCloseBtn && wbComposer && wbKeyBtn) {
+    wbComposerCloseBtn.addEventListener("click", function () {
+      wbComposer.hidden = true;
+      wbKeyBtn.setAttribute("aria-pressed", "false");
+      wbKeyBtn.setAttribute("aria-expanded", "false");
+    });
+  }
+  if (wbComposer && wbPromptInput) {
+    wbComposer.addEventListener("submit", function (e) {
+      e.preventDefault();
+      renderCustomMarkdown(wbPromptInput.value);
+    });
+  }
+  if (wbVoiceBtn) {
+    wbVoiceBtn.addEventListener("click", function () {
+      if (wbComposer) wbComposer.hidden = true;
+      if (wbKeyBtn) { wbKeyBtn.setAttribute("aria-pressed", "false"); wbKeyBtn.setAttribute("aria-expanded", "false"); }
+      var streamTab = document.getElementById("tabStreamBtn");
+      if (streamTab) activateWbTab(streamTab, false);
+      startStream();
+      if (streamStatusText) streamStatusText.textContent = "Voice dictation simulated -> streaming " + STREAM_PRESETS[streamIdx].name + "...";
+    });
+  }
 
   /* 5. Live Stream Simulator + Wire Errors */
   var STREAM_PRESETS = [
@@ -1314,7 +1797,6 @@ cd NiroWear
     }
   ];
 
-  // Populate exact runtime character counts so button labels match strings verbatim
   STREAM_PRESETS.forEach(function (p, idx) {
     var btn = document.getElementById("presetBtn" + idx);
     if (btn) btn.textContent = p.name + " · " + p.text.length + " chars";
@@ -1341,11 +1823,65 @@ cd NiroWear
     return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
 
+  function renderInline(str) {
+    return escapeHtml(str).replace(/`([^`]+)`/g, "<code>$1</code>");
+  }
+
   function simpleBlocksHtml(md) {
     return md.split(/\n\n+/).map(function (chunk) {
-      if (chunk.indexOf("## ") === 0) return "<h3 class=\"w-h\">" + escapeHtml(chunk.slice(3)) + "</h3>";
-      return "<p class=\"w-p\">" + escapeHtml(chunk) + "</p>";
+      var trimmed = chunk.trim();
+      if (!trimmed) return "";
+      if (trimmed.indexOf("## ") === 0) return "<h3 class=\"w-h\">" + renderInline(trimmed.slice(3)) + "</h3>";
+      if (trimmed.indexOf("# ") === 0) return "<h3 class=\"w-h\">" + renderInline(trimmed.slice(2)) + "</h3>";
+      var lines = trimmed.split(/\n/);
+      if (lines.every(function (l) { return /^[-*]\s+/.test(l); })) {
+        return "<div class=\"w-record\">" + lines.map(function (l) {
+          return "<div class=\"w-record-row\"><span>&bull;</span><span style=\"text-align:left;font-weight:400\">" + renderInline(l.replace(/^[-*]\s+/, "")) + "</span></div>";
+        }).join("") + "</div>";
+      }
+      return "<p class=\"w-p\">" + renderInline(trimmed) + "</p>";
     }).join("");
+  }
+
+  function updatePanLabels() {
+    if (!wbDial) return;
+    Array.prototype.forEach.call(wbDial.querySelectorAll(".w-pan-card"), function (card) {
+      var scroller = card.querySelector(".w-math-scroll, .w-code-scroll");
+      var btn = card.querySelector("[data-pan-box]");
+      if (!scroller || !btn) return;
+      var maxScroll = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+      if (maxScroll <= 4) { btn.textContent = "Fits dial"; btn.disabled = true; }
+      else { btn.disabled = false; btn.textContent = scroller.scrollLeft > maxScroll - 8 ? "<- Reset pan" : "Pan ->"; }
+    });
+  }
+
+  if (wbDial) {
+    wbDial.addEventListener("click", function (e) {
+      var btn = e.target.closest ? e.target.closest("[data-pan-box]") : null;
+      if (!btn || btn.disabled) return;
+      var card = btn.closest(".w-pan-card");
+      var scroller = card ? card.querySelector(".w-math-scroll, .w-code-scroll") : null;
+      if (!scroller) return;
+      var maxScroll = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+      var targetLeft = scroller.scrollLeft > maxScroll - 8 ? 0 : Math.min(maxScroll, scroller.scrollLeft + Math.max(84, Math.round(scroller.clientWidth * 0.72)));
+      if (typeof scroller.scrollTo === "function") scroller.scrollTo({ left: targetLeft, behavior: reduceMotion ? "auto" : "smooth" });
+      else scroller.scrollLeft = targetLeft;
+      window.setTimeout(updatePanLabels, reduceMotion ? 10 : 260);
+    });
+    var panDrag = null;
+    wbDial.addEventListener("pointerdown", function (e) {
+      var scroller = e.target.closest ? e.target.closest(".w-math-scroll, .w-code-scroll") : null;
+      if (!scroller) return;
+      panDrag = { el: scroller, startX: e.clientX, startLeft: scroller.scrollLeft };
+    });
+    window.addEventListener("pointermove", function (e) {
+      if (!panDrag) return;
+      panDrag.el.scrollLeft = panDrag.startLeft - (e.clientX - panDrag.startX);
+      updatePanLabels();
+    });
+    window.addEventListener("pointerup", function () { panDrag = null; });
+    window.addEventListener("pointercancel", function () { panDrag = null; });
+    window.setTimeout(updatePanLabels, 40);
   }
 
   function updateStreamTelemetry() {
@@ -1551,7 +2087,189 @@ cd NiroWear
     });
   });
 
-  /* 7. Accessible Gallery Lightbox */
+  /* 7. 6-Stage Architecture Pipeline */
+  var PIPELINE_STAGES = [
+    {
+      title: "Stage 1: Voice & Gboard entry",
+      desc: "MainActivity preserves full TextFieldValue selection and composition spans across Gboard input and launches Android's speech recognizer with VoiceLanguage locale tags. Back-exiting the composer writes the draft into Room v3 so process death never drops half-typed prompts.",
+      symbols: ["MainActivity", "VoiceLanguage", "TextFieldValue", "ChatViewModel"],
+      kv: [
+        ["Touch targets", "48 dp (96 px @ 320 dpi)"],
+        ["Draft persistence", "Back-exit Room v3"],
+        ["Composition state", "Full selection kept"]
+      ]
+    },
+    {
+      title: "Stage 2: Room v3 atomic persistence & linear history",
+      desc: "ChatDatabase v3 stores provider-neutral USER/ASSISTANT raw Markdown alongside profile ID and model ID provenance. Send commits the prompt and clears the saved draft in one transaction; editing an earlier message replaces that row and deletes trailing turns linearly.",
+      symbols: ["ChatDatabase", "StoredMessage", "SearchQuery", "ChatViewModel"],
+      kv: [
+        ["5,000-msg upgrade", "286.48 ms (v2 -> v3)"],
+        ["Search P50 / P95", "0.53 ms / 4.15 ms"],
+        ["Edit model", "Linear replace + truncate"]
+      ]
+    },
+    {
+      title: "Stage 3: Four explicit SSE wire adapters",
+      desc: "NiroApplication routes each profile directly to OpenAiProvider, OpenAiCompatibleProvider, GeminiProvider, or AnthropicProvider. SecretStore decrypts the API key in memory with Keystore AES-256-GCM; adapters cancel OkHttp calls on Stop and require an explicit terminal SSE event.",
+      symbols: ["ProviderContract", "ProviderHttp", "SecretStore", "FailureToken"],
+      kv: [
+        ["Credential crypto", "AES-256-GCM + ref AAD"],
+        ["Stream checkpoint", "400 ms (NonCancellable)"],
+        ["Error mapping", "12 FailureTokens (EN/ID)"]
+      ]
+    },
+    {
+      title: "Stage 4: 16 ms coalescer & confined prefix cache",
+      desc: "StreamParse.coalesceDelayMs throttles incoming token bursts to a 16 ms window while clamping backwards wall-clock steps to zero wait. ResponseParser.parseIncremental reuses an immutable parsed prefix inside streamPrefixCache, strictly confined to single-flight parseDispatcher.",
+      symbols: ["StreamParse", "ResponseParser", "parseIncremental", "parseDispatcher"],
+      kv: [
+        ["Coalesce window", "16 ms throttle"],
+        ["4 KB parse P95", "1.080 ms (3,755 B cached)"],
+        ["Retained chats", "MAX_RETAINED = 3"]
+      ]
+    },
+    {
+      title: "Stage 5: Bounded lazy RenderUnits & JLaTeXMath guard",
+      desc: "RenderUnit expands long fenced code blocks every 24 lines and unwraps multi-column tables into one lazy item per row. NativeMathGuard blocks \\input, \\def, and unbalanced braces before NativeMathRenderer typesets bitmaps bounded by pixels and readability floor.",
+      symbols: ["RenderUnit", "NativeMathGuard", "NativeMathRenderer", "DocumentBlock"],
+      kv: [
+        ["Code / table chunk", "24 lines / 1 row per unit"],
+        ["Math bitmap cap", "16,384 x 1,024 (3M px)"],
+        ["Scale / LRU cache", "MIN_SCALE 0.5f / 8 bitmaps"]
+      ]
+    },
+    {
+      title: "Stage 6: 466 px circular safe chord & TalkBack order",
+      desc: "ReaderList and ReaderAnchor track block-level scroll position inside circular screen insets at both 466 px and 384 px. Scrolling up pauses auto-follow and surfaces a Latest jump pill instead of pulling the reader down; TalkBack traverses Menu -> Reader -> Footer.",
+      symbols: ["ReaderList", "ReaderAnchor", "ContentBlock", "MainActivity"],
+      kv: [
+        ["Reference dial", "466 x 466 & 384 x 384 px"],
+        ["Signed scroll jank", "2.92% AVD / 1.18% HW"],
+        ["TalkBack traversal", "Menu -> Reader -> Footer"]
+      ]
+    }
+  ];
+
+  var pipeTabs = Array.prototype.slice.call(document.querySelectorAll("[data-pipe]"));
+  var pipePanel = document.getElementById("pipePanel");
+  var pipeTitle = document.getElementById("pipeTitle");
+  var pipeDesc = document.getElementById("pipeDesc");
+  var pipeSymbols = document.getElementById("pipeSymbols");
+  var pipeKv = document.getElementById("pipeKv");
+
+  function renderPipelineStage(idx, focusTab) {
+    var st = PIPELINE_STAGES[idx] || PIPELINE_STAGES[0];
+    if (pipeTitle) pipeTitle.textContent = st.title;
+    if (pipeDesc) pipeDesc.textContent = st.desc;
+    if (pipeSymbols) {
+      pipeSymbols.innerHTML = st.symbols.map(function (sym) {
+        return "<code class=\"symbol-tag\">" + escapeHtml(sym) + "</code>";
+      }).join("");
+    }
+    if (pipeKv) {
+      pipeKv.innerHTML = st.kv.map(function (pair) {
+        return "<div><dt>" + escapeHtml(pair[0]) + "</dt><dd>" + escapeHtml(pair[1]) + "</dd></div>";
+      }).join("");
+    }
+    if (pipePanel) pipePanel.setAttribute("aria-labelledby", "pipeTab" + idx);
+    pipeTabs.forEach(function (t, i) {
+      var active = i === idx;
+      t.setAttribute("aria-selected", active ? "true" : "false");
+      t.setAttribute("tabindex", active ? "0" : "-1");
+    });
+    if (focusTab && pipeTabs[idx]) pipeTabs[idx].focus();
+  }
+  pipeTabs.forEach(function (tab, i) {
+    tab.addEventListener("click", function () { renderPipelineStage(i, false); });
+    tab.addEventListener("keydown", function (e) {
+      var next = null;
+      if (e.key === "ArrowRight") next = (i + 1) % pipeTabs.length;
+      else if (e.key === "ArrowLeft") next = (i - 1 + pipeTabs.length) % pipeTabs.length;
+      else if (e.key === "Home") next = 0;
+      else if (e.key === "End") next = pipeTabs.length - 1;
+      if (next !== null) { e.preventDefault(); renderPipelineStage(next, true); }
+    });
+  });
+  renderPipelineStage(0, false);
+
+  /* 8. 4-Step Private-LAN Phone Pairing Walkthrough */
+  var PAIR_STEPS = [
+    {
+      title: "1. 120 s Private-LAN HTTPS + NFC HCE & QR",
+      desc: "PairingServer binds strictly to the advertised private LAN interface (never 0.0.0.0) with a per-session SelfSignedCert so phone browsers unlock WebCrypto crypto.subtle. Reach the URL via NfcPairingService (Type 2 NDEF, APDU 6A82 outside active window), QR canvas (330 px at 466, 248 px at 384), or displayed link.",
+      kv: [
+        ["Session TTL", "120,000 ms (120 s)"],
+        ["NFC / QR bounds", "APDU 6A82 / 330 & 248 px"],
+        ["Socket bind", "Private LAN IP only"]
+      ]
+    },
+    {
+      title: "2. Ephemeral ECDH P-256 + 128-bit token AAD",
+      desc: "Phone browser and watch mint fresh secp256r1 key pairs (separate from the TLS certificate key). The browser encrypts the JSON credential payload with AES-GCM using the 16-byte (128-bit) capability URL path token as Associated Data (updateAAD), blocking cross-session replay.",
+      kv: [
+        ["Key agreement", "ECDH P-256 (secp256r1)"],
+        ["Token AAD", "128-bit (16 B) random"],
+        ["IV length", "12-byte GCM nonce"]
+      ]
+    },
+    {
+      title: "3. Concurrency caps, CAS burn & Keystore commit",
+      desc: "PairingServer bounds concurrency to 8 in-flight handler threads (32-slot accept backlog) and a 16 KiB body cap, returning generic 400 on malformed payloads and using compareAndSet(false, true) so replay attempts get 401. SecretStore encrypts the key under Android Keystore AES-256-GCM before atomic file commit.",
+      kv: [
+        ["Request limits", "Max 8 reqs / 16 KiB cap"],
+        ["Replay defense", "CAS single-use burn"],
+        ["Storage path", "noBackupFilesDir + fsync"]
+      ]
+    },
+    {
+      title: "4. Listener teardown & fail-closed zeroing",
+      desc: "Immediately after payload handoff, screen exit, or 120 s timeout (plus grace window returning HTTP 410), PairingServer.close() closes every live client socket. Shared ECDH secret and plaintext byte arrays are wiped via fill(0) in finally blocks while FLAG_SECURE and allowBackup=\"false\" stay enforced.",
+      kv: [
+        ["Memory wipe", "shared.fill(0) / plain.fill(0)"],
+        ["Screen guard", "FLAG_SECURE active"],
+        ["Backup policy", "allowBackup=\"false\""]
+      ]
+    }
+  ];
+
+  var pairTabs = Array.prototype.slice.call(document.querySelectorAll("[data-pair]"));
+  var pairPanel = document.getElementById("pairPanel");
+  var pairTitle = document.getElementById("pairTitle");
+  var pairDesc = document.getElementById("pairDesc");
+  var pairKv = document.getElementById("pairKv");
+
+  function renderPairStep(idx, focusTab) {
+    var st = PAIR_STEPS[idx] || PAIR_STEPS[0];
+    if (pairTitle) pairTitle.textContent = st.title;
+    if (pairDesc) pairDesc.textContent = st.desc;
+    if (pairKv) {
+      pairKv.innerHTML = st.kv.map(function (pair) {
+        return "<div><dt>" + escapeHtml(pair[0]) + "</dt><dd>" + escapeHtml(pair[1]) + "</dd></div>";
+      }).join("");
+    }
+    if (pairPanel) pairPanel.setAttribute("aria-labelledby", "pairTab" + idx);
+    pairTabs.forEach(function (t, i) {
+      var active = i === idx;
+      t.setAttribute("aria-selected", active ? "true" : "false");
+      t.setAttribute("tabindex", active ? "0" : "-1");
+    });
+    if (focusTab && pairTabs[idx]) pairTabs[idx].focus();
+  }
+  pairTabs.forEach(function (tab, i) {
+    tab.addEventListener("click", function () { renderPairStep(i, false); });
+    tab.addEventListener("keydown", function (e) {
+      var next = null;
+      if (e.key === "ArrowRight") next = (i + 1) % pairTabs.length;
+      else if (e.key === "ArrowLeft") next = (i - 1 + pairTabs.length) % pairTabs.length;
+      else if (e.key === "Home") next = 0;
+      else if (e.key === "End") next = pairTabs.length - 1;
+      if (next !== null) { e.preventDefault(); renderPairStep(next, true); }
+    });
+  });
+  renderPairStep(0, false);
+
+  /* 9. Accessible Gallery Lightbox */
   var GALLERY = [
     { src: "screenshots/real-response.png", cap: "Mixed Markdown response rendered inside the 466 px watch safe area" },
     { src: "screenshots/streaming-stop.png", cap: "Active streaming view with centered Stop button (dx = 0, dy = 0)" },
@@ -1613,7 +2331,7 @@ cd NiroWear
     }
   });
 
-  /* 8. Evidence Ledger Scope + Text Filter */
+  /* 10. Evidence Ledger Scope + Text Filter */
   var activeScope = "all";
   var scopeBtns = Array.prototype.slice.call(document.querySelectorAll("[data-scope]"));
   var evidenceSearch = document.getElementById("evidenceSearch");
@@ -1652,7 +2370,7 @@ cd NiroWear
     });
   }
 
-  /* 9. Install Tabs & Copy Buttons */
+  /* 11. Install Tabs & Copy Buttons */
   var itabs = Array.prototype.slice.call(document.querySelectorAll("[data-itab]"));
   var ipanels = Array.prototype.slice.call(document.querySelectorAll(".ipanel[role='tabpanel']"));
   function activateItab(tab, focusTab) {

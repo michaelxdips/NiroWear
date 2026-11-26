@@ -52,4 +52,37 @@ class PairingCloseTest {
         held.runCatching { close() }
         if (lingering.isNotEmpty()) fail("pairing worker still alive 5s after close(); join it in close()")
     }
+
+    @Test
+    fun concurrentCloseDoesNotLeaveAcceptedClientsUnclosed() {
+        repeat(8) {
+            val pairing = PairingServer("127.0.0.1", ttlMillis = 120_000) {}
+            pairing.start()
+            val port = pairing.port
+            val connector =
+                Thread {
+                    repeat(5) {
+                        runCatching { Socket("127.0.0.1", port).use { s -> s.soTimeout = 500; s.getInputStream().read() } }
+                    }
+                }.apply { isDaemon = true; start() }
+            Thread.sleep(15)
+            pairing.close()
+            connector.join(3000)
+            val deadline = System.currentTimeMillis() + 2000
+            while (
+                System.currentTimeMillis() < deadline &&
+                (
+                    workers().isNotEmpty() ||
+                        Thread.getAllStackTraces().keys.any { it.name == "nirowear-pairing-request" && it.isAlive }
+                )
+            ) {
+                Thread.sleep(25)
+            }
+            val lingeringWorkers = workers()
+            val lingeringReqs =
+                Thread.getAllStackTraces().keys.filter { it.name == "nirowear-pairing-request" && it.isAlive }
+            assertTrue("pairing worker survived close", lingeringWorkers.isEmpty())
+            assertTrue("pairing request handler survived close", lingeringReqs.isEmpty())
+        }
+    }
 }

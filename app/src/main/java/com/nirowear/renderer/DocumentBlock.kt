@@ -76,21 +76,22 @@ private const val MAX_LIST_LEVELS = 4
 // A paragraph direction marker keeps the paragraph's own direction even when
 // every visible character is hidden inside FSI/PDI isolates.
 private fun paragraphDirectionMarker(content: List<InlineContent>): String {
-    val text = content.joinToString("") { it.text }
-    if (text.isEmpty()) return ""
-    var index = 0
-    while (index < text.length) {
-        val point = text.codePointAt(index)
-        val direction = Character.getDirectionality(point)
-        if (direction == Character.DIRECTIONALITY_RIGHT_TO_LEFT ||
-            direction == Character.DIRECTIONALITY_RIGHT_TO_LEFT_ARABIC
-        ) {
-            return "\u200F"
+    for (span in content) {
+        val text = span.text
+        var index = 0
+        while (index < text.length) {
+            val point = text.codePointAt(index)
+            val direction = Character.getDirectionality(point)
+            if (direction == Character.DIRECTIONALITY_RIGHT_TO_LEFT ||
+                direction == Character.DIRECTIONALITY_RIGHT_TO_LEFT_ARABIC
+            ) {
+                return "\u200F"
+            }
+            if (direction == Character.DIRECTIONALITY_LEFT_TO_RIGHT) {
+                return "\u200E"
+            }
+            index += Character.charCount(point)
         }
-        if (direction == Character.DIRECTIONALITY_LEFT_TO_RIGHT) {
-            return "\u200E"
-        }
-        index += Character.charCount(point)
     }
     return ""
 }
@@ -130,14 +131,7 @@ internal fun openHttpLink(
     }
 }
 
-// No row cap here any more.
-//
-// The old MAX_TABLE_ROWS = 40 existed because a table was ONE LazyColumn item, so every row composed
-// and measured in a single pass and a 1000x4 table became ~8000 Text nodes at once. The reader now
-// expands each row into its own item (RenderUnit.TableRowUnit) — the upgrade path that cap's own
-// comment named — so the cost is paid as the reader reaches a row and nothing is withheld.
-
-/** ponytail: 6 link buttons per paragraph; the rest stay inline in the text. */
+/** Maximum link buttons extracted per paragraph; extra links stay inline in text. */
 private const val MAX_LINK_ACTIONS = 6
 
 @Composable
@@ -204,6 +198,7 @@ fun DocumentBlock(
                 RichText(
                     block.content,
                     Modifier.padding(start = 8.dp),
+                    measurer = measurer,
                 )
             }
         }
@@ -264,6 +259,7 @@ fun DocumentBlock(
                             ),
                         ),
                         heading = null,
+                        measurer = measurer,
                     )
                 }
             }
@@ -627,21 +623,18 @@ private fun InlineRichText(
                     // Paint a link only when it can actually be opened. Relative links, bare domains,
                     // mailto: and javascript: used to render blue and underlined with no click action,
                     // so the reader was told "this is tappable" and nothing happened.
-                    val openable = span.link?.let { isOpenableLink(it) } == true
+                    val link = span.link?.takeIf { isOpenableLink(it) }
                     val style =
                         SpanStyle(
                             fontWeight = if (span.bold || heading != null) FontWeight.Bold else null,
                             fontStyle = if (span.italic || span.math) FontStyle.Italic else null,
                             fontFamily = if (span.code) FontFamily.Monospace else null,
                             background = if (span.code) Color(0xFF25282D) else Color.Unspecified,
-                            color = if (openable) Color(0xFFA8C7FA) else Color.Unspecified,
-                            textDecoration = if (openable) TextDecoration.Underline else null,
+                            color = if (link != null) Color(0xFFA8C7FA) else Color.Unspecified,
+                            textDecoration = if (link != null) TextDecoration.Underline else null,
                         )
                     withStyle(style) {
-                        val link = span.link
-                        // Isolate mixed-direction URLs and code from surrounding text.
-                        val isolated = BIDI_ISOLATE_OPEN + span.text + BIDI_ISOLATE_CLOSE
-                        if (openable && link != null) {
+                        if (link != null) {
                             // ponytail: inline links have no guaranteed 48dp target; add
                             // separate accessible actions when they preserve paragraph flow.
                             withLink(
@@ -651,9 +644,15 @@ private fun InlineRichText(
                                         link,
                                     )?.let { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() }
                                 },
-                            ) { append(isolated) }
+                            ) {
+                                append(BIDI_ISOLATE_OPEN)
+                                append(span.text)
+                                append(BIDI_ISOLATE_CLOSE)
+                            }
                         } else {
-                            append(isolated)
+                            append(BIDI_ISOLATE_OPEN)
+                            append(span.text)
+                            append(BIDI_ISOLATE_CLOSE)
                         }
                     }
                 }

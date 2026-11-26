@@ -38,15 +38,19 @@ fun rememberMath(
     complete: Boolean = true,
 ): Drawable? {
     val px = with(LocalDensity.current) { 18.sp.toPx() }
-    // Seed from the cache: `render` always starts at null, so a formula that was already typeset
-    // showed its raw LaTeX for one frame every time it scrolled back into view.
+    val initial = if (complete) mathRenderer.cached(source, px) else null
+    // Seed from cache to prevent a raw LaTeX flash on scroll re-entry when already complete.
     return produceState<Drawable?>(
-        initialValue = mathRenderer.cached(source, px),
+        initialValue = initial,
         source,
         complete,
         px,
     ) {
-        value = if (complete) mathRenderer.render(source, px) else null
+        if (!complete) {
+            value = null
+            return@produceState
+        }
+        if (initial == null) value = mathRenderer.render(source, px)
     }.value
 }
 

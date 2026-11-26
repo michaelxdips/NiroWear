@@ -20,11 +20,8 @@ import androidx.wear.compose.material3.MaterialTheme
 import com.nirowear.R
 
 /**
- * The small round action the reader shows over the transcript: a retry arrow after a failure, or a
- * jump-to-latest arrow when the user has scrolled away from the stream.
- *
- * Moved verbatim out of MainActivity (Task 4.1). The body is byte-identical apart from indentation;
- * this is a move, not a rewrite.
+ * Small round action shown over the transcript: retry after a failure, or jump-to-latest
+ * when the user has scrolled away from the stream.
  */
 @Composable
 internal fun ReaderAction(
@@ -32,7 +29,6 @@ internal fun ReaderAction(
     onClick: () -> Unit,
 ) {
     val color = MaterialTheme.colorScheme.onSurfaceVariant
-    // Resolved here: the `semantics` lambda below is not a composable scope.
     val description =
         stringResource(
             if (retry) R.string.reader_action_retry else R.string.reader_action_latest,

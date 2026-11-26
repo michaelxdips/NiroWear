@@ -1,22 +1,9 @@
 package com.nirowear.renderer
 
-/**
- * Code lines rendered as one LazyColumn item.
- *
- * A code block used to be ONE item holding one `Text` of the whole fence, so a 5000-line fence from a
- * model was a single measuring pass over 5000 lines — the same ANR shape `MAX_TABLE_ROWS` exists to
- * prevent, but with no cap and no notice. Splitting at 24 lines bounds each pass while keeping the
- * block readable: every chunk still scrolls horizontally as one unit, and nothing is dropped.
- */
+/** Maximum code fence lines per LazyColumn item to bound each measure pass. */
 internal const val CODE_LINES_PER_ITEM = 24
 
-/**
- * Table rows rendered as one LazyColumn item.
- *
- * Rows used to be capped at 40 inside a single item, so row 41 did not exist and the reader was told
- * so. Rows are now their own items — the upgrade path the cap's own comment named — which lets the
- * cap go: the cost is paid lazily, one row at a time.
- */
+/** Table rows emitted per LazyColumn item so large tables pay composition cost lazily. */
 internal const val TABLE_ROWS_PER_ITEM = 1
 
 /**

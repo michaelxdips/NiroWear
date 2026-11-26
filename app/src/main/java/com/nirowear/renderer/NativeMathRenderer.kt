@@ -68,21 +68,17 @@ object NativeMathRenderer : MathRenderer {
             cached(source, textSizePx)?.let { return@withContext it }
 
             mutex.withLock {
+                cached(source, textSizePx)?.let { return@withLock it }
                 val first = layout(source, textSizePx) ?: return@withLock null
                 if (fits(first)) return@withLock remember(source, textSizePx, first)
-                // Outside the bound on any axis. The math contract's order is pan, then MODEST scaling,
-                // and only then give up — refusing outright showed source text for a formula the
-                // reader could have panned at a smaller size. The ratio takes the WORST axis and the
-                // area into account, so a tall matrix is bounded too and not just a wide one.
+                if (first.intrinsicWidth <= 0 || first.intrinsicHeight <= 0) return@withLock null
+                // Scale down within MIN_SCALE before falling back to source text for tall/wide formulas.
                 val ratio =
                     minOf(
                         MAX_WIDTH.toFloat() / first.intrinsicWidth,
                         MAX_HEIGHT.toFloat() / first.intrinsicHeight,
                         sqrt(MAX_PIXELS.toFloat() / (first.intrinsicWidth.toLong() * first.intrinsicHeight)),
                     )
-                // Below the readability floor there is nothing left to scale TO, so an over-bound
-                // formula goes straight to readable source text instead of a second allocation that
-                // cannot fit either.
                 if (ratio <= MIN_SCALE) return@withLock null
                 val scaledSize = textSizePx * ratio.coerceIn(MIN_SCALE, 1f)
                 if (scaledSize >= textSizePx) return@withLock null

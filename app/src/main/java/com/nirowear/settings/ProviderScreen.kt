@@ -69,6 +69,8 @@ import com.nirowear.provider.SafeProviderException
 import com.nirowear.provider.SecretValue
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -293,38 +295,34 @@ fun ProviderScreen(onBack: () -> Unit) {
         scope.launch {
             val started =
                 withContext(Dispatchers.IO) {
-                    // The constructor itself does real work — SecureRandom, a P-256 KeyPairGenerator,
-                    // and a ServerSocket bind. Only start() used to be guarded, so a Wi-Fi drop
-                    // between lanAddress() and the bind threw BindException out of the Compose
-                    // onClick and killed the process. Both are guarded now, and a failed start closes
-                    // the already-bound socket instead of leaking the fd until process death.
                     runCatching {
-                        PairingServer(host, clock = SystemClock::elapsedRealtime) { payload ->
-                            scope.launch {
-                                stopPairing(resources.getString(R.string.provider_key_received))
-                                edit = null
-                                adding = true
-                                reveal = false
-                                validated = false
-                                models = emptyList()
-                                type = payload.type
-                                name = payload.name.ifBlank { resources.getString(payload.type.nameRes()) }
-                                base = payload.baseUrl
-                                model = payload.modelId
-                                // The key arrived encrypted and is handed straight to storage. Putting
-                                // it in the editing field would make it revealable and
-                                // screenshot-adjacent for no benefit; the field stays blank, exactly
-                                // as it does after a manual save.
-                                key = ""
-                                saveProfile(SecretValue(sanitizeKey(payload.apiKey)))
+                        val created =
+                            PairingServer(host, clock = SystemClock::elapsedRealtime) { payload ->
+                                scope.launch {
+                                    stopPairing(resources.getString(R.string.provider_key_received))
+                                    edit = null
+                                    adding = true
+                                    reveal = false
+                                    validated = false
+                                    models = emptyList()
+                                    type = payload.type
+                                    name = payload.name.ifBlank { resources.getString(payload.type.nameRes()) }
+                                    base = payload.baseUrl
+                                    model = payload.modelId
+                                    // Never repopulate a saved key into an editable field.
+                                    key = ""
+                                    saveProfile(SecretValue(sanitizeKey(payload.apiKey)))
+                                }
                             }
+                        try {
+                            if (!currentCoroutineContext().isActive) throw CancellationException()
+                            created.start()
+                            if (!currentCoroutineContext().isActive) throw CancellationException()
+                            created
+                        } catch (t: Throwable) {
+                            runCatching { created.close() }
+                            throw t
                         }
-                    }.mapCatching { created ->
-                        created.start()
-                        created
-                    }.onFailure { created ->
-                        // A half-started listener must not keep its fd until process death.
-                        runCatching { (created as? PairingServer)?.close() }
                     }
                 }
             pairingStarting = false
@@ -408,7 +406,7 @@ fun ProviderScreen(onBack: () -> Unit) {
                     message = presetMessage
                 }) { Text(presetLabel) }
             }
-            items(state.profiles) { p ->
+            items(state.profiles, key = { it.id }) { p ->
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = {
                         scope.launch {
@@ -456,6 +454,7 @@ fun ProviderScreen(onBack: () -> Unit) {
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
+                        enabled = !busy || pairing != null,
                         onClick = { if (pairing == null) startPairing() else stopPairing() },
                         modifier = Modifier.fillMaxWidth(),
                     ) {
@@ -586,7 +585,7 @@ fun ProviderScreen(onBack: () -> Unit) {
                 }
             }
             item {
-                OutlinedButton(modifier = Modifier.fillMaxWidth(), enabled = !busy, onClick = {
+                OutlinedButton(modifier = Modifier.fillMaxWidth(), enabled = !busy && pairing == null, onClick = {
                     scope.launch {
                         busy = true
                         message = ""
@@ -635,7 +634,7 @@ fun ProviderScreen(onBack: () -> Unit) {
                     }
                 }) { Text(stringResource(R.string.provider_discover_models)) }
             }
-            items(models) { id ->
+            items(models, key = { it }) { id ->
                 Button(onClick = {
                     model = id
                     validated = false
@@ -643,7 +642,7 @@ fun ProviderScreen(onBack: () -> Unit) {
                 }, modifier = Modifier.fillMaxWidth()) { Text(id, fontSize = 14.sp) }
             }
             item {
-                OutlinedButton(modifier = Modifier.fillMaxWidth(), enabled = !busy, onClick = {
+                OutlinedButton(modifier = Modifier.fillMaxWidth(), enabled = !busy && pairing == null, onClick = {
                     scope.launch {
                         busy = true
                         validated = false
@@ -744,7 +743,7 @@ fun ProviderScreen(onBack: () -> Unit) {
             val deleting = edit
             if (deleting != null) {
                 item {
-                    OutlinedButton(modifier = Modifier.fillMaxWidth(), enabled = !busy, onClick = {
+                    OutlinedButton(modifier = Modifier.fillMaxWidth(), enabled = !busy && pairing == null, onClick = {
                         scope.launch {
                             busy = true
                             try {

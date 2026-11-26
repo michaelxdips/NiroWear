@@ -191,13 +191,19 @@ internal class PairingServer(
      * finishing.
      */
     private fun dispatch(client: Socket) {
-        inFlight.incrementAndGet()
-        liveClients += client
+        synchronized(liveClients) {
+            if (closed) {
+                runCatching { client.close() }
+                return
+            }
+            inFlight.incrementAndGet()
+            liveClients += client
+        }
         Thread({
             try {
                 client.use { runCatching { handle(it) } }
             } finally {
-                liveClients -= client
+                synchronized(liveClients) { liveClients -= client }
                 runCatching { client.close() }
                 inFlight.decrementAndGet()
             }

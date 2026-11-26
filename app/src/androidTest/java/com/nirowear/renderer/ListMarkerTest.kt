@@ -1,7 +1,6 @@
 package com.nirowear.renderer
 
 import android.content.Intent
-import android.content.res.Configuration
 import android.graphics.Rect
 import android.os.SystemClock
 import android.view.accessibility.AccessibilityNodeInfo

@@ -80,6 +80,7 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -246,13 +247,13 @@ private fun ChatReader(
                     save = { map ->
                         ArrayList<Any>().apply {
                             map.forEach { (id, a) ->
-                                addAll(listOf(id, a.messageId, a.block, a.index, a.offset, a.contentHash, a.following))
+                                addAll(listOf(id, a.messageId, a.block, a.offset, a.contentHash, a.following))
                             }
                         }
                     },
                     restore = { values ->
                         values
-                            .chunked(7)
+                            .chunked(6)
                             .associate { v ->
                                 v[0] as String to
                                     ReaderAnchor(
@@ -260,8 +261,7 @@ private fun ChatReader(
                                         v[2] as Int,
                                         v[3] as Int,
                                         v[4] as Int,
-                                        v[5] as Int,
-                                        v[6] as Boolean,
+                                        v[5] as Boolean,
                                     )
                             }.toMutableMap()
                     },
@@ -288,16 +288,12 @@ private fun ChatReader(
         }
     val streamPrefixCache = remember { HashMap<Long, ResponseParser.IncrementalParseState>() }
     var footerHeight by remember { androidx.compose.runtime.mutableIntStateOf(0) }
-    val renderedHistory = historyBlocks
-    val historyKeys = remember(renderedHistory) { historyKeysFor(renderedHistory) }
-    // Composition is per UNIT, bookkeeping per BLOCK. A long code fence or a big table expands into
-    // many items so its cost is paid as the reader reaches it; anchors, heights and scroll targets
-    // stay expressed in blocks and are translated through `unitRanges`.
-    val renderUnits = remember(renderedHistory, historyKeys) { renderUnitsFor(renderedHistory, historyKeys) }
-    val unitRanges =
-        remember(renderUnits, renderedHistory.size) {
-            unitRangeByBlock(renderUnits, renderedHistory.size)
-        }
+    // Precomputed on parseDispatcher alongside historyBlocks so streaming checkpoints do not
+    // rebuild RenderUnit/range structures on the Main thread.
+    var historyKeys by remember { mutableStateOf<List<String>>(emptyList()) }
+    var renderUnits by remember { mutableStateOf<List<com.nirowear.renderer.RenderUnit>>(emptyList()) }
+    var unitRanges by remember { mutableStateOf<List<IntRange>>(emptyList()) }
+    val readerTextMeasurer = rememberTextMeasurer()
     // One lookup per message, not one per rendered block. The item body used to call
     // storedMessages.find { it.id == messageId } for EVERY block, which is O(blocks x messages) on
     // every recomposition — with a 200-message conversation and several blocks per message that is
@@ -441,24 +437,32 @@ private fun ChatReader(
             }
         currentCoroutineContext().ensureActive()
         if (currentSource != (id to messages)) return@LaunchedEffect
+        val parsedLayout =
+            kotlinx.coroutines.withContext(parseDispatcher) {
+                val flatBlocks = rows.values.flatten()
+                val flatKeys = historyKeysFor(flatBlocks)
+                val flatUnits = renderUnitsFor(flatBlocks, flatKeys)
+                val flatRanges = unitRangeByBlock(flatUnits, flatBlocks.size)
+                Triple(flatBlocks, flatKeys, flatUnits to flatRanges)
+            }
+        currentCoroutineContext().ensureActive()
+        if (currentSource != (id to messages)) return@LaunchedEffect
         lastParseAt = System.currentTimeMillis()
-        // Merge, then bound: storing `rows` alone (the open conversation's messages) made the bound
-        // and the recency list inert, so History A -> B -> A re-parsed all of A on a watch.
+        // Merge before evicting so switching between recent chats stays cached without unbounded memory growth.
         val merged = mergeParsed(parsedRows, rows, recentConversations, id)
         recentConversations = merged.second
         parsedRows = merged.first
-        // Same bound as the parse memo above: one entry per conversation ever opened
-        // grows without limit otherwise.
         (anchors.keys - (recentConversations + listOfNotNull(id)).toSet()).forEach { anchors.remove(it) }
-        historyBlocks = rows.values.flatten()
+        historyBlocks = parsedLayout.first
+        historyKeys = parsedLayout.second
+        renderUnits = parsedLayout.third.first
+        unitRanges = parsedLayout.third.second
         parsedConversation = id
     }
 
     fun saveReaderPosition() {
         val id = chatState.conversationId ?: return
         if (parsedConversation != id || historyBlocks.isEmpty() || renderLab) return
-        // The list is indexed by UNIT; an anchor is expressed in BLOCKS. Translate before reading
-        // the message, or a flattened table/fence would save an index past the block list.
         val unitIndex =
             (listState.firstVisibleItemIndex - if (notice.isNotEmpty()) 1 else 0).coerceAtLeast(0)
         val index =
@@ -470,7 +474,6 @@ private fun ChatReader(
             ReaderAnchor(
                 messageId,
                 historyBlocks.take(index).count { it.first == messageId },
-                index,
                 listState.firstVisibleItemScrollOffset,
                 message.rawContent.hashCode(),
                 following,
@@ -661,7 +664,7 @@ private fun ChatReader(
                         // conversation after the row promised that message. contentHash = -1 never
                         // matches, so the restore lands on the message's first block rather than a
                         // saved scroll offset.
-                        if (messageId != null) anchors[id] = ReaderAnchor(messageId, 0, 0, 0, -1, false)
+                        if (messageId != null) anchors[id] = ReaderAnchor(messageId, 0, 0, -1, false)
                         if (id != chatState.conversationId) chat.open(id)
                         // Re-arm the restore effect even for the conversation already open, where the
                         // id is unchanged and nothing else would make it run.
@@ -1188,42 +1191,38 @@ private fun ChatReader(
                         itemsIndexed(
                             renderUnits,
                             key = { _, unit -> unit.key },
+                            contentType = { _, unit ->
+                                when (unit) {
+                                    is com.nirowear.renderer.RenderUnit.Whole -> unit.block::class
+                                    else -> unit::class
+                                }
+                            },
                         ) { _, unit ->
-                            val messageId = renderedHistory.getOrNull(unit.blockIndex)?.first
+                            val messageId = historyBlocks.getOrNull(unit.blockIndex)?.first
                             val message = messageId?.let { messageById[it] }
                             val editable = message?.role == "USER" && !chatState.generating
-                            // `combinedClickable` requires a non-empty onClick, so an empty one made the
-                            // row an activatable control that TalkBack announced ("double tap to
-                            // activate") while a tap did nothing. Long-press is the only real action:
-                            // a raw long-press detector plus an explicit semantics long-click action
-                            // keeps the gesture AND the TalkBack entry, and advertises no tap at all.
                             val editLabel =
                                 if (editable) stringResource(R.string.chat_edit_message) else null
                             val openEditor: () -> Unit = {
                                 message?.let { target ->
                                     saveReaderPosition()
-                                    // The edit body goes to its OWN slot: the unsent draft is
-                                    // left exactly as it was, so abandoning the edit cannot
-                                    // destroy it and cannot resurrect it later either.
+                                    // Use a dedicated edit slot so abandoning an edit never alters the unsent draft.
                                     editField = fieldOf(target.rawContent)
                                     editedId = target.id
                                     editing = true
                                 }
                             }
+                            val currentOpenEditor by rememberUpdatedState(openEditor)
                             val editModifier =
                                 if (editable) {
                                     Modifier
                                         .pointerInput(messageId) {
-                                            detectTapGestures(onLongPress = { openEditor() })
+                                            detectTapGestures(onLongPress = { currentOpenEditor() })
                                         }
-                                        // NOT `mergeDescendants = true`: merging the row's children into
-                                        // one node changes the accessibility tree the reader is measured
-                                        // against, and the reader's own scroll targets depend on those
-                                        // per-block bounds. The long-click action is advertised on the row
-                                        // node without merging, which is what `combinedClickable` did.
+                                        // Do not set mergeDescendants = true; reader bounds track individual child nodes.
                                         .semantics {
                                             onLongClick(label = editLabel, action = {
-                                                openEditor()
+                                                currentOpenEditor()
                                                 true
                                             })
                                         }
@@ -1234,16 +1233,11 @@ private fun ChatReader(
                                 Modifier.onSizeChanged { blockHeights[unit.key] = it.height }.then(
                                     editModifier,
                                 ),
-                            ) { RenderUnitView(unit) }
+                            ) { RenderUnitView(unit, readerTextMeasurer) }
                         }
                     }
-                    // The live blocks render the IN-FLIGHT answer only. When a terminal write fails, the ViewModel
-                    // puts the same text in `rawMarkdown` (so it is not lost) while the live row is
-                    // already merged into `historyBlocks` — rendering both duplicated the whole
-                    // answer and pushed the "Copy unsaved answer / Retry saving" row below the copy.
-                    // The empty-history guard keeps the answer visible if the merge did not happen.
                     if (liveBlocksShown) {
-                        items(blocks) { DocumentBlock(it) }
+                        items(blocks, contentType = { it::class }) { DocumentBlock(it, readerTextMeasurer) }
                     }
                     // One copy of the transient failure only. The same string also renders on
                     // the persisted assistant row (:255-266), so a bare `error?.let` prints it
@@ -1399,16 +1393,9 @@ private fun ChatReader(
                                 Modifier
                                     .size(48.dp)
                                     .semantics { contentDescription = keyboardInputLabel }
-                                    // Re-entry keeps an unsent DRAFT: Back out of the editor is not a
-                                    // discard. The re-entry also DROPS a pending edit target —
-                                    // `editText` and `editedId` are cleared together, so a stale
-                                    // edit body can never reappear as a fresh message. (The previous
-                                    // comment claimed the target was kept; the line below contradicts
-                                    // it, and the code is the intended behaviour.)
+                                    // Keeps unsent draft intact on Back while dropping any stale edit target.
                                     .clickable(role = Role.Button, onClick = {
                                         saveReaderPosition()
-                                        // Entry is guarded: the stored draft is read first and the
-                                        // editor opens only after a successful restore.
                                         openComposer(null)
                                     }),
                                 contentAlignment = Alignment.Center,
@@ -1632,16 +1619,10 @@ private fun markClipSensitive(clip: android.content.ClipData) {
         }
 }
 
-/**
- * Stable LazyColumn keys for the reader, one per (messageId, block) pair, in render order.
- *
- * Extracted from the composable so the ordering contract can be pinned by a JVM test before the
- * list rendering is moved (Task 4.1). The anchor logic indexes into this flat list, so if the order
- * or the per-message numbering changes, anchors silently point at the wrong block.
- */
-internal fun historyKeysFor(renderedHistory: List<Pair<Long, com.nirowear.renderer.ContentBlock>>): List<String> {
+/** Stable LazyColumn keys for the reader, matching [ReaderAnchor] ordering contracts. */
+internal fun historyKeysFor(blocks: List<Pair<Long, com.nirowear.renderer.ContentBlock>>): List<String> {
     val counts = mutableMapOf<Long, Int>()
-    return renderedHistory.map { (id, _) ->
+    return blocks.map { (id, _) ->
         val block = counts[id] ?: 0
         counts[id] = block + 1
         "$id:$block"

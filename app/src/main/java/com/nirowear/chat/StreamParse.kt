@@ -56,13 +56,7 @@ internal fun coalesceDelayMs(
     return if (elapsed >= windowMs) 0L else windowMs - elapsed
 }
 
-/**
- * Recency list with [id] moved to the end and bounded to [MAX_RETAINED_CONVERSATIONS].
- *
- * Extracted from the reader effect so the eviction order is testable on the JVM. The previous test
- * computed this expression itself and fed the result back in, so dropping the move-to-end here (or
- * the bound) changed nothing in any suite — the production line was untested.
- */
+/** Moves [id] to the most-recent slot while bounding the memo to [MAX_RETAINED_CONVERSATIONS]. */
 internal fun nextRecency(
     recent: List<String>,
     id: String?,
@@ -71,15 +65,7 @@ internal fun nextRecency(
     return (recent - id + id).takeLast(MAX_RETAINED_CONVERSATIONS)
 }
 
-/**
- * The memo update the reader effect performs: MERGE the fresh parse into what is already memoised,
- * then bound the result by recency.
- *
- * The effect used to store `rows` alone — the open conversation's messages — so the eviction filter
- * could never keep another conversation and the recency list was inert, which meant History
- * A -> B -> A re-parsed all of A on `Dispatchers.Default` while the user waited. Extracted here so
- * the merge itself is pinned by a test instead of only the pieces around it.
- */
+/** Merges fresh parsed rows into [previous] and evicts conversations beyond the recency cap. */
 internal fun mergeParsed(
     previous: Map<StoredMessage, List<Pair<Long, ContentBlock>>>,
     parsed: Map<StoredMessage, List<Pair<Long, ContentBlock>>>,

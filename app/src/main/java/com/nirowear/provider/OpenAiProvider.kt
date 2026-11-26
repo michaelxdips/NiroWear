@@ -2,7 +2,6 @@ package com.nirowear.provider
 
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import kotlinx.serialization.json.Json
@@ -75,6 +74,7 @@ class OpenAiProvider(
         secret: SecretValue,
     ): Flow<StreamEvent> {
         require(profile.selectedModelId.isNotBlank()) { "Model required" }
+        val normalizedBase = Endpoints.normalize(profile.baseUrl, allowLocalHttp)
         val payload =
             buildJsonObject {
                 put("model", profile.selectedModelId)
@@ -89,15 +89,19 @@ class OpenAiProvider(
                                 request.openAiContinuation
                                     ?.takeIf {
                                         it.profileId == profile.id && it.modelId == profile.selectedModelId &&
-                                            it.baseUrl == Endpoints.normalize(profile.baseUrl, allowLocalHttp)
+                                            it.baseUrl == normalizedBase
                                     }?.phases
                                     ?.get(index)
                             if (local != null && message.role == ChatRole.ASSISTANT) {
                                 require(
                                     local.isNotEmpty() &&
-                                        local.all {
-                                            it.length >= 0 &&
-                                                it.phase in listOf(null, "commentary", "final_answer")
+                                        local.all { part ->
+                                            part.length >= 0 &&
+                                                (
+                                                    part.phase == null ||
+                                                        part.phase == "commentary" ||
+                                                        part.phase == "final_answer"
+                                                )
                                         },
                                 )
                                 require(local.sumOf { it.length.toLong() } == message.rawContent.length.toLong())
@@ -344,12 +348,16 @@ internal class OpenAiStreamDecoder {
     private fun phase(item: JsonObject): String? {
         val value = item["phase"] ?: return null
         if (value == JsonNull) return null
-        require(value is JsonPrimitive && value.isString && value.content in setOf("commentary", "final_answer"))
+        require(
+            value is JsonPrimitive &&
+                value.isString &&
+                (value.content == "commentary" || value.content == "final_answer"),
+        )
         return value.content
     }
 }
 
-private fun openAiError(element: JsonElement?): ProviderError =
+internal fun openAiError(element: JsonElement?): ProviderError =
     when ((element as? JsonObject)?.get("code")?.jsonPrimitive?.contentOrNull) {
         "invalid_api_key" -> ProviderError.INVALID_CREDENTIAL
         "permission_denied" -> ProviderError.PERMISSION_DENIED

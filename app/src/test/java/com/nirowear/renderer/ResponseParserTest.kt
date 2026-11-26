@@ -109,4 +109,15 @@ class ResponseParserTest {
         assertTrue(currency.none { it.math })
         assertEquals("Cost \$5 and \$10.", currency.joinToString("") { it.text })
     }
+
+    @Test fun trailingBackslashDoesNotCrossNewlineIntoInlineMath() {
+        val dollarNewline = ResponseParser.parse("\$x \\\ny\$")
+        assertTrue(
+            dollarNewline.filterIsInstance<ContentBlock.Paragraph>().flatMap { it.content }.none { it.math },
+        )
+        val parenNewline = ResponseParser.parse("\\(x \\\ny\\)")
+        assertTrue(
+            parenNewline.filterIsInstance<ContentBlock.Paragraph>().flatMap { it.content }.none { it.math },
+        )
+    }
 }

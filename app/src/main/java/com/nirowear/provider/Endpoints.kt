@@ -78,12 +78,7 @@ object Endpoints {
 }
 
 /**
- * Header names whose values are credentials.
- *
- * [redactHeaders] currently has no production caller — this app logs nothing — so treat it as the
- * redactor to use the moment any diagnostic path prints request headers, and as the reason a new
- * adapter has one obvious list to extend. Its behaviour is pinned by CompatibleProviderTest; the
- * previous comment claimed diagnostic paths already read it, which was not true.
+ * Header names whose values hold credentials; redacted whenever diagnostic code inspects request headers.
  */
 private val CREDENTIAL_HEADERS = setOf("authorization", "x-api-key", "x-goog-api-key", "api-key")
 
