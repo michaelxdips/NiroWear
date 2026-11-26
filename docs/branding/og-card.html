@@ -2,15 +2,15 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>NiroWear — 466 × 466 px OpenGraph Card</title>
+<title>NiroWear: 466 x 466 px OpenGraph Card</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   html,body{
     width:1200px;
     height:630px;
     overflow:hidden;
-    background:#F4F2EE;
-    color:#141619;
+    background:#F3F1EA;
+    color:#101418;
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,Helvetica,Arial,sans-serif;
   }
   .sheet{
@@ -18,130 +18,101 @@
     width:1200px;
     height:630px;
     display:grid;
-    grid-template-columns:56px 1fr 480px;
+    grid-template-columns:1fr 520px;
     align-items:center;
-    padding-right:56px;
-    background:
-      linear-gradient(to right, rgba(20,22,25,.05) 1px, transparent 1px) 0 0 / 24px 24px,
-      linear-gradient(to bottom, rgba(20,22,25,.04) 1px, transparent 1px) 0 0 / 24px 24px,
-      #F4F2EE;
-  }
-  .ruler{
-    height:100%;
-    border-right:1px solid #C8C4BC;
-    background:#ECE9E2;
-    display:flex;
-    flex-direction:column;
-    justify-content:space-between;
-    align-items:center;
-    padding:28px 0;
-    font-family:ui-monospace,SFMono-Regular,Consolas,monospace;
-    font-size:10px;
-    letter-spacing:.14em;
-    color:#585E67;
-  }
-  .ruler-tag{
-    writing-mode:vertical-rl;
-    transform:rotate(180deg);
-    text-transform:uppercase;
-  }
-  .ruler-val{
-    color:#1747A8;
-    font-weight:700;
+    padding:48px 64px;
+    gap:48px;
+    background:#F3F1EA;
   }
   .copy{
-    padding:54px 44px 54px 52px;
-  }
-  .eyebrow{
-    display:inline-flex;
-    align-items:center;
-    gap:12px;
-    font-family:ui-monospace,SFMono-Regular,Consolas,monospace;
-    font-size:12px;
-    letter-spacing:.16em;
-    text-transform:uppercase;
-    color:#585E67;
-    margin-bottom:24px;
-  }
-  .eyebrow .bar{
-    width:32px;
-    height:2px;
-    background:#1747A8;
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
   }
   .brand-row{
     display:flex;
     align-items:center;
     gap:14px;
-    margin-bottom:20px;
+    margin-bottom:28px;
   }
   .brand-row span{
     font-family:ui-monospace,SFMono-Regular,Consolas,monospace;
-    font-size:16px;
+    font-size:15px;
     font-weight:700;
-    letter-spacing:.12em;
+    letter-spacing:.08em;
     text-transform:uppercase;
+    color:#101418;
   }
   h1{
-    font-size:56px;
-    line-height:1.03;
+    font-size:58px;
+    line-height:1.02;
     letter-spacing:-.045em;
     font-weight:700;
     max-width:14ch;
     margin-bottom:24px;
+    color:#101418;
   }
   h1 em{
     font-style:normal;
-    color:#1747A8;
+    color:#0B5D51;
   }
   .sub{
-    font-size:20px;
+    font-size:21px;
     line-height:1.45;
-    color:#4A5058;
+    color:#49525B;
     max-width:34ch;
     margin-bottom:32px;
   }
-  .chips{
-    display:flex;
-    gap:10px;
-    flex-wrap:wrap;
+  .specs{
+    display:grid;
+    grid-template-columns:repeat(3,minmax(0,1fr));
+    border-top:1px solid #C8C6BE;
+    border-bottom:1px solid #C8C6BE;
   }
-  .chip{
+  .specs div{
+    padding:12px 14px 12px 0;
     font-family:ui-monospace,SFMono-Regular,Consolas,monospace;
-    font-size:11px;
-    letter-spacing:.12em;
-    text-transform:uppercase;
-    padding:6px 12px;
-    border:1px solid #C8C4BC;
-    background:#F4F2EE;
-    color:#141619;
   }
-  .chip.hi{
-    border-color:#1747A8;
-    color:#1747A8;
+  .specs div + div{
+    border-left:1px solid #C8C6BE;
+    padding-left:14px;
+  }
+  .specs dt{
+    font-size:10px;
+    letter-spacing:.1em;
+    text-transform:uppercase;
+    color:#49525B;
+    margin-bottom:4px;
+  }
+  .specs dd{
+    font-size:13px;
+    font-weight:600;
+    color:#101418;
   }
   .dial-wrap{
     position:relative;
     width:466px;
     height:466px;
+    margin:0 auto;
     display:grid;
     place-items:center;
   }
   .dial-wrap svg.bezel{
     position:absolute;
-    inset:-20px;
-    width:506px;
-    height:506px;
+    inset:-22px;
+    width:510px;
+    height:510px;
   }
   .dial{
     position:relative;
     width:466px;
     height:466px;
     border-radius:50%;
-    background:#0D0F12;
-    border:2px solid #2A3038;
-    box-shadow:0 0 0 8px #F4F2EE, 0 0 0 9px #C8C4BC, 0 28px 64px -24px rgba(0,0,0,.48);
+    background:#090B0E;
+    border:2px solid #2A3138;
+    box-shadow:0 0 0 8px #F3F1EA, 0 0 0 9px #C8C6BE, 0 28px 64px -24px rgba(0,0,0,.48);
     padding:76px 76px 64px;
-    color:#E7E4DC;
+    color:#EDF1F0;
     overflow:hidden;
   }
   .dial::before{
@@ -149,7 +120,7 @@
     position:absolute;
     inset:18px;
     border-radius:50%;
-    border:1px dashed rgba(126,96,36,.42);
+    border:1px dashed rgba(126,230,204,.28);
     pointer-events:none;
   }
   .wtop{
@@ -157,99 +128,89 @@
     justify-content:space-between;
     font-family:ui-monospace,SFMono-Regular,Consolas,monospace;
     font-size:10px;
-    letter-spacing:.1em;
-    color:#8C929C;
+    letter-spacing:.08em;
+    color:#9BA6AD;
     margin-bottom:14px;
     text-transform:uppercase;
   }
-  .wtop .live{color:#63D4A8}
+  .wtop .live{color:#7EE6CC}
   .dh2{
     font-size:19px;
     font-weight:700;
     letter-spacing:-.02em;
-    color:#FFFFFF;
+    color:#EDF1F0;
     margin-bottom:10px;
   }
   .dp{
     font-size:13.5px;
     line-height:1.5;
-    color:#C9C5BD;
+    color:#C9D0CE;
     margin-bottom:14px;
   }
   .dcode{
     font-family:ui-monospace,SFMono-Regular,Consolas,monospace;
     font-size:11.5px;
     line-height:1.55;
-    background:#151921;
-    border-left:2px solid #7C90FF;
+    background:#13181D;
+    border-left:2px solid #7EE6CC;
     padding:9px 11px;
-    color:#D7E0FF;
+    color:#D6E2DF;
     margin-bottom:14px;
     white-space:pre;
   }
   .drec{
-    border-top:1px solid #2A3038;
+    border-top:1px solid #232A30;
     padding-top:9px;
     display:grid;
     gap:4px;
     font-family:ui-monospace,SFMono-Regular,Consolas,monospace;
     font-size:11px;
   }
-  .drec-h{color:#7C90FF;letter-spacing:.12em;text-transform:uppercase;font-size:10px}
-  .drec-r{display:flex;justify-content:space-between;color:#A9B0BA}
-  .drec-r b{color:#F4F2EE;font-weight:500}
+  .drec-h{color:#7EE6CC;letter-spacing:.1em;text-transform:uppercase;font-size:10px}
+  .drec-r{display:flex;justify-content:space-between;color:#9BA6AD}
+  .drec-r b{color:#EDF1F0;font-weight:600}
 </style>
 </head>
 <body>
 <div class="sheet">
-  <div class="ruler">
-    <span>00</span>
-    <span class="ruler-val">466 PX</span>
-    <span class="ruler-tag">Reference Viewport · API 34</span>
-    <span>MIT</span>
-  </div>
   <div class="copy">
     <div class="brand-row">
       <svg width="36" height="36" viewBox="0 0 108 108" aria-hidden="true">
         <rect width="108" height="108" rx="24" fill="#11171E"></rect>
-        <path d="M31.89 30.87 H76.11 V64.28 H67.89 V39.09 H40.11 V77.13 H31.89 Z" fill="#9BE8D5"></path>
+        <path d="M31.89 30.87 H76.11 V64.28 H67.89 V39.09 H40.11 V77.13 H31.89 Z" fill="#8FE3CF"></path>
       </svg>
       <span>NiroWear</span>
     </div>
-    <div class="eyebrow">
-      <span class="bar"></span>
-      <span>Wear OS · BYOK AI Client</span>
-    </div>
-    <h1>The whole answer, inside a <em>466-pixel</em> circle.</h1>
+    <h1>Full answers inside a <em>466-pixel</em> circle.</h1>
     <p class="sub">
-      Semantic blocks for headings, code, TeX math, and vertical records on the wrist — streamed directly to your own key.
+      A standalone BYOK AI client for Wear OS. Code, math, and tables render as semantic blocks straight from your own provider key.
     </p>
-    <div class="chips">
-      <span class="chip hi">466 × 466 px @ 320 dpi</span>
-      <span class="chip">OpenAI · Anthropic · Gemini</span>
-      <span class="chip">Keystore AES-GCM</span>
-      <span class="chip">MIT Licensed</span>
-    </div>
+    <dl class="specs">
+      <div><dt>Viewport</dt><dd>466 x 466 px</dd></div>
+      <div><dt>Adapters</dt><dd>OpenAI · Claude · Gemini</dd></div>
+      <div><dt>Security</dt><dd>Keystore AES-GCM · MIT</dd></div>
+    </dl>
   </div>
   <div class="dial-wrap">
-    <svg class="bezel" viewBox="0 0 506 506" aria-hidden="true">
-      <circle cx="253" cy="253" r="249" fill="none" stroke="#C8C4BC" stroke-width="1" stroke-dasharray="2 6"></circle>
-      <circle cx="253" cy="253" r="244" fill="none" stroke="#1747A8" stroke-width="2" stroke-dasharray="980 600" transform="rotate(-90 253 253)"></circle>
-      <line x1="253" y1="2" x2="253" y2="16" stroke="#1747A8" stroke-width="2"></line>
-      <line x1="504" y1="253" x2="490" y2="253" stroke="#1747A8" stroke-width="2"></line>
-      <line x1="253" y1="504" x2="253" y2="490" stroke="#1747A8" stroke-width="2"></line>
-      <line x1="2" y1="253" x2="16" y2="253" stroke="#1747A8" stroke-width="2"></line>
+    <svg class="bezel" viewBox="0 0 510 510" aria-hidden="true">
+      <circle cx="255" cy="255" r="249" fill="none" stroke="#C8C6BE" stroke-width="1" stroke-dasharray="2 6"></circle>
+      <circle cx="255" cy="255" r="244" fill="none" stroke="#0E5A4F" stroke-width="2" stroke-dasharray="980 600" transform="rotate(-90 255 255)"></circle>
+      <line x1="255" y1="2" x2="255" y2="16" stroke="#0E5A4F" stroke-width="2"></line>
+      <line x1="508" y1="255" x2="494" y2="255" stroke="#0E5A4F" stroke-width="2"></line>
+      <line x1="255" y1="508" x2="255" y2="494" stroke="#0E5A4F" stroke-width="2"></line>
+      <line x1="2" y1="255" x2="16" y2="255" stroke="#0E5A4F" stroke-width="2"></line>
     </svg>
     <div class="dial">
-      <div class="wtop"><span>09:41 · Semantic Reader</span><span class="live">EOF Verified</span></div>
+      <div class="wtop"><span>09:41 · Reader</span><span class="live">EOF Verified</span></div>
       <div class="dh2">Authenticated cipher</div>
-      <div class="dp">Answers stream into typed blocks inside the 96 px safe ring. Nothing is trimmed to fit.</div>
+      <div class="dp">Answers stream into typed blocks inside the 96 px safe ring.</div>
       <div class="dcode">c.init(DECRYPT_MODE, key, iv)
 c.updateAAD(sessionToken)</div>
       <div class="drec">
-        <div class="drec-h">Vertical Record · Property</div>
-        <div class="drec-r"><span>Tag length</span><b>128-bit GCM</b></div>
-        <div class="drec-r"><span>Transport</span><b>Direct BYOK SSE</b></div>
+        <div class="drec-h">Table record</div>
+        <div class="drec-r"><span>Tag length</span><b>128 bit</b></div>
+        <div class="drec-r"><span>Nonce</span><b>96 bit</b></div>
+        <div class="drec-r"><span>On failure</span><b>No plaintext</b></div>
       </div>
     </div>
   </div>
