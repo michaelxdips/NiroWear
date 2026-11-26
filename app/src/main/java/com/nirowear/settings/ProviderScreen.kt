@@ -25,7 +25,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -747,6 +746,7 @@ fun ProviderScreen(onBack: () -> Unit) {
                 item {
                     OutlinedButton(modifier = Modifier.fillMaxWidth(), enabled = !busy, onClick = {
                         scope.launch {
+                            busy = true
                             try {
                                 app.settings.delete(deleting.id)
                                 edit = null
@@ -759,6 +759,8 @@ fun ProviderScreen(onBack: () -> Unit) {
                                 throw cancelled
                             } catch (_: Exception) {
                                 message = resources.getString(R.string.provider_delete_failed)
+                            } finally {
+                                busy = false
                             }
                         }
                     }) { Text(stringResource(R.string.provider_delete)) }

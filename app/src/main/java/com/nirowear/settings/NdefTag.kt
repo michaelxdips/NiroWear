@@ -31,7 +31,6 @@ internal object NdefTag {
     val INS_NOT_SUPPORTED = byteArrayOf(0x6D, 0x00)
     val WRONG_LENGTH = byteArrayOf(0x67, 0x00)
 
-    private const val TENF_WELL_KNOWN = 0x01
     private const val RTD_URI = 0x55
 
     /** RTD URI prefix code for `https://` (URI Record Type Definition, table 3). */

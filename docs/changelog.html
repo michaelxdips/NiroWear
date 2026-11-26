@@ -17,7 +17,6 @@
   --border:#C8C6BE;
   --border-soft:#DCDBD4;
   --accent:#0B5D51;
-  --accent-hover:#08473E;
   --accent-ink:#FFFFFF;
   --amber:#924C06;
   --font-display:"Segoe UI Variable Display","Inter","Segoe UI",system-ui,-apple-system,sans-serif;
@@ -33,7 +32,6 @@ html[data-theme="dark"]{
   --border:#2B333C;
   --border-soft:#1E242B;
   --accent:#7EE6CC;
-  --accent-hover:#9EEEDD;
   --accent-ink:#081412;
   --amber:#F2B45A;
 }
@@ -240,8 +238,8 @@ p:last-child{margin-bottom:0}
       <table class="gate">
         <thead><tr><th scope="col">Check</th><th scope="col">Result</th></tr></thead>
         <tbody>
-          <tr><td>JVM unit tests</td><td>316 / 316 pass across 51 suites, 0 failures, 1 skipped (opt-in live smoke)</td></tr>
-          <tr><td>ktlint &amp; lintDebug</td><td>ktlint 0 violations; lintDebug 0 errors, 1 warning (VisibleForTests)</td></tr>
+          <tr><td>JVM unit tests</td><td>315 passed, 1 skipped (316 tests across 51 suites, 0 failures; opt-in live smoke skipped); post-cut <code>main</code> runs 316 passed, 1 skipped (317 tests / 51 suites)</td></tr>
+          <tr><td>ktlint &amp; lintDebug</td><td>ktlint 0 violations; 0.3.0 lintDebug 0 errors, 1 warning (VisibleForTests resolved on post-cut <code>main</code>: 0 code warnings)</td></tr>
           <tr><td>Wear OS 5 AVD (466 x 466)</td><td>11/11 closeout classes (19/19 tests) + 10/10 CI smoke; v0.2.1 -&gt; v0.3.0 cold upgrade 0 FATAL; cold median 549 ms, warm 37 ms, scroll 2.92% jank (377 frames)</td></tr>
           <tr><td>5,000-msg migration &amp; torture</td><td>Room v2 -&gt; v3 migrated 200 convs / 5,000 msgs in 286.48 ms; search P50 0.53 ms (P95 4.15 ms); History 18-swipe scroll 2.23% jank (494 frames); 4,485 B torture fixture 6.09% jank on SwiftShader debug</td></tr>
         </tbody>
