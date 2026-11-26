@@ -33,8 +33,8 @@ android {
         applicationId = "com.nirowear"
         minSdk = 30
         targetSdk = 37
-        versionCode = 16
-        versionName = "0.3.0"
+        versionCode = 17
+        versionName = "0.3.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         testInstrumentationRunnerArguments["notAnnotation"] = "com.nirowear.HostDrivenGate"
     }
@@ -114,28 +114,27 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.wear.compose:compose-material3:1.6.2")
     implementation("androidx.datastore:datastore-preferences:1.3.0")
-    implementation("androidx.room:room-runtime:2.8.4")
-    ksp("androidx.room:room-compiler:2.8.4")
+    implementation("androidx.room:room-runtime:2.8.5")
+    ksp("androidx.room:room-compiler:2.8.5")
     implementation("com.squareup.okhttp3:okhttp:5.5.1")
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.13.0")
     implementation("org.commonmark:commonmark:0.24.0")
     implementation("org.commonmark:commonmark-ext-gfm-tables:0.24.0")
     implementation("org.commonmark:commonmark-ext-autolink:0.24.0")
     // Pairing QR: the platform has no QR encoder, and this artifact is also the DECODER the JVM
     // test uses to prove the rendered pixels scan — an encoder alone could only prove
     // self-consistency. Apache-2.0, pure JVM (no Android dependency), ~340 KB.
-    implementation("com.google.zxing:core:3.5.3")
+    implementation("com.google.zxing:core:3.5.4")
     testImplementation("junit:junit:4.13.2")
     // GPL v2-or-later WITH an independent-module linking exception: the exception permits linking
     // with MIT code and distributing the executable under terms of our choice. Notices + source
     // offer ship in assets/legal; see THIRD_PARTY_NOTICES.md.
     implementation("ru.noties:jlatexmath-android:0.2.0")
-    androidTestImplementation("androidx.test:runner:1.5.2")
-    // FixtureIsolationTest.kt uses androidx.test.core.app.ActivityScenario. It only arrived
-    // transitively through androidx.test.ext:junit:1.1.5, so the resolved version is declared here
-    // at the version that dependency already brings in (no upgrade, no new artifact).
-    androidTestImplementation("androidx.test:core:1.5.0")
-    androidTestImplementation("androidx.test.ext:junit:1.1.5")
+    androidTestImplementation("androidx.test:runner:1.7.0")
+    // FixtureIsolationTest.kt uses androidx.test.core.app.ActivityScenario, pinned explicitly alongside
+    // androidx.test.ext:junit:1.3.0.
+    androidTestImplementation("androidx.test:core:1.7.0")
+    androidTestImplementation("androidx.test.ext:junit:1.3.0")
     androidTestImplementation("com.squareup.okhttp3:mockwebserver:5.5.1")
     testImplementation("com.squareup.okhttp3:mockwebserver:5.5.1")
 }

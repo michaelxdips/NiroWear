@@ -5,7 +5,12 @@ Notable changes to NiroWear. Versions follow the published APK releases at
 
 ## Unreleased
 
-- `ChatViewModel` fixes and cleanup: clear `liveAnswer` after `retrySaving()` commits (`CompatibleChatTest#retrySavingClearsStaleLiveAnswerError`), propagate `CancellationException` cleanly in `init`, guard `SavedStateHandle` as nullable (`lintDebug` `VisibleForTests` resolved to 0 code warnings), thread-confine `streamPrefixCache` to `parseDispatcher` across locale changes (`StreamParseTest#confinedPrefixCacheSurvivesRepeatedLocaleClearWithoutConcurrentModification`), lock `ProviderScreen` `Delete` button with `busy`, and remove unused imports and constants.
+_(Nothing pending release — all verified fixes below ship in 0.3.1.)_
+
+## 0.3.1 — 2026-11-26
+
+- `ChatViewModel` fixes and cleanup: clear `liveAnswer` after `retrySaving()` commits (`CompatibleChatTest#retrySavingClearsStaleLiveAnswerError`), propagate `CancellationException` cleanly in `init`, guard `SavedStateHandle` as nullable (`lintDebug` `VisibleForTests` resolved to 0 code warnings), thread-confine `streamPrefixCache` to `parseDispatcher` across locale changes (`StreamParseTest#confinedPrefixCacheSurvivesRepeatedLocaleClearWithoutConcurrentModification`), lock `ProviderScreen` `Delete` button with `busy`, and remove unused constants and imports across `MainActivity`, `ProviderScreen`, `NdefTag`, `AnthropicProvider`, `GeminiProvider`, `OpenAiProvider`, `DocumentBlock`, `MathContent`, and `ResponseParser`.
+- Land `compileSdk 37.0`-compatible dependency patch updates (`androidx.room` `2.8.5`, `kotlinx-serialization-json` `1.13.0`, `com.google.zxing:core` `3.5.4`, `androidx.test:runner` / `core` `1.7.0`, `androidx.test.ext:junit` `1.3.0`) alongside GitHub Actions pins. (`androidx.compose:compose-bom:2026.11.01` stays held until `compileSdk` moves to `37.1`.)
 - Tighten GitHub Pages UI (`docs/index.html`) without pre-entry splash animation and sync cross-file references (`docs/changelog.html`, `README.md`, `BUILD_AND_RECOVERY.md`).
 
 ## 0.3.0 — 2026-11-26
