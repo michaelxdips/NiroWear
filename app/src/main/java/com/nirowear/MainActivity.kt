@@ -12,7 +12,6 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -61,8 +60,6 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
@@ -349,11 +346,11 @@ private fun ChatReader(
     // Presentation includes status/error/provenance, not just Markdown. All fields invalidate it.
     LaunchedEffect(storedMessages, chatState.conversationId, localeTag) {
         val id = chatState.conversationId
-        if (lastLocaleTag != localeTag) {
+        val localeChanged = lastLocaleTag != localeTag
+        if (localeChanged) {
             lastLocaleTag = localeTag
             // Every memoised block carries resolved text, so they are all stale now.
             parsedRows = emptyMap()
-            streamPrefixCache.clear()
         }
         val messages = storedMessages
         val previous = evictStaleConversations(parsedRows, recentConversations + listOfNotNull(id))
@@ -381,6 +378,7 @@ private fun ChatReader(
 
         val rows =
             kotlinx.coroutines.withContext(parseDispatcher) {
+                if (localeChanged) streamPrefixCache.clear()
                 val activeIds = messages.mapNotNull { if (it.conversationId == id) it.id else null }.toSet()
                 streamPrefixCache.keys.retainAll(activeIds)
                 messages.filter { it.conversationId == id }.associateWith { message ->

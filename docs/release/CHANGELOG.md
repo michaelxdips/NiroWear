@@ -5,17 +5,18 @@ Notable changes to NiroWear. Versions follow the published APK releases at
 
 ## Unreleased
 
-_(Nothing pending release — all verified fixes below ship in 0.3.0.)_
+- `ChatViewModel` fixes and cleanup: clear `liveAnswer` after `retrySaving()` commits (`CompatibleChatTest#retrySavingClearsStaleLiveAnswerError`), propagate `CancellationException` cleanly in `init`, guard `SavedStateHandle` as nullable (`lintDebug` `VisibleForTests` resolved to 0 code warnings), thread-confine `streamPrefixCache` to `parseDispatcher` across locale changes (`StreamParseTest#confinedPrefixCacheSurvivesRepeatedLocaleClearWithoutConcurrentModification`), lock `ProviderScreen` `Delete` button with `busy`, and remove unused imports and constants.
+- Tighten GitHub Pages UI (`docs/index.html`) without pre-entry splash animation and sync cross-file references (`docs/changelog.html`, `README.md`, `BUILD_AND_RECOVERY.md`).
 
 ## 0.3.0 — 2026-11-26
 
 - Atomic composer draft persistence (`I4`, #83): exit-saved drafts live in Room (`ChatDatabase` v3) across process death, and `Send` commits the `USER` row and clears the draft in one transaction (`InputResultUiTest`).
-- Localize the unsaved-answer banner behind `FailureToken.ANSWER_NOT_SAVED` (`failure_answer_not_saved`) so English/Indonesian resource parity matches at **127 keys per locale** (`IndonesianReaderNoticesTest`; combining #83 `chat_draft_unavailable` and `N4`).
+- Localize the unsaved-answer banner behind `FailureToken.ANSWER_NOT_SAVED` (`failure_answer_not_saved`) so English/Indonesian resource parity matches at **127 keys per locale** (`IndonesianReaderNoticesTest`; combining #83 `chat_draft_not_saved` and `N4`).
 - Enforce top-to-bottom TalkBack traversal order (`Menu -> Reader -> Footer`) with labelled interactive controls across Reader, Menu, History, and Providers (`M6`, `TalkBackTraversalOrderTest`), and add conditional horizontal pan fade + slate edge cue to code blocks (`M4`, `CodeBlockPanCueTest`).
 - Strengthen `ComposerSendButtonTest` to prove like-for-like cancel zero-shift (`index=2->2, offset=102->102`, `Rect(48, 122 - 418, 166)`) plus settled Turn 2 follow on `nirowear-b`.
 - Optimize streaming Markdown parsing (`ResponseParser.needsPreScan`, `ResponseParser.parseIncremental` prefix caching, single-flight `parseDispatcher`), cutting debug-AVD 4 KB parse P95 from `90.948 ms` to `11.735 ms` (pipe-free) and `48.184 ms` to `12.077 ms` (mixed), and same-process coalesced mixed burst total parse CPU from `79.503 ms` to `21.880 ms` (`P95 1.080 ms`).
 - Harden History Flow retry handling (`P1`), SSE monotonic idle timing (`P2`), parse memo eviction (`P3`), release workflow test/lint/notes preflight (`P4`, `P5`), CI test-source enforcement (`P12`), website accessibility/layout (`A1..A8`, `P6`, `P7`), and documentation sync (`B1..B4`, `K4` reconciling closed `#50` under `#84`).
-- Release notes: `docs/release/RELEASE_NOTES_0.3.0.md` (**316 unit tests / 51 suites**, `0` failures, `1` skipped; `lintDebug` `0` errors / `1` warning; `ktlintCheck` `0` violations).
+- Release notes: `docs/release/RELEASE_NOTES_0.3.0.md` (`versionCode 16`, signed APK **3,779,197 B**, SHA-256 `d94a5af3755b1c3d86257525cd643042db4cf64d7f755cbcdcab5ea23e040ca2`; **316 unit tests / 51 suites**, `0` failures, `1` skipped; `lintDebug` `0` errors / `1` warning; `ktlintCheck` `0` violations).
 - Startup rule: never add animation or delay to mask a slow launch. Measure startup using a release build. (#82)
 - CI instrumented smoke runner passes the 10-class filter directly to `AndroidJUnitRunner` and isolates status bundles in `scripts/instrumentation-xml.py` (#80, #81).
 
@@ -155,7 +156,7 @@ That is a test-side bug in a gate nobody had run — no product behaviour change
 scripts now take `-Serial` and `-ExpectedAvd` and refuse unless `adb emu avd name` reports exactly that
 AVD, so none of them can be pointed at a watch holding real credentials.
 
-Measured on this tree: JVM **269 / 269** across 43 suites, ktlint 0, Android Lint 0 issues,
+Measured on this tree: JVM **283 / 283** across 44 suites, ktlint 0, Android Lint 0 issues,
 `assembleDebug` + `assembleRelease` pass, and the instrumented suite is **66 tests, 2 failures,
 0 errors** — `PairingUiTest#keyArrivesFromPhoneWithoutTypingOnWatch` (needs a real phone browser) and
 `RendererTapAndPanTest#wideCodeHasAccessibleHorizontalScrollInLtrAndRtl` (fails in suite order, passes in

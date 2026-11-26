@@ -138,7 +138,7 @@ internal fun Flow<List<Conversation>>.retryHistoryReads(
 
 class ChatViewModel(
     application: Application,
-    savedState: SavedStateHandle = SavedStateHandle(),
+    savedState: SavedStateHandle? = null,
 ) : AndroidViewModel(application) {
     private val app = application as NiroApplication
     private val dao = app.database.chats()
@@ -202,6 +202,8 @@ class ChatViewModel(
                     observe(it.id)
                 }
                 ready.complete(Unit)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (_: Exception) {
                 initFailed = true
                 mutableState.value = mutableState.value.copy(error = FailureToken.HISTORY_UNAVAILABLE)
@@ -268,7 +270,7 @@ class ChatViewModel(
 
     // Task state can be captured while Send is still writing. Keep its text, but use it only
     // if Room still has the revision this editor opened on. A save or committed Send supersedes it.
-    private var restoredComposer = savedState.get<Bundle>("composer")?.takeIf { it.containsKey("text") }
+    private var restoredComposer = savedState?.get<Bundle>("composer")?.takeIf { it.containsKey("text") }
     private var composerRevision: String? = null
     private var composerLoaded = false
     var composerField by mutableStateOf(TextFieldValue())
@@ -277,7 +279,7 @@ class ChatViewModel(
     var pendingDictation: String? = null
 
     init {
-        savedState.setSavedStateProvider("composer", ::composerTaskSnapshot)
+        savedState?.setSavedStateProvider("composer", ::composerTaskSnapshot)
     }
 
     internal fun composerTaskSnapshot(): Bundle {
@@ -768,6 +770,7 @@ class ChatViewModel(
                 try {
                     save()
                     pendingSave = null
+                    liveAnswer.value = null
                     mutableState.value = mutableState.value.copy(rawMarkdown = null, unsaved = false, error = null)
                 } catch (cancelled: CancellationException) {
                     // Stop during a save retry must not be reported as a storage failure: the write is

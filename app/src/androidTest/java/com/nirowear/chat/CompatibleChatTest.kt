@@ -3,6 +3,7 @@ package com.nirowear.chat
 import android.os.SystemClock
 import androidx.lifecycle.viewModelScope
 import androidx.test.platform.app.InstrumentationRegistry
+import com.nirowear.FailureToken
 import com.nirowear.NiroApplication
 import com.nirowear.provider.*
 import kotlinx.coroutines.*
@@ -299,6 +300,61 @@ class CompatibleChatTest {
                         app.settings.delete(b.id)
                         instrumentation.runOnMainSync { vm?.viewModelScope?.cancel() }
                     }
+                }
+            }
+        }
+
+    @Test fun retrySavingClearsStaleLiveAnswerError() =
+        runBlocking {
+            MockWebServer().use { server ->
+                server.start()
+                val profile =
+                    ProviderProfile(
+                        UUID.randomUUID().toString(),
+                        ProviderType.OPENAI_COMPATIBLE,
+                        "Retry clears error",
+                        server.url("/v1").toString(),
+                        "test",
+                        UUID.randomUUID().toString(),
+                    )
+                var vm: ChatViewModel? = null
+                var id: String? = null
+                try {
+                    app.settings.save(profile, SecretValue("controlled-retry-clear-not-real"))
+                    instrumentation.runOnMainSync { vm = ChatViewModel(app) }
+                    val chat = vm!!
+                    val ready =
+                        ChatViewModel::class.java
+                            .getDeclaredField("ready")
+                            .apply { isAccessible = true }
+                            .get(chat) as CompletableDeferred<*>
+                    withTimeout(5000) { ready.await() }
+                    ChatStorageProbe.beforeFinish = { error("Controlled save failure") }
+                    server.enqueue(response("Saved after retry"))
+                    withContext(Dispatchers.Main) {
+                        chat.newChat()
+                        chat.send("Retry error probe")
+                    }
+                    withTimeout(10000) { chat.state.first { !it.generating } }
+                    id = chat.state.value.conversationId!!
+                    assertTrue(chat.state.value.unsaved)
+                    withTimeout(5000) {
+                        chat.messages.first { it.lastOrNull()?.error == FailureToken.ANSWER_NOT_SAVED }
+                    }
+                    ChatStorageProbe.beforeFinish = null
+                    withContext(Dispatchers.Main) { chat.retrySaving() }
+                    withTimeout(5000) { chat.state.first { !it.generating } }
+                    assertFalse(chat.state.value.unsaved)
+                    val cleared =
+                        withTimeout(5000) {
+                            chat.messages.first { it.lastOrNull()?.error == null }
+                        }
+                    assertNull(cleared.last().error)
+                } finally {
+                    ChatStorageProbe.beforeFinish = null
+                    id?.let { app.database.chats().deleteConversation(it) }
+                    app.settings.delete(profile.id)
+                    instrumentation.runOnMainSync { vm?.viewModelScope?.cancel() }
                 }
             }
         }

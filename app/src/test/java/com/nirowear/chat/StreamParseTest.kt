@@ -2,6 +2,13 @@ package com.nirowear.chat
 
 import com.nirowear.data.StoredMessage
 import com.nirowear.renderer.ContentBlock
+import com.nirowear.renderer.ResponseParser
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -60,4 +67,36 @@ class StreamParseTest {
     fun neverReturnsNegative() {
         assertEquals(0L, coalesceDelayMs(nowMs = 900L, lastParseAtMs = 1_000L, windowMs = 16L))
     }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun confinedPrefixCacheSurvivesRepeatedLocaleClearWithoutConcurrentModification() =
+        runBlocking {
+            val parseDispatcher = Dispatchers.Default.limitedParallelism(1)
+            val streamPrefixCache = HashMap<Long, ResponseParser.IncrementalParseState>()
+            val prefixSample = "Alpha section.\n\nBeta section.\n\nGamma paragraph with enough characters to exceed the incremental prefix threshold safely."
+            val jobs =
+                (1..200).map { step ->
+                    async(Dispatchers.Default) {
+                        val localeChanged = step % 3 == 0
+                        withContext(parseDispatcher) {
+                            if (localeChanged) streamPrefixCache.clear()
+                            val activeIds = setOf(1L, 2L, 3L)
+                            streamPrefixCache.keys.retainAll(activeIds)
+                            val id = (step % 3).toLong() + 1L
+                            val raw = prefixSample + "\n\nDelta #$step."
+                            val (nextPrefix, blocks) = ResponseParser.parseIncremental(streamPrefixCache[id], raw)
+                            if (nextPrefix != null) {
+                                streamPrefixCache[id] = nextPrefix
+                            } else {
+                                streamPrefixCache.remove(id)
+                            }
+                            blocks
+                        }
+                    }
+                }
+            val results = jobs.awaitAll()
+            assertEquals(200, results.size)
+            assertTrue(results.all { it.isNotEmpty() })
+        }
 }
