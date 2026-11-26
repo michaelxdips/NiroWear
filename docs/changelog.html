@@ -3,131 +3,214 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>NiroWear — changelog</title>
-<meta name="description" content="Every NiroWear release, with the artifact identity and the checks that were actually run for each one.">
+<title>NiroWear: Changelog</title>
+<meta name="description" content="Release history for NiroWear, recording artifact digests and verified test gates for each cut.">
 <meta name="color-scheme" content="light dark">
 <link rel="icon" href="branding/nirowear-mark.svg">
 <style>
 :root{
-  --paper:#ECEDE9;--ink:#101315;--steel:#5A6167;--hair:#C9CCC5;--hair-soft:#DBDED7;
-  --cobalt:#1D39C4;--brass:#7E5C1C;--dial:#0A0C0E;--code-bg:#DFE2DB;
-  --display:ui-monospace,"SFMono-Regular",Menlo,Consolas,"Liberation Mono",monospace;
-  --display-2:"Segoe UI Variable Display","Segoe UI",system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;
-  --body:"Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua",Georgia,serif;
-  --util:ui-monospace,"SFMono-Regular",Menlo,Consolas,"Liberation Mono",monospace;
+  --bg:#F3F1EA;
+  --surface:#E8E5DC;
+  --card:#FAF9F5;
+  --ink:#101418;
+  --muted:#49525B;
+  --border:#C8C6BE;
+  --border-soft:#DCDBD4;
+  --accent:#0B5D51;
+  --accent-hover:#08473E;
+  --accent-ink:#FFFFFF;
+  --amber:#924C06;
+  --font-display:"Segoe UI Variable Display","Inter","Segoe UI",system-ui,-apple-system,sans-serif;
+  --font-body:"Segoe UI",system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;
+  --font-mono:ui-monospace,"SFMono-Regular",Menlo,Consolas,"Liberation Mono",monospace;
 }
 html[data-theme="dark"]{
-  --paper:#0E1012;--ink:#E8E9E5;--steel:#8A9196;--hair:#2A2E31;--hair-soft:#1D2124;
-  --cobalt:#7C90FF;--brass:#C79A46;--dial:#05070A;--code-bg:#191D20;
+  --bg:#0A0D11;
+  --surface:#12161B;
+  --card:#141A21;
+  --ink:#EEF2F0;
+  --muted:#9BA5AE;
+  --border:#2B333C;
+  --border-soft:#1E242B;
+  --accent:#7EE6CC;
+  --accent-hover:#9EEEDD;
+  --accent-ink:#081412;
+  --amber:#F2B45A;
 }
 *,*::before,*::after{box-sizing:border-box}
-html{scroll-padding-top:74px}
+html{scroll-padding-top:76px}
 body{
-  margin:0;background:var(--paper);color:var(--ink);
-  font-family:var(--body);font-size:17px;line-height:1.62;
-  -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
+  margin:0;
+  background:var(--bg);
+  color:var(--ink);
+  font-family:var(--font-body);
+  font-size:17px;
+  line-height:1.62;
+  -webkit-font-smoothing:antialiased;
 }
-a{color:var(--ink);text-decoration:none;text-underline-offset:3px;text-decoration-thickness:1px}
-a:hover{text-decoration:underline}
-:where(a,button):focus-visible{outline:2px solid var(--cobalt);outline-offset:3px}
-h1,h2,h3{font-family:var(--display);font-weight:700;letter-spacing:-.045em;line-height:.98;margin:0;text-wrap:balance}
-p{margin:0 0 1.05em;max-width:64ch}
+a{color:var(--accent);text-decoration:underline;text-underline-offset:3px;text-decoration-thickness:1px}
+a:hover{color:var(--ink)}
+:where(a,button):focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+h1,h2,h3{font-family:var(--font-display);font-weight:700;letter-spacing:-.035em;line-height:1.1;margin:0;text-wrap:balance}
+p{margin:0 0 1rem;max-width:65ch}
 p:last-child{margin-bottom:0}
-.label{font-family:var(--util);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--steel)}
 
-.masthead{position:sticky;top:0;z-index:50;background:color-mix(in srgb,var(--paper) 92%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--hair)}
-.masthead-in{display:flex;align-items:center;gap:18px;min-height:58px;max-width:900px;margin:0 auto;padding:0 28px}
-.brand{display:flex;align-items:baseline;gap:9px;font-family:var(--display);font-weight:700;font-size:15px;letter-spacing:.02em;text-transform:uppercase}
-.brand svg{width:17px;height:17px;flex:0 0 auto;align-self:center}
-.masthead nav{margin-left:auto;display:flex;align-items:center;gap:20px;font-family:var(--util);font-size:11px;letter-spacing:.11em;text-transform:uppercase}
-.masthead nav a{color:var(--steel)}
-.masthead nav a:hover{color:var(--ink);text-decoration:none}
-.tbtn{appearance:none;background:none;border:1px solid var(--hair);color:var(--steel);width:30px;height:30px;display:grid;place-items:center;cursor:pointer;font-family:var(--util);font-size:12px;line-height:1;padding:0}
-.tbtn:hover{border-color:var(--ink);color:var(--ink)}
+.skip{position:absolute;left:-9999px;top:0;z-index:200;background:var(--accent);color:var(--accent-ink);padding:10px 16px;font-family:var(--font-mono);font-size:13px;text-decoration:none}
+.skip:focus{left:12px;top:12px}
 
-.wrap{max-width:900px;margin:0 auto;padding:0 28px}
-.head{padding:64px 0 40px;border-bottom:1px solid var(--ink)}
-.head h1{font-size:clamp(2rem,5vw,3rem);margin-bottom:18px}
-.head p{color:var(--steel);font-size:17px;max-width:58ch}
-.head .meta{font-family:var(--util);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--steel);margin-top:24px}
+.masthead{
+  position:sticky;top:0;z-index:50;
+  background:color-mix(in srgb, var(--bg) 92%, transparent);
+  backdrop-filter:blur(10px);
+  border-bottom:1px solid var(--border);
+}
+.masthead-in{
+  max-width:960px;margin:0 auto;padding:0 24px;
+  min-height:60px;display:flex;align-items:center;gap:18px;
+}
+.brand{
+  display:flex;align-items:center;gap:10px;
+  font-family:var(--font-display);font-weight:700;font-size:16px;
+  color:var(--ink);text-decoration:none;letter-spacing:-.02em;
+}
+.brand:hover{color:var(--accent)}
+.masthead nav{margin-left:auto;display:flex;align-items:center;gap:18px;font-family:var(--font-mono);font-size:12px}
+.masthead nav a{color:var(--muted);text-decoration:none;padding:8px 2px}
+.masthead nav a:hover,.masthead nav a[aria-current="page"]{color:var(--ink)}
+.tbtn{
+  appearance:none;background:var(--card);border:1px solid var(--border);
+  color:var(--ink);min-width:44px;min-height:44px;
+  display:inline-grid;place-items:center;cursor:pointer;
+  font-family:var(--font-mono);font-size:15px;padding:0;border-radius:4px;
+}
+.tbtn:hover{border-color:var(--accent)}
 
-.release{padding:48px 0 44px;border-bottom:1px solid var(--hair);display:grid;grid-template-columns:132px minmax(0,1fr);gap:0 32px;align-items:start}
+.wrap{max-width:960px;margin:0 auto;padding:0 24px}
+.head{padding:56px 0 36px;border-bottom:1px solid var(--border)}
+.head h1{font-size:clamp(2rem,4.4vw,3rem);margin-bottom:14px}
+.head p{color:var(--muted);font-size:17px}
+.head .meta{font-family:var(--font-mono);font-size:12px;color:var(--muted);margin-top:20px}
+
+.release{
+  padding:44px 0;border-bottom:1px solid var(--border);
+  display:grid;grid-template-columns:160px minmax(0,1fr);gap:24px 36px;align-items:start;
+}
 .release:last-of-type{border-bottom:0}
-.rside{position:sticky;top:82px}
-.rver{font-family:var(--display-2);font-weight:600;font-size:22px;letter-spacing:-.03em;line-height:1;display:block;font-variant-numeric:tabular-nums}
-.rdate{font-family:var(--util);font-size:10.5px;letter-spacing:.08em;color:var(--steel);display:block;margin-top:8px}
-.rbadge{display:inline-block;margin-top:12px;border:1px solid currentColor;padding:1px 7px;font-family:var(--util);font-size:9px;letter-spacing:.13em;text-transform:uppercase;line-height:1.7;color:var(--brass)}
-.rbadge.latest{color:var(--cobalt)}
+.rside{position:sticky;top:84px}
+.rver{
+  font-family:var(--font-mono);font-weight:700;font-size:22px;
+  line-height:1.1;display:block;font-variant-numeric:tabular-nums;color:var(--ink);
+}
+.rdate{font-family:var(--font-mono);font-size:12px;color:var(--muted);display:block;margin-top:6px}
+.rtag{
+  display:inline-block;margin-top:10px;font-family:var(--font-mono);
+  font-size:11px;font-weight:600;color:var(--accent);
+}
 
-.rbody h2{font-size:clamp(1.25rem,2.4vw,1.6rem);margin-bottom:14px;letter-spacing:-.03em}
-.rbody > p{color:var(--steel);font-size:16px;margin-bottom:18px}
-.rbody ul{margin:0 0 18px;padding-left:20px;color:var(--steel);font-size:15.5px}
+.rbody h2{font-size:clamp(1.25rem,2.4vw,1.6rem);margin-bottom:14px;letter-spacing:-.025em}
+.rbody h3{font-size:1.08rem;margin:22px 0 10px}
+.rbody > p{color:var(--muted);font-size:16px}
+.rbody strong{color:var(--ink)}
+.rbody ul{margin:0 0 18px;padding-left:20px;color:var(--muted);font-size:15.5px}
 .rbody li{margin-bottom:8px}
 .rbody li strong{color:var(--ink);font-weight:600}
-.rbody code{font-family:var(--util);font-size:.86em;background:var(--code-bg);padding:1px 4px;overflow-wrap:anywhere}
+.rbody code{
+  font-family:var(--font-mono);font-size:.86em;
+  background:var(--surface);padding:2px 5px;border-radius:3px;
+  color:var(--ink);overflow-wrap:anywhere;
+}
 
-.ident{border:1px solid var(--hair);background:var(--code-bg);margin:18px 0 0}
-.ident div{display:grid;grid-template-columns:110px minmax(0,1fr);gap:0 14px;padding:7px 13px;border-bottom:1px solid var(--hair-soft);font-family:var(--util);font-size:11px}
+.ident{border:1px solid var(--border);background:var(--card);margin:20px 0 0;border-radius:4px}
+.ident div{
+  display:grid;grid-template-columns:130px minmax(0,1fr);gap:4px 16px;
+  padding:9px 14px;border-bottom:1px solid var(--border-soft);
+  font-family:var(--font-mono);font-size:12px;
+}
 .ident div:last-child{border-bottom:0}
-.ident dt{color:var(--steel);letter-spacing:.08em;text-transform:uppercase;font-size:9.5px;padding-top:2px}
-.ident dd{margin:0;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+.ident dt{color:var(--muted);font-weight:600}
+.ident dd{margin:0;color:var(--ink);overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
 
-.gate{width:100%;border-collapse:collapse;font-family:var(--util);font-size:11.5px;margin-top:18px}
-.gate th{text-align:left;font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--steel);font-weight:400;padding:0 12px 7px 0;border-bottom:1px solid var(--ink)}
-.gate td{padding:8px 12px 8px 0;border-bottom:1px solid var(--hair-soft);vertical-align:top}
-.gate td:first-child{color:var(--steel)}
-.gate td:last-child{text-align:right;color:var(--ink);font-variant-numeric:tabular-nums;white-space:normal;overflow-wrap:anywhere}
+.gate{width:100%;border-collapse:collapse;font-family:var(--font-mono);font-size:12px;margin-top:20px}
+.gate th{
+  text-align:left;font-size:11px;color:var(--muted);font-weight:600;
+  padding:0 12px 8px 0;border-bottom:1px solid var(--border);
+}
+.gate td{padding:9px 12px 9px 0;border-bottom:1px solid var(--border-soft);vertical-align:top;color:var(--ink)}
+.gate td:first-child{color:var(--muted);width:34%}
 .gate tr:last-child td{border-bottom:0}
 
-.note{margin-top:18px;font-family:var(--util);font-size:11px;line-height:1.7;color:var(--steel);border-left:2px solid var(--brass);padding-left:12px;max-width:70ch}
+.note{
+  margin-top:18px;font-family:var(--font-mono);font-size:12px;line-height:1.65;
+  color:var(--muted);border-left:3px solid var(--amber);padding-left:14px;max-width:68ch;
+}
 
-.colophon{border-top:1px solid var(--ink);padding:40px 0 60px;margin-top:20px}
-.colophon .fine{font-family:var(--util);font-size:10.5px;line-height:1.85;color:var(--steel);max-width:78ch}
+.colophon{border-top:1px solid var(--border);padding:36px 0 56px}
+.colophon .fine{font-family:var(--font-mono);font-size:12px;line-height:1.75;color:var(--muted);max-width:74ch}
 
-@media (max-width:720px){
-  .release{grid-template-columns:minmax(0,1fr);gap:18px}
-  .rside{position:static}
-  .rver{font-size:19px}
+@media (max-width:740px){
+  .wrap,.masthead-in{padding:0 16px}
+  .masthead-in{gap:10px}
+  .masthead nav{gap:10px;font-size:11.5px}
+  .release{grid-template-columns:minmax(0,1fr);gap:14px;padding:34px 0}
+  .rside{position:static;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+  .rtag{margin-top:0}
   .ident div{grid-template-columns:minmax(0,1fr);gap:2px}
-  .gate td:last-child{text-align:left;white-space:normal}
   .masthead nav a.opt{display:none}
   body{font-size:16px}
 }
-@media (prefers-reduced-motion:reduce){*{transition-duration:.01ms !important;animation-duration:.01ms !important}}
-@media print{.masthead{display:none}body{background:#fff;color:#000}.release{break-inside:avoid}}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{transition-duration:.01ms !important;animation-duration:.01ms !important}
+}
+@media print{
+  .masthead{display:none}
+  body{background:#fff;color:#000}
+  .release{break-inside:avoid}
+}
 </style>
+<script>
+(function () {
+  try {
+    var stored = localStorage.getItem("nirowear-scheme");
+    if (stored === "dark" || stored === "light") {
+      document.documentElement.setAttribute("data-theme", stored);
+    } else if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
+      document.documentElement.setAttribute("data-theme", "dark");
+    }
+  } catch (e) {}
+})();
+</script>
 </head>
 <body>
+<a class="skip" href="#main">Skip to content</a>
 
 <header class="masthead">
   <div class="masthead-in">
     <a class="brand" href="index.html">
-      <svg viewBox="0 0 108 108" aria-hidden="true">
-        <rect width="108" height="108" rx="24" fill="currentColor"/>
-        <path d="M31.89 30.87 H76.11 V64.28 H67.89 V39.09 H40.11 V77.13 H31.89 Z" fill="var(--paper)"/>
+      <svg width="20" height="20" viewBox="0 0 108 108" aria-hidden="true">
+        <rect width="108" height="108" rx="24" fill="currentColor"></rect>
+        <path d="M31.89 30.87 H76.11 V64.28 H67.89 V39.09 H40.11 V77.13 H31.89 Z" fill="var(--bg)"></path>
       </svg>
-      NiroWear
+      <span>NiroWear</span>
     </a>
-    <nav>
-      <a href="index.html">Home</a>
+    <nav aria-label="Primary">
+      <a href="index.html">Overview</a>
       <a href="index.html#bench" class="opt">Bench</a>
-      <a href="index.html#status" class="opt">Status</a>
-      <a href="https://github.com/michaelxdips/NiroWear">Source</a>
-      <button class="tbtn" id="theme" aria-label="Switch colour scheme">◐</button>
+      <a href="index.html#status" class="opt">Evidence</a>
+      <a href="changelog.html" class="opt" aria-current="page">Changelog</a>
+      <a href="https://github.com/michaelxdips/NiroWear">GitHub</a>
+      <button class="tbtn" type="button" id="theme" aria-label="Switch color scheme" aria-pressed="false">◐</button>
     </nav>
   </div>
 </header>
 
-<main class="wrap">
+<main class="wrap" id="main">
 
   <div class="head">
-    <span class="label">Release history</span>
-    <h1 style="margin-top:14px">Changelog</h1>
+    <h1>Changelog</h1>
     <p>
-      Every published build, in order, with the numbers that identify it. Each entry records what was
-      actually executed for that release — not what was intended.
+      Published builds in reverse chronological order, recording the artifact identity and the tests actually run for each cut.
     </p>
-    <p class="meta">Generated from git history and the NiroWear release API · 2026-11-26</p>
+    <p class="meta">Synced to tag v0.3.0 and main · Updated 2026-11-26</p>
   </div>
 
   <!-- 0.3.0 -->
@@ -135,30 +218,36 @@ p:last-child{margin-bottom:0}
     <div class="rside">
       <span class="rver">0.3.0</span>
       <span class="rdate">2026-11-26</span>
-      <span class="rbadge latest">Latest</span>
+      <span class="rtag">Latest release</span>
     </div>
     <div class="rbody">
-      <h2>Atomic drafts, incremental Markdown streaming, TalkBack order, and 127-key parity</h2>
+      <h2>Atomic drafts, incremental streaming, TalkBack order, and 127-key parity</h2>
       <p>
-        Exit-saved composer drafts live in Room (<code>ChatDatabase</code> v3) so Back-exit drafts
-        survive process death and <code>Send</code> commits the question while clearing the draft in one
-        transaction (<code>InputResultUiTest</code>).
+        Exit-saved composer drafts live in Room (<code>ChatDatabase</code> v3) so Back-exit drafts survive process death and <code>Send</code> commits the question while clearing the draft in one transaction (<code>InputResultUiTest</code>).
       </p>
-      <p>
-        Streaming Markdown parsing adds <code>ResponseParser.needsPreScan</code>,
-        <code>ResponseParser.parseIncremental</code> prefix caching, and single-flight coalescing;
-        the unsaved-answer banner is localized under <code>FailureToken.ANSWER_NOT_SAVED</code>
-        (<strong>127 keys</strong> in English and Indonesian, zero missing), code blocks show a
-        conditional horizontal-pan edge fade cue, and TalkBack traversal visits
-        <code>Menu → Reader → Footer</code> in top-to-bottom order
-        (<code>TalkBackTraversalOrderTest</code>).
-      </p>
-      <p>
-        Verified on this cut: <strong>316 JVM unit tests / 51 suites</strong> (0 failures, 1
-        skipped), <code>lintDebug</code> 0 errors / 1 warning, <code>ktlintCheck</code> 0
-        violations, and Wear OS 5 API 34 AVD (<code>466×466</code>) instrumented suites. Physical
-        Xiaomi Watch 2 checks were skipped for this emulator-first cut; release workflow gates signing
-        on unit tests, lint, ktlint, and release notes.
+      <ul>
+        <li><strong>Incremental Markdown streaming:</strong> adds <code>ResponseParser.needsPreScan</code>, container guards, <code>ResponseParser.parseIncremental</code> prefix caching (3,755 B cached on a 4 KB mixed answer), and single-flight <code>parseDispatcher</code>.</li>
+        <li><strong>Localized unsaved banner &amp; 127-key parity:</strong> moves the unsaved-answer notice under <code>FailureToken.ANSWER_NOT_SAVED</code> (<code>failure_answer_not_saved</code>), bringing <code>values/</code> and <code>values-in/</code> to 127 matching keys with zero missing or extra.</li>
+        <li><strong>TalkBack order &amp; code-block scroll cue:</strong> enforces top-to-bottom <code>Menu -&gt; Reader -&gt; Footer</code> traversal (<code>TalkBackTraversalOrderTest</code>) and adds a conditional horizontal-pan edge fade to code blocks (<code>CodeBlockPanCueTest</code>).</li>
+        <li><strong>Workflow &amp; CI gates:</strong> signed release builds gate keystore decode on <code>ktlintCheck</code>, <code>testDebugUnitTest</code>, <code>lintDebug</code>, and <code>RELEASE_NOTES_0.3.0.md</code> preflight; branch protection requires both <code>jvm</code> and <code>instrumented</code>.</li>
+      </ul>
+      <dl class="ident">
+        <div><dt>versionCode</dt><dd>16</dd></div>
+        <div><dt>size</dt><dd>3,779,197 B</dd></div>
+        <div><dt>sha256</dt><dd>d94a5af3755b1c3d86257525cd643042db4cf64d7f755cbcdcab5ea23e040ca2</dd></div>
+        <div><dt>certificate</dt><dd>CN=NiroWear Release (0dc50fc0…86543e)</dd></div>
+      </dl>
+      <table class="gate">
+        <thead><tr><th scope="col">Check</th><th scope="col">Result</th></tr></thead>
+        <tbody>
+          <tr><td>JVM unit tests</td><td>316 / 316 pass across 51 suites, 0 failures, 1 skipped (opt-in live smoke)</td></tr>
+          <tr><td>ktlint &amp; lintDebug</td><td>ktlint 0 violations; lintDebug 0 errors, 1 warning (VisibleForTests)</td></tr>
+          <tr><td>Wear OS 5 AVD (466 x 466)</td><td>11/11 closeout classes (19/19 tests) + 10/10 CI smoke; v0.2.1 -&gt; v0.3.0 cold upgrade 0 FATAL; cold median 549 ms, warm 37 ms, scroll 2.92% jank (377 frames)</td></tr>
+          <tr><td>5,000-msg migration &amp; torture</td><td>Room v2 -&gt; v3 migrated 200 convs / 5,000 msgs in 286.48 ms; search P50 0.53 ms (P95 4.15 ms); History 18-swipe scroll 2.23% jank (494 frames); 4,485 B torture fixture 6.09% jank on SwiftShader debug</td></tr>
+        </tbody>
+      </table>
+      <p class="note">
+        Physical Xiaomi Watch 2 hardware checks (battery %, thermals above status 0, TalkBack audio, real Gboard dictation/taps, phone cert click-through #28, and v0.3.0 watch release timings #65/#89) were skipped for this emulator-first cut.
       </p>
     </div>
   </article>
@@ -170,31 +259,21 @@ p:last-child{margin-bottom:0}
       <span class="rdate">2026-11-17</span>
     </div>
     <div class="rbody">
-      <h2>The Stop label sits in the middle of its button</h2>
+      <h2>Stop button centering, Indonesian provider screen, and TextFieldValue preservation</h2>
       <p>
-        Measured on the reference watch: the label occupied <code>Rect(189,344,243,380)</code> inside a
-        button at <code>Rect(161,314,305,410)</code> — <strong>17 px left of centre</strong>, because
-        Compose for Wear OS Material 3 pads a button for an optional leading icon.
+        Measured on the physical Xiaomi Watch 2: the Stop label sat at <code>Rect(189,344,243,380)</code> inside a button at <code>Rect(161,314,305,410)</code>, 17 px left of center due to Compose Material 3 icon padding. Using a full-width centered label aligned it to <code>dx = 0, dy = 0</code> (<code>StopButtonCenterTest</code>).
       </p>
-      <p>
-        Padding alone moved it the other way (45 px off), so the label now claims the button's full
-        width and centres its own text: measured <code>Rect(161,344,305,380)</code> against
-        <code>Rect(161,314,305,410)</code>, <strong>dx = 0, dy = 0</strong>, asserted by
-        <code>StopButtonCenterTest</code>.
-      </p>
-      <h2>Provider screen is Indonesian end to end</h2>
-      <p>
-        The in-ID title read <code>Tambah compatible</code> because the type name was hard-coded
-        English; it reads <code>Tambah kompatibel</code> now, and the two provider-screen hints moved
-        out of Kotlin into resources (125 keys in each locale, zero missing). The composer also keeps a
-        full <code>TextFieldValue</code> — text, selection and composition — after the editor was
-        measured handing the app <code>composition=(0,2)</code> while only the text was retained.
-      </p>
-      <p>
-        Full suite per class on the watch with <code>pm clear</code> between classes: 38 of 45 passed;
-        cold start 4375.5 ms median (4311, 4345, 4406, 4619 ms debug; earlier written 4373 ms, #65); scroll 761 frames, 1.18 % janky. Not tested for this cut:
-        battery, thermals, TalkBack audio, phone pairing.
-      </p>
+      <ul>
+        <li><strong>Full TextFieldValue retention:</strong> composer and edit body keep selection and composition state after Gboard was measured passing <code>composition=(0,2)</code>. Issue #62 stayed open because lost-word reproduction failed under real taps.</li>
+        <li><strong>End-to-end Indonesian provider UI (#66):</strong> changed <code>Tambah compatible</code> to <code>Tambah kompatibel</code> and moved provider hints into resources (125 keys per locale in 0.2.2).</li>
+        <li><strong>Hardware &amp; release verification:</strong> watch per-class pass with <code>pm clear</code> completed 38 of 45 classes (4 teardown crashes tracked under #84 replacing #50). Debug cold start measured 4375.5 ms median (earlier release note wrote 4373 ms; 4311, 4345, 4406, 4619 ms), hardware scroll 761 frames / 1.18% jank, 20-min stress +3.2 MB PSS at Thermal Status 0.</li>
+      </ul>
+      <dl class="ident">
+        <div><dt>versionCode</dt><dd>15</dd></div>
+        <div><dt>size</dt><dd>3,761,661 B</dd></div>
+        <div><dt>sha256</dt><dd>1ba0fa8c…802322771</dd></div>
+        <div><dt>certificate</dt><dd>CN=NiroWear Release (0dc50fc0…86543e)</dd></div>
+      </dl>
     </div>
   </article>
 
@@ -205,40 +284,19 @@ p:last-child{margin-bottom:0}
       <span class="rdate">2026-11-15</span>
     </div>
     <div class="rbody">
-      <h2>One peer can no longer deny the pairing session</h2>
+      <h2>Concurrent pairing listener &amp; replay-safe compare-and-set</h2>
       <p>
-        The LAN listener accepted one connection, served it, and only then accepted the next. Over TLS
-        the first read is where the handshake happens, so a peer that connected and sent nothing held
-        the whole session for one read timeout — serially, once per connection.
-      </p>
-      <p>
-        Measured with a raw-socket probe: four idle preconnects delayed the real browser by
-        <strong>8,015 ms</strong>, and eight delayed it by <strong>16,018 ms</strong>. That is linear in
-        the attacker's connection count against a 120 s capability, so a burst of about sixty pushed the
-        phone's first request past the deadline — the page never loaded and the watch said nothing. The
-        same probe after the change: <strong>7 ms</strong> and <strong>2,033 ms</strong>.
+        Moved pairing TLS handling onto per-request threads capped at 8 in-flight with a 32-slot accept backlog and compare-and-set single-use consumption, reducing browser delay behind 8 idle preconnects from 16,018 ms to 2,033 ms.
       </p>
       <ul>
-        <li>Requests are dispatched to their own handler threads, capped at eight in flight; the overflow waits a queue slot instead of queueing the real browser behind every hostile connection.</li>
-        <li>Single use is a compare-and-set. Two concurrent requests could otherwise both save; the loser is refused exactly like a replay.</li>
-        <li>The accept queue is 32, not 8: with 8, a burst made the browser's own connect fail outright, because a full queue is answered with a reset.</li>
-        <li>The handshake is still unauthenticated by design, and the page still says so. No new trust assumption.</li>
+        <li><strong>Dependency update:</strong> <code>androidx.datastore:datastore-preferences</code> 1.2.1 to 1.3.0.</li>
+        <li><strong>Measured checks:</strong> JVM 283 / 283 across 44 suites, ktlint 0, lint 0 issues; watch v0.2.1 cold-start median 723 ms (5 runs).</li>
       </ul>
-      <p>
-        <strong>Dependencies.</strong> <code>androidx.datastore:datastore-preferences</code> 1.2.1 → 1.3.0.
-        No API this app uses changed. Lint's dependency detector makes a "0 warnings" claim expire on its
-        own when a library publishes, with no commit to this repository; it had already expired for 0.2.0.
-      </p>
-      <p>
-        <strong>Corrections.</strong> The published string count was 89; the resources hold 105 keys in
-        both languages, none missing. The CI comment said <code>compileSdk 36</code> while the build uses
-        37. Both re-derived from the files rather than carried forward.
-      </p>
-      <p class="meta">
-        Measured for this cut: JVM <strong>283 / 283</strong> across 44 suites, ktlint 0, Android Lint
-        "No issues found.", both assembles pass. <em>Not</em> measured for this cut: the connected suite —
-        no emulator was run, and instrumentation is destructive.
-      </p>
+      <dl class="ident">
+        <div><dt>versionCode</dt><dd>14</dd></div>
+        <div><dt>size</dt><dd>3,702,157 B</dd></div>
+        <div><dt>sha256</dt><dd>56974449…749cb6d9</dd></div>
+      </dl>
     </div>
   </article>
 
@@ -249,60 +307,21 @@ p:last-child{margin-bottom:0}
       <span class="rdate">2026-11-08</span>
     </div>
     <div class="rbody">
-      <h2>Nothing is withheld from a long answer</h2>
+      <h2>Per-row tables, 24-line code chunks, and complete UI localization</h2>
       <p>
-        A table was one lazy item capped at 40 rows, and a code fence was a single text node holding the
-        whole fence. Both were the jank the cap was meant to prevent, and both contradicted the rule
-        that an answer is never shortened for the screen. Every table row and every 24-line code chunk
-        is its own item now, so the cap is gone rather than raised.
+        Removed the 40-row table cap by emitting one lazy item per table row and per 24-line code chunk, fixed eight protocol and state bugs, resolved four accessibility dead stops, moved all 89 initial strings into EN/ID resources, and moved pairing key generation off the UI thread.
       </p>
-      <ul>
-        <li><strong>Eight product bugs fixed.</strong> Stop no longer downgrades an answer that had
-          already finished; Retry with no user message refuses instead of blaming the provider; a
-          terminal chunk that carries only <code>finish_reason</code> no longer fails a complete
-          answer; a bare Gemini host resolves to <code>/v1beta</code> instead of 404ing; pairing stops
-          delivering a payload after Cancel; an accepted socket is closed when the handler thread
-          cannot start; one transient DataStore error no longer strands the provider screen; and the
-          dropped-cells notice is reachable again.</li>
-        <li><strong>The pairing listener accepts the browser behind a hostile peer.</strong> Each
-          request is joined with a hard time bound, which blocks the accept loop by design — with a
-          listen backlog of 1, a peer that filled the single queue slot made the real connection fail
-          with <code>ECONNREFUSED</code>. Measured as a <code>ConnectException</code> in the JVM suite.
-          The backlog is 8.</li>
-        <li><strong>Four accessibility dead stops removed</strong>: the Links group opens the first link
-          instead of announcing a count it could not activate, the composer field carries its own
-          label, a credential label is no longer announced twice, and the provider header survives a
-          2.0x font scale.</li>
-        <li><strong>The whole UI is localised</strong>: 89 strings moved into resources with a complete
-          Indonesian set; technical terms stay English, and every English value is byte-identical to
-          the literal it replaced.</li>
-        <li><strong>Nothing freezes the dial on input</strong>: pairing key generation, certificate
-          minting and the listener bind left <code>onClick</code>, the close-path join left the caller,
-          and discovery gained a 30 s whole-operation budget.</li>
-        <li><strong>Smaller and bounded</strong>: math layout capped at 16384 × 1024 px and 3,000,000 px
-          area, list depth at 4, memoised inline nodes, and 1.20 MB of dead Markdown artifacts deleted
-          with the documentation tree cut from 1.4 MB to 285 KB.</li>
-      </ul>
       <dl class="ident">
         <div><dt>versionCode</dt><dd>13</dd></div>
-        <div><dt>certificate</dt><dd>0dc50fc0…543e (same as 0.1.2)</dd></div>
-        <div><dt>identity</dt><dd>CN=NiroWear Release</dd></div>
+        <div><dt>certificate</dt><dd>0dc50fc0…543e</dd></div>
       </dl>
       <table class="gate">
-        <thead><tr><th>Check</th><th>Result</th></tr></thead>
+        <thead><tr><th scope="col">Check</th><th scope="col">Result</th></tr></thead>
         <tbody>
           <tr><td>JVM unit tests</td><td>269 / 269, 0 failures, 43 suites</td></tr>
-          <tr><td>ktlint</td><td>0 errors</td></tr>
-          <tr><td>lint</td><td>0 errors, 0 warnings</td></tr>
-          <tr><td>Instrumented (Wear OS 37 AVD)</td><td>66 tests, 3 failing, 0 errors — rotary source and the phone-browser pairing click-through need hardware (#27, #28); the third is pre-existing on main and tracked (#34)</td></tr>
-          <tr><td>assembleRelease, signed in CI</td><td>pass, certificate asserted before publish</td></tr>
+          <tr><td>Instrumented (Wear OS 37 AVD)</td><td>66 tests, 3 failing (pairing phone #28, rotary #27, pre-existing #34)</td></tr>
         </tbody>
       </table>
-      <p class="note">
-        Unchanged and disclosed: the 6 <code>@HostDrivenGate</code> methods have still never executed
-        (#29), CI cannot compile the private instrumented sources (#30), and provider or network error
-        text remains English-only (#31).
-      </p>
     </div>
   </article>
 
@@ -313,42 +332,14 @@ p:last-child{margin-bottom:0}
       <span class="rdate">2026-11-07</span>
     </div>
     <div class="rbody">
-      <h2>Validate is advisory; Save is not gated on a live call</h2>
+      <h2>Advisory validation and non-blocking Save</h2>
       <p>
-        Save used to stay disabled until a real API call succeeded, which made the app unusable offline,
-        behind a captive portal, or while a provider was briefly down — and contradicted the same
-        screen's "chat still allowed" message. Save now needs the data a profile needs, and an
-        unvalidated save says so on screen.
+        Save no longer requires a live network round-trip; profiles save behind captive portals or offline endpoints and surface credential failures at send time. First audited execution of the 66-test instrumentation suite corrected an older unverified "48 / 48" claim.
       </p>
-      <ul>
-        <li><strong>Save requires name, base URL, model and a key (or an existing profile)</strong> — not
-          a successful live call. The first send reports a bad key as an error row on the conversation.</li>
-        <li><strong>Validate and Discover are unchanged</strong>: Validate still makes one real call,
-          Discover still lists what the provider advertises, and discovery failure still never blocks
-          manual entry.</li>
-        <li><strong>Instrumentation executed for the first time.</strong> The published "48 / 48" was
-          never reproducible: the suite is 66 methods. Measured 66 / 31 failing at the start of the
-          audit, 66 / 18 at this release; the remaining 18 were itemised in the README. An earlier
-          revision said "14" — that number was inferred from a partial run, not measured, and was
-          wrong: the tests share one app process, so a class that passes alone can fail in suite
-          order. Test-side fixes afterwards (fixture cleanup, stale mock queues, impossible geometry
-          assertions, bidi-mojibake literals, and a History list offset the composable discarded on
-          every close) brought the measured figure to <strong>66 / 2</strong>.</li>
-      </ul>
       <dl class="ident">
         <div><dt>versionCode</dt><dd>12</dd></div>
-        <div><dt>certificate</dt><dd>0dc50fc0…543e (same as 0.1.1)</dd></div>
-        <div><dt>identity</dt><dd>CN=NiroWear Release</dd></div>
+        <div><dt>certificate</dt><dd>0dc50fc0…543e</dd></div>
       </dl>
-      <table class="gate">
-        <thead><tr><th>Check</th><th>Result</th></tr></thead>
-        <tbody>
-          <tr><td>JVM unit tests</td><td>264 / 264, 0 failures, 42 suites</td></tr>
-          <tr><td>lint</td><td>0 errors, 1 warning (GradleDependency)</td></tr>
-          <tr><td>Instrumented (Wear OS 37 AVD)</td><td>66 tests, 18 failing at release; 2 failing after the test-side fixes (measured)</td></tr>
-          <tr><td>assembleRelease, signed in CI</td><td>pass, certificate asserted before publish</td></tr>
-        </tbody>
-      </table>
     </div>
   </article>
 
@@ -359,265 +350,32 @@ p:last-child{margin-bottom:0}
       <span class="rdate">2026-11-06</span>
     </div>
     <div class="rbody">
-      <h2>Fixes only — and the first automated signed release</h2>
+      <h2>CI-signed release key and Keystore fault isolation</h2>
       <p>
-        No new product surface. The release is built and signed by
-        <code>.github/workflows/release.yml</code> from the tag, under a dedicated release key, so the
-        artifact and its certificate no longer depend on the machine that cut it.
+        Moved release signing to <code>.github/workflows/release.yml</code> under <code>CN=NiroWear Release</code>, isolated transient Keystore lookup errors from wiping sibling keys, preserved failed edits and Stops cleanly, and refined Gemini/Anthropic non-2xx error mapping.
       </p>
-      <ul>
-        <li><strong>A Keystore hiccup no longer destroys every saved key.</strong> A transient failure
-          while <em>obtaining</em> the key used to delete the shared entry, permanently orphaning every
-          other provider's ciphertext. Obtaining the key is now its own failure domain; only a key that
-          genuinely cannot encrypt is replaced.</li>
-        <li><strong>A failed turn recovers instead of vanishing.</strong> A Stop or error after an edit or
-          retry had already written records a STOPPED/ERROR row (it used to delete the previous answer
-          with no row, no status line and no Retry); a Stop inside a new chat's first insert keeps the
-          typed prompt; a refused edit re-opens the editor with your text.</li>
-        <li><strong>Provider truth.</strong> A long reasoning phase is no longer killed as "Provider timed
-          out"; a cut answer from <code>pause_turn</code> or <code>tool_use</code> is disclosed; "Partial
-          answer kept." appears only when text survived; a captive-portal page is reported as unreachable;
-          non-2xx bodies are read for Anthropic, OpenAI and compatible gateways; Anthropic model metadata
-          is cached per endpoint and model instead of fetched on every send.</li>
-        <li><strong>Renderer.</strong> A table inside a list reports the cells it had to clamp, a
-          <code>$$</code> in a table row no longer shreds the table, an HTML block no longer steals the
-          next table's notice, a prose line with backticks is not a fence, and spacing commands such as
-          <code>\hspace</code> typeset instead of degrading to source.</li>
-        <li><strong>Signing identity changed.</strong> 0.1.0 used the Android debug lineage; 0.1.1 uses
-          <code>CN=NiroWear Release</code>. A 0.1.0 install must be uninstalled before updating — that
-          removes local conversations and saved keys.</li>
-      </ul>
       <dl class="ident">
         <div><dt>versionCode</dt><dd>11</dd></div>
         <div><dt>size</dt><dd>3,621,253 B</dd></div>
         <div><dt>sha256</dt><dd>0ba7ddefd7ca51528c0d3083b23bd7ee9221715a017cd7058fa8875efb30b207</dd></div>
         <div><dt>certificate</dt><dd>0dc50fc0…543e</dd></div>
       </dl>
-      <table class="gate">
-        <thead><tr><th>Check</th><th>Result</th></tr></thead>
-        <tbody>
-          <tr><td>JVM unit tests</td><td>264 / 264, 0 failures, 42 suites</td></tr>
-          <tr><td>lint</td><td>0 errors, 1 warning (GradleDependency)</td></tr>
-          <tr><td>Connected suite (Wear OS 37 AVD)</td><td>66 tests, 18 failing, 0 errors — first execution ever, 2026-11-06; the failures are itemised in the README</td></tr>
-          <tr><td>assembleRelease, signed in CI</td><td>pass, certificate asserted before publish</td></tr>
-        </tbody>
-      </table>
     </div>
   </article>
 
-  <!-- 0.1.0 -->
+  <!-- 0.1.0 - beta.1 condensed archive -->
   <article class="release">
     <div class="rside">
-      <span class="rver">0.1.0</span>
-      <span class="rdate">2026-11-03</span>
+      <span class="rver">0.1.0 &lt;= beta.1</span>
+      <span class="rdate">2026-10-10 .. 11-03</span>
     </div>
     <div class="rbody">
-      <h2>Stable cut</h2>
+      <h2>Foundation lineage (debug-class signing identity)</h2>
       <p>
-        First stable: green beta.8 tree plus a version bump only. Same lineage
-        signing identity, so beta installs update in place.
+        Initial public cuts from <code>beta.1</code> (25,994,739 B unstripped, SHA-256 <code>25b091753743c5b439bb1413525ddef9f69a28d81bd7dae9773013e32605fdb7</code>) through <code>0.1.0</code> (<code>versionCode 10</code>, 3,609,553 B, SHA-256 <code>319ae1cfbc6ee738f0b5b8b4c185f1ab8ebf3718a2b3d2fc43ab612d51934d71</code>), adding the Thread launcher mark (<code>beta.4</code>), LAN ECDH key pairing (<code>beta.5</code>), native JLaTeXMath typesetting with 30 bundled fonts (<code>beta.6</code>), and bounded stream parse memos (<code>beta.7</code>).
       </p>
-      <ul>
-        <li><strong>No protocol guesswork.</strong> Four adapters, four wire protocols; a model name never changes the request format.</li>
-        <li><strong>Regeneration is explicit.</strong> Stop keeps partial content; edit replaces from that point; branches never form.</li>
-        <li><strong>Disclosed, not hidden.</strong> Live provider smoke skipped per owner order; hardware sheet, TalkBack and licence review still open — see release notes.</li>
-      </ul>
-      <dl class="ident">
-        <div><dt>versionCode</dt><dd>10</dd></div>
-        <div><dt>size</dt><dd>3,609,553 B</dd></div>
-        <div><dt>sha256</dt><dd>319ae1cfbc6ee738f0b5b8b4c185f1ab8ebf3718a2b3d2fc43ab612d51934d71</dd></div>
-        <div><dt>certificate</dt><dd>7d4e6e99…abe3</dd></div>
-      </dl>
-      <table class="gate">
-        <thead><tr><th>Check</th><th>Result</th></tr></thead>
-        <tbody>
-          <tr><td>JVM unit tests</td><td>176 / 176, 0 failures</td></tr>
-          <tr><td>lint</td><td>0 errors</td></tr>
-          <tr><td>Connected suite (emulator)</td><td>48 / 48 (XML ts 2026-11-02T20:10:22)</td></tr>
-          <tr><td>assembleRelease + signed</td><td>pass</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </article>
-
-  <!-- beta.7 -->
-  <article class="release">
-    <div class="rside">
-      <span class="rver">beta.7</span>
-      <span class="rdate">2026-11-02</span>
-    </div>
-    <div class="rbody">
-      <h2>Finish campaign: renderer, hardening, watch-frame demo</h2>
-      <p>
-        The response parser no longer drops content silently; pairing reads and the parse
-        memo are bounded; the site demo sits in a 466 px round frame with stop, retry and
-        model-switch states.
-      </p>
-      <ul>
-        <li><strong>Renderer keeps dropped content.</strong> Display math in quotes/lists, fenced lines in containers, code/math nodes in flattening, over-wide table rows and mid-line <code>$$</code> all keep their content.</li>
-        <li><strong>Hardening.</strong> Keystore entry deleted on rotation failure; pairing screen states the unauthenticated-handshake threat model; body reads enforce the deadline; parse memo LRU-capped at 3 conversations.</li>
-        <li><strong>Site demo is a watch.</strong> 466×466 round frame, STOPPED copy, Retry, model switch, measured follow/scroll readout; zero console errors in Edge.</li>
-      </ul>
-      <dl class="ident">
-        <div><dt>versionCode</dt><dd>8</dd></div>
-        <div><dt>size</dt><dd>3609553 B</dd></div>
-        <div><dt>sha256</dt><dd>4fbe6db9ba4633662986128c5cd12865d5296af6638f28a15071212552167ea1</dd></div>
-        <div><dt>certificate</dt><dd>7d4e6e99…abe3</dd></div>
-      </dl>
-      <table class="gate">
-        <thead><tr><th>Check</th><th>Result</th></tr></thead>
-        <tbody>
-          <tr><td>JVM unit tests</td><td>176 / 176, 0 failures</td></tr>
-          <tr><td>ktlint</td><td>0 errors</td></tr>
-          <tr><td>Connected suite (emulator)</td><td>48 / 48 (XML ts 2026-11-02T06:58:50, per Task 2 report)</td></tr>
-          <tr><td>assembleDebug + assembleRelease</td><td>pass (unsigned release 3,582,786 B)</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </article>
-
-  <!-- beta.6 -->
-  <article class="release">
-    <div class="rside">
-      <span class="rver">beta.6</span>
-      <span class="rdate">2026-10-22</span>
-    </div>
-    <div class="rbody">
-      <h2>Native LaTeX in release builds</h2>
-      <p>
-        Until this release, release builds could only show formula source as monospace text. The
-        debug-only stub returned <code>null</code> and the reader fell back to the LaTeX source. Both
-        variants now share one native typesetter.
-      </p>
-      <ul>
-        <li><strong>Licensing resolved on evidence.</strong> The dependency's POM declares plain GPL v2; its actual <code>LICENSE</code> carries an independent-module linking exception, which is what permits linking it from MIT code.</li>
-        <li><strong>Obligations shipped.</strong> The notice, the exception and the canonical GPL-2.0 text are bundled in the app under <code>assets/legal/</code>.</li>
-        <li><strong>Hostile input refused before the parser sees it.</strong> File-inclusion macros, macro definitions and unbalanced braces degrade to readable source; a refused formula never renders blank.</li>
-      </ul>
-      <dl class="ident">
-        <div><dt>versionCode</dt><dd>7</dd></div>
-        <div><dt>size</dt><dd>3,593,274 B</dd></div>
-        <div><dt>sha256</dt><dd>bd9c7eb968dc3b10c873591a79c81987c147980c480620af464dc2c65154fcb9</dd></div>
-        <div><dt>certificate</dt><dd>7d4e6e99…abe3</dd></div>
-      </dl>
-      <table class="gate">
-        <thead><tr><th>Check</th><th>Result</th></tr></thead>
-        <tbody>
-          <tr><td>Release build installed, non-debuggable confirmed</td><td>pass</td></tr>
-          <tr><td>Seeded display + inline math produced Math canvas nodes</td><td>pass</td></tr>
-          <tr><td>NativeMathTest on device</td><td>0.482 s</td></tr>
-          <tr><td>TrueType fonts in APK</td><td>30</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </article>
-
-  <!-- beta.5 -->
-  <article class="release">
-    <div class="rside">
-      <span class="rver">beta.5</span>
-      <span class="rdate">2026-10-22</span>
-    </div>
-    <div class="rbody">
-      <h2>The credential-entry release</h2>
-      <p>
-        Setting up a provider stopped requiring a 164-character key typed on a watch keyboard. The
-        watch serves a one-time page; the key is pasted on a device with a real keyboard and
-        encrypted before it leaves the browser.
-      </p>
-      <ul>
-        <li><strong>Ephemeral ECDH P-256 + AES-GCM</strong>, with a 128-bit single-use token as associated data.</li>
-        <li><strong>Two-minute TTL, one use.</strong> The socket closes when you leave the screen.</li>
-        <li><strong>Errors that name the actual problem.</strong> A 401 reads “API key rejected”; a 404 reads “Model unavailable”. They were previously one message.</li>
-        <li><strong>Source published under MIT</strong> at github.com/michaelxdips/NiroWear.</li>
-      </ul>
-      <dl class="ident">
-        <div><dt>versionCode</dt><dd>6</dd></div>
-        <div><dt>size</dt><dd>3,072,665 B</dd></div>
-        <div><dt>sha256</dt><dd>c0ff1240bc525ad8f9d3aa38a63f0fb1eb852b490658b81a3c1a3a4c3dba9f63</dd></div>
-      </dl>
-    </div>
-  </article>
-
-  <!-- beta.4 -->
-  <article class="release">
-    <div class="rside">
-      <span class="rver">beta.4</span>
-      <span class="rdate">2026-10-21</span>
-    </div>
-    <div class="rbody">
-      <h2>The “Thread” launcher mark</h2>
-      <p>
-        One page edge that never closes: the right stem stops partway down, because the answer is
-        still arriving. Single stroke, no gradient, designed to survive the monochrome launcher mask.
-      </p>
-      <ul>
-        <li><strong>Menu row against the bezel</strong> — worst ink radius 230.7 → 225.6 px on a 466 px face.</li>
-        <li><strong>Reader text against the bezel</strong> — worst ink radius 231.3 → 217.0 px.</li>
-        <li><strong>Provider heading casing</strong> — <code>Add Openai</code> became <code>Add OpenAI</code>.</li>
-      </ul>
-      <table class="gate">
-        <thead><tr><th>Check</th><th>Result</th></tr></thead>
-        <tbody>
-          <tr><td>JVM unit tests</td><td>92 / 92, 19 suites</td></tr>
-          <tr><td>Connected tests, 466×466 @ 320 dpi</td><td>53 tests</td></tr>
-          <tr><td>lintRelease</td><td>0 errors, 16 warnings</td></tr>
-          <tr><td>Release cold launch on emulator</td><td>646 ms</td></tr>
-        </tbody>
-      </table>
-      <dl class="ident">
-        <div><dt>versionCode</dt><dd>5</dd></div>
-        <div><dt>size</dt><dd>3,056,281 B</dd></div>
-        <div><dt>sha256</dt><dd>da3818840c2c2257208428589b576652f7bf5fbd745e08fa9ede64958c0de1fa</dd></div>
-      </dl>
       <p class="note">
-        Native math was not in this build: release fell back to Unicode/LaTeX source rendering, and
-        the licensing question was still open. It was closed two releases later.
-      </p>
-    </div>
-  </article>
-
-  <!-- beta.2 -->
-  <article class="release">
-    <div class="rside">
-      <span class="rver">beta.2</span>
-      <span class="rdate">2026-10-12</span>
-    </div>
-    <div class="rbody">
-      <h2>Closure pass</h2>
-      <p>
-        Defect-closure work on the reader, credential storage and provider setup. This release was
-        distributed as a binary only; the source was not yet public.
-      </p>
-      <dl class="ident">
-        <div><dt>size</dt><dd>3,023,513 B</dd></div>
-        <div><dt>sha256</dt><dd>d524c3bae5a26ab5cac7c8c3b80f62824b1ecc82506f180ca005954eeaeaa0b6</dd></div>
-      </dl>
-    </div>
-  </article>
-
-  <!-- beta.1 -->
-  <article class="release">
-    <div class="rside">
-      <span class="rver">beta.1</span>
-      <span class="rdate">2026-10-10</span>
-    </div>
-    <div class="rbody">
-      <h2>First public build</h2>
-      <p>
-        The first signed beta: four provider adapters, streaming with Stop, linear history, edit and
-        retry, and the document reader. 25,994,739 B — the large size is the unstripped native
-        toolchain, and it was 25 MB smaller by beta.4.
-      </p>
-      <dl class="ident">
-        <div><dt>size</dt><dd>25,994,739 B</dd></div>
-        <div><dt>sha256</dt><dd>25b091753743c5b439bb1413525ddef9f69a28d81bd7dae9773013e32605fdb7</dd></div>
-      </dl>
-      <p class="note">
-        Signed with a debug-class certificate (<code>CN=Android Debug</code>) as a stable limited-beta
-        identity. It is not production-grade signing. Every release since keeps that identity so
-        in-place updates keep working; changing it would force an uninstall, which deletes local
-        conversations.
+        Releases 0.1.0 and earlier carried <code>CN=Android Debug</code> (<code>7d4e6e99…abe3</code>) and require uninstalling before upgrading to 0.1.1 or newer.
       </p>
     </div>
   </article>
@@ -627,10 +385,7 @@ p:last-child{margin-bottom:0}
 <footer class="colophon">
   <div class="wrap">
     <p class="fine">
-      Versions, sizes and hashes on this page were read from the NiroWear release API and the
-      signed APK bytes, and the gate figures from the result XML and release notes for each build. Where a
-      number was not recorded for a release it is omitted rather than estimated.<br><br>
-      <a href="index.html">Back to the site</a> · <a href="https://github.com/michaelxdips/NiroWear">Source</a> · <a href="https://github.com/michaelxdips/NiroWear/releases">Releases</a>
+      Versions, sizes, and digests are read directly from signed APKs and GitHub Releases; gate figures come from JUnit XML reports and adb logs. <a href="index.html">Back to overview</a> · <a href="https://github.com/michaelxdips/NiroWear">Source</a> · <a href="https://github.com/michaelxdips/NiroWear/releases">Releases</a>
     </p>
   </div>
 </footer>
@@ -639,16 +394,17 @@ p:last-child{margin-bottom:0}
 (function () {
   "use strict";
   var root = document.documentElement;
-  var stored = null;
-  try { stored = localStorage.getItem("nirowear-scheme"); } catch (e) {}
-  if (stored === "dark" || stored === "light") root.setAttribute("data-theme", stored);
-  else if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) root.setAttribute("data-theme", "dark");
-
   var btn = document.getElementById("theme");
+  function syncTheme() {
+    if (!btn) return;
+    btn.setAttribute("aria-pressed", root.getAttribute("data-theme") === "dark" ? "true" : "false");
+  }
+  syncTheme();
   if (btn) btn.addEventListener("click", function () {
     var next = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
     root.setAttribute("data-theme", next);
     try { localStorage.setItem("nirowear-scheme", next); } catch (e) {}
+    syncTheme();
   });
 })();
 </script>
