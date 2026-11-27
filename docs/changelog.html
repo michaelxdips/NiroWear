@@ -222,15 +222,52 @@ p:last-child{margin-bottom:0}
     <p>
       Published builds in reverse chronological order, recording the artifact identity and the tests actually run for each cut.
     </p>
-    <p class="meta">Synced to tag v0.3.1 and main · Updated 2026-11-26</p>
+    <p class="meta">Synced to tag v0.3.2 and main · Updated 2026-11-27</p>
   </div>
+
+  <!-- 0.3.2 -->
+  <article class="release">
+    <div class="rside">
+      <span class="rver">0.3.2</span>
+      <span class="rdate">2026-11-27</span>
+      <span class="rtag">Latest release</span>
+    </div>
+    <div class="rbody">
+      <h2>Reader notice reveal, Watch 2 verification closure (#62, #84), and Compose/parser hardening</h2>
+      <p>
+        Shipping release bundling post-<code>0.3.1</code> concurrency, parser, math, and Compose optimizations together with hardware-verified Xiaomi Watch 2 fixes across notice visibility, pairing replay, and Wear launch transition timing.
+      </p>
+      <ul>
+        <li><strong>Reader notice visibility &amp; concurrency hardening:</strong> Reveal reader <code>notice</code> banners at index 0 via <code>LaunchedEffect(notice)</code> with polite live-region semantics in <code>MainActivity</code> so long threads do not leave banners scrolled offscreen; wrap <code>openEditor</code> with <code>rememberUpdatedState</code>; fix <code>PairingServer</code> close/cancel races, <code>CompatibleStreamDecoder</code> <code>JsonNull</code> error mapping, <code>ResponseParser</code> inline-math backslash bleed, and <code>NativeMathRenderer</code> cache/bounds guards.</li>
+        <li><strong>Compose &amp; streaming performance:</strong> Run <code>historyKeysFor</code>, <code>renderUnitsFor</code>, and <code>unitRangeByBlock</code> on <code>parseDispatcher</code>; hoist shared <code>TextMeasurer</code> in <code>ChatReader</code>, <code>Quote</code>, and <code>Table</code>; add <code>contentType</code> and <code>LazyColumn</code> keys; remove dead code and unused imports.</li>
+        <li><strong>Watch 2 test alignment &amp; Dependabot hygiene:</strong> Treat <code>SocketException</code>, <code>SSLHandshakeException</code>, and <code>EOFException</code> on post-close pairing replay as refused in <code>PairingUiTest</code>; wait 800 ms in <code>InputResultUiTest.launch()</code> for Wear transition animations; closed Dependabot PR #98 due to <code>compose-bom:2026.11.01</code> requiring <code>compileSdk 37.1</code> and <code>Kotlin 2.4.21</code> vs <code>KSP 2.3.14</code>.</li>
+      </ul>
+      <dl class="ident">
+        <div><dt>versionCode</dt><dd>18</dd></div>
+        <div><dt>size</dt><dd>3,778,806 B</dd></div>
+        <div><dt>sha256</dt><dd>0f0a46124b8470f3b45350f5d68289c818fc22bc63fb7c83cb515c1200ac29eb</dd></div>
+        <div><dt>certificate</dt><dd>CN=NiroWear Release (0dc50fc0…86543e)</dd></div>
+      </dl>
+      <table class="gate">
+        <thead><tr><th scope="col">Check</th><th scope="col">Result</th></tr></thead>
+        <tbody>
+          <tr><td>JVM unit tests</td><td>319 passed, 1 skipped (320 tests across 51 suites, 0 failures; opt-in <code>LiveProviderSmokeTest</code> skipped)</td></tr>
+          <tr><td>ktlint &amp; lintDebug</td><td><code>ktlintCheck</code> 0 violations; <code>lintDebug</code> 0 errors, 0 source-code warnings (7 pinned dependency advisories)</td></tr>
+          <tr><td>CI instrumented (Wear OS 5)</td><td>10/10 classes green on Wear OS 5 API 34 (466 x 466) on PR #100 before merge</td></tr>
+          <tr><td>Xiaomi Watch 2 HW (debug pre-tag + v0.3.1 signed)</td><td>Post-final-edit debug pass: <code>InputResultUiTest</code> 8/8, <code>IndonesianReaderNoticesTest</code> 1/1 (<code>id-ID</code>), <code>CompatibleChatTest</code> 4/4, <code>ComposerSendReachabilityTest</code> 2/2, <code>PairingUiTest</code> 1/1, <code>ComposerImeCommitTest</code> 1/1, <code>ComposerSendButtonTest</code> 1/1, <code>InputControlsUiTest</code> 1/1, <code>TalkBackTraversalOrderTest</code> 1/1, <code>ReaderSemanticsTest</code> 1/1, <code>QuoteSemanticsTest</code> 1/1, plus <code>ReaderNavigationTest</code> 7/7 pre-<code>LaunchedEffect(notice)</code> (#62, #84 closed; signed <code>v0.3.2</code> watch install pending watch reconnection, signed <code>v0.3.1</code> baseline cold 694 ms / warm 71 ms / PSS 31,575 KB)</td></tr>
+        </tbody>
+      </table>
+      <p class="note">
+        Human spoken dictation accuracy and TalkBack speaker audio (#27, plus signed <code>v0.3.2</code> watch install when reconnected) and second-phone Chrome self-signed cert click-through (#28) remain open; 5,000-message disk injection onto the signed container stays blocked by <code>allowBackup="false"</code> and <code>debuggable=false</code>.
+      </p>
+    </div>
+  </article>
 
   <!-- 0.3.1 -->
   <article class="release">
     <div class="rside">
       <span class="rver">0.3.1</span>
       <span class="rdate">2026-11-26</span>
-      <span class="rtag">Latest release</span>
     </div>
     <div class="rbody">
       <h2>State &amp; concurrency hardening, zero source-code lint warnings, and compileSdk 37.0 dependency updates</h2>
