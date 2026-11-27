@@ -9,7 +9,7 @@ Single Android application module, `:app`. Gradle wrapper 9.6.0 (`gradle/wrapper
 .\gradlew.bat :app:testDebugUnitTest :app:ktlintCheck :app:assembleDebug :app:assembleDebugAndroidTest :app:assembleRelease :app:lintDebug
 ```
 
-`app/src/test` (51 files) and `app/src/androidTest` (51 files: 50 test classes plus `HostDrivenGate.kt`) are tracked in git (`.gitignore:51-52`), so on a fresh clone `.github/workflows/ci.yml` executes `:app:testDebugUnitTest` (320 unit tests across 51 suites on `v0.3.2` / `317` on `v0.3.1` / `316` on `v0.3.0`, failing if result XML is absent), `lintDebug`, `ktlintCheck`, `assembleDebug`, and `assembleRelease` in the `jvm` job, and runs the 10-class instrumented smoke subset on a 466×466 API 34 Wear OS AVD in the `instrumented` job; only the four `@HostDrivenGate` PowerShell scripts under `scripts/` remain gitignored by `.gitignore:104`.
+`app/src/test` (50 files) and `app/src/androidTest` (51 files: 50 test classes plus `HostDrivenGate.kt`) are tracked in git (`.gitignore:51-52`), so on a fresh clone `.github/workflows/ci.yml` executes `:app:testDebugUnitTest` (321 unit tests across 50 suites on `v0.3.3` / 320 across 51 suites on `v0.3.2` / `317` on `v0.3.1` / `316` on `v0.3.0`, failing if result XML is absent), `lintDebug`, `ktlintCheck`, `assembleDebug`, and `assembleRelease` in the `jvm` job, and runs the 10-class instrumented smoke subset on a 466×466 API 34 Wear OS AVD in the `instrumented` job; only the four `@HostDrivenGate` PowerShell scripts under `scripts/` remain gitignored by `.gitignore:104`.
 
 Release signing is environment-driven (`app/build.gradle.kts:55-65`): `NIROWEAR_KEYSTORE`, `NIROWEAR_KEYSTORE_PASSWORD`, `NIROWEAR_KEY_ALIAS`, `NIROWEAR_KEY_PASSWORD`. `.github/workflows/release.yml` decodes the keystore from the `NIROWEAR_KEYSTORE_BASE64` secret, signs, verifies `certificate DN: CN=NiroWear Release`, then deletes the keystore before any upload step. With no keystore in the environment the same task produces `app/build/outputs/apk/release/app-release-unsigned.apk`. No keystore or password is committed, and the signing identity must not be changed to manufacture a release.
 
@@ -30,7 +30,7 @@ debug math tests do not establish native release behavior.
 - Before future production edits, create a new verified source-only recovery ZIP. Exclude secrets, signing keys, local.properties, emulator data and authenticated logs.
 - Do not uninstall or clear an installation holding valuable conversations/credentials. APK rollback may need database-version compatibility; verify on a fresh AVD first and obtain separate data-loss authorization if required.
 - Keys use device-bound Android Keystore encryption and backup is disabled. Broken/inaccessible keys require normal masked re-entry; no plaintext fallback or key extraction.
-- The workspace is a Git clone of `https://github.com/michaelxdips/NiroWear.git`; released tags are `v0.1.0`, `v0.1.1`, `v0.1.2`, `v0.2.0`, `v0.2.1`, `v0.2.2`, `v0.3.0`, `v0.3.1`, `v0.3.2`. Provenance for a shipped artifact is its tag, the workflow run that built it and the APK SHA-256 that run printed — not a local file fingerprint.
+- The workspace is a Git clone of `https://github.com/michaelxdips/NiroWear.git`; released tags are `v0.1.0`, `v0.1.1`, `v0.1.2`, `v0.2.0`, `v0.2.1`, `v0.2.2`, `v0.3.0`, `v0.3.1`, `v0.3.2`, `v0.3.3`. Provenance for a shipped artifact is its tag, the workflow run that built it and the APK SHA-256 that run printed — not a local file fingerprint.
 
 ## Acceptance identity
 

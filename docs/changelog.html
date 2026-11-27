@@ -222,15 +222,49 @@ p:last-child{margin-bottom:0}
     <p>
       Published builds in reverse chronological order, recording the artifact identity and the tests actually run for each cut.
     </p>
-    <p class="meta">Synced to tag v0.3.2 and main · Updated 2026-11-27</p>
+    <p class="meta">Synced to tag v0.3.3 and main · Updated 2026-11-27</p>
   </div>
+
+  <!-- 0.3.3 -->
+  <article class="release">
+    <div class="rside">
+      <span class="rver">0.3.3</span>
+      <span class="rdate">2026-11-27</span>
+      <span class="rtag">Latest release</span>
+    </div>
+    <div class="rbody">
+      <h2>Direct watch prompt policy, faster ART startup &amp; streaming, Open on phone + pairing model fetcher</h2>
+      <p>
+        Release focused on physical watch speed, directness, and setup reliability: lazy DAO and storage initialization paired with an ART Baseline Profile, 1-tap <code>Open on phone</code> via <code>RemoteActivityHelper</code> replacing broken NFC HCE, and encrypted phone-page model fetching over <code>POST /&lt;CAP&gt;/models</code>.
+      </p>
+      <ul>
+        <li><strong>Direct answer prompt &amp; provider robustness:</strong> Sharpen <code>SYSTEM_INSTRUCTION</code> for concise, accurate, non-lecturing answers (<code>WatchFirstPolicyTest</code>); handle Anthropic <code>refusal</code> stops and deterministic 404 metadata caching, guard <code>JsonNull</code> in Gemini/OpenAI adapters, and surface <code>reasoning_content</code> status in OpenAI-Compatible.</li>
+        <li><strong>Replace NFC HCE with Open on phone &amp; pairing model fetcher:</strong> Remove broken <code>NfcPairingService</code>/<code>NdefTag</code>; add <code>PhoneLauncher</code> (<code>androidx.wear:wear-remote-interactions:1.2.0</code>), dedicated pairing layout with countdown and <code>FLAG_KEEP_SCREEN_ON</code>, <code>Fetch models</code> + filterable dropdown in <code>PAIRING_PAGE</code>, <code>id-kp-serverAuth</code> certificate EKU hardening, two-tap delete confirmation, and EN/ID validation parity.</li>
+        <li><strong>Startup, streaming &amp; input fixes:</strong> Defer <code>Room</code> DAO and <code>SecretStore</code> credential-dir resolution cleanly off Main initialization; ship <code>app/src/main/baseline-prof.txt</code> (<code>assets/dexopt/baseline.prof</code>, <code>7,854 B</code>); decouple <code>50 ms</code> streaming UI flushes from <code>1000 ms</code> SQLite checkpoints; merge single-pass reader parsing; fix rotary-crown polarity/scaling and bind rotary scrolling to History and Providers.</li>
+      </ul>
+      <dl class="ident">
+        <div><dt>versionCode</dt><dd>19</dd></div>
+        <div><dt>size</dt><dd>4,076,023 B</dd></div>
+        <div><dt>sha256</dt><dd>93fbbb70bac8c136181978569e2dd58fa9ef38e8954526b6e8809abc995d4c44</dd></div>
+        <div><dt>certificate</dt><dd>CN=NiroWear Release (0dc50fc0…86543e)</dd></div>
+      </dl>
+      <table class="gate">
+        <thead><tr><th scope="col">Check</th><th scope="col">Result</th></tr></thead>
+        <tbody>
+          <tr><td>JVM unit tests</td><td>320 passed, 1 skipped (321 tests across 50 suites, 0 failures; opt-in <code>LiveProviderSmokeTest</code> skipped)</td></tr>
+          <tr><td>ktlint &amp; lintDebug</td><td><code>ktlintCheck</code> 0 violations; <code>lintDebug</code> 0 errors, 0 source-code warnings (7 pinned dependency advisories)</td></tr>
+          <tr><td>CI instrumented (Wear OS 5)</td><td>10/10 classes green on Wear OS 5 API 34 (466 x 466) on PR #102 before merge</td></tr>
+          <tr><td>Xiaomi Watch 2 HW (v0.3.3 signed)</td><td>In-place upgrade over signed <code>v0.3.2</code> (<code>0 FATAL</code>, <code>versionCode 19</code>, <code>nfc_has_nirowear=False</code>, 3-item Menu): cold start median <strong>516 ms</strong> (<code>598, 600, 516, 513, 511 ms</code>, <code>WaitTime</code> 550 ms), warm <code>HOT</code> <strong>79 ms</strong> (<code>87, 74, 79, 76, 81 ms</code>), <strong>PSS 22,060 KB</strong> (<code>RSS 107,312 KB</code>), Providers 18-swipe <code>gfxinfo</code> <strong>209 frames, 0 janky (0.00%)</strong> (P50 5 ms, P95 6 ms, P99 10 ms), <code>Thermal Status: 0</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </article>
 
   <!-- 0.3.2 -->
   <article class="release">
     <div class="rside">
       <span class="rver">0.3.2</span>
       <span class="rdate">2026-11-27</span>
-      <span class="rtag">Latest release</span>
     </div>
     <div class="rbody">
       <h2>Reader notice reveal, Watch 2 verification closure (#62, #84), and Compose/parser hardening</h2>
