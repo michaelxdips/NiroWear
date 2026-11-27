@@ -32,4 +32,12 @@ class SearchQueryTest {
         assertEquals(8, terms.size)
         assertTrue(terms.first() == "t1" && terms.last() == "t8")
     }
+
+    @Test
+    fun snippetCentersAroundMatchAndCollapsesWhitespace() {
+        val longBody = "Intro ".repeat(25) + "needle_100%   in\n\tthe   haystack " + "tail ".repeat(20)
+        val snippet = extractSearchSnippet(longBody, likeTerms("needle_100%"))
+        assertTrue("Expected centered snippet around match, got: $snippet", snippet.contains("needle_100% in the haystack"))
+        assertTrue("Snippet must remain compact (len=${snippet.length})", snippet.length <= 82)
+    }
 }

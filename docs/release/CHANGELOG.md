@@ -5,7 +5,7 @@ Notable changes to NiroWear. Versions follow the published APK releases at
 
 ## Unreleased
 
-(No unreleased changes yet.)
+- Preparing `0.3.3` (`versionCode 19`): see [RELEASE_NOTES_0.3.3.md](RELEASE_NOTES_0.3.3.md) (final signed SHA-256 and Watch 2 telemetry appended on release).
 
 ## 0.3.2 — 2026-11-26
 

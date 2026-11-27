@@ -97,8 +97,8 @@ class RotaryInputTest {
                                 toolType =
                                     MotionEvent.TOOL_TYPE_UNKNOWN
                             }
-                        // Scroll forward: the reader may already be at the top after another test.
-                        val coords = MotionEvent.PointerCoords().apply { setAxisValue(MotionEvent.AXIS_SCROLL, 12f) }
+                        // Real Wear OS hardware emits negative AXIS_SCROLL for clockwise (scroll down/forward).
+                        val coords = MotionEvent.PointerCoords().apply { setAxisValue(MotionEvent.AXIS_SCROLL, -1f) }
                         val time = SystemClock.uptimeMillis()
                         val event =
                             MotionEvent.obtain(

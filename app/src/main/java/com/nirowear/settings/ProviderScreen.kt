@@ -2,6 +2,7 @@ package com.nirowear.settings
 
 import android.os.SystemClock
 import android.view.WindowManager
+import androidx.activity.compose.BackHandler
 import androidx.annotation.StringRes
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -27,6 +28,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -54,6 +56,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.wear.compose.material3.Button
 import androidx.wear.compose.material3.OutlinedButton
 import androidx.wear.compose.material3.Text
+import com.nirowear.BindSimpleRotaryScroll
 import com.nirowear.BuildConfig
 import com.nirowear.NiroApplication
 import com.nirowear.R
@@ -69,11 +72,15 @@ import com.nirowear.provider.SafeProviderException
 import com.nirowear.provider.SecretValue
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import java.util.Locale
 import java.util.UUID
 
 /** The four add-provider presets. Only the literals differ, so the button logic is written once. */
@@ -126,6 +133,30 @@ private fun ProviderType.nameRes(): Int =
         ProviderType.ANTHROPIC -> R.string.provider_type_anthropic
     }
 
+private fun validationErrorText(
+    resources: android.content.res.Resources,
+    failure: Exception,
+): String? =
+    when (failure.message) {
+        "Enter valid HTTPS API base URL",
+        "Base URL cannot contain credentials, query or fragment",
+        -> resources.getString(R.string.provider_error_invalid_url)
+
+        "HTTPS required" -> resources.getString(R.string.provider_error_https_required)
+
+        "Enter API base, not request endpoint" -> resources.getString(R.string.provider_error_base_not_endpoint)
+
+        "API key required" -> resources.getString(R.string.provider_error_key_required)
+
+        "Invalid credential format" -> resources.getString(R.string.provider_error_key_format)
+
+        "Display name required" -> resources.getString(R.string.provider_error_name_required)
+
+        "Selected model ID required" -> resources.getString(R.string.provider_error_model_required)
+
+        else -> null
+    }
+
 @Composable
 fun ProviderScreen(onBack: () -> Unit) {
     val context = LocalContext.current
@@ -138,8 +169,9 @@ fun ProviderScreen(onBack: () -> Unit) {
     val app = context.applicationContext as NiroApplication
     val state by app.settings.state.collectAsStateWithLifecycle(initialValue = ProviderSettingsState())
     val scope = rememberCoroutineScope()
-    var edit by remember { mutableStateOf<ProviderProfile?>(null) }
-    var adding by remember { mutableStateOf(false) }
+    var editId by rememberSaveable { mutableStateOf<String?>(null) }
+    var adding by rememberSaveable { mutableStateOf(false) }
+    val edit = editId?.let { id -> state.profiles.find { it.id == id } }
     // Survive Activity recreation (rotation, theme change, a Watch-face handoff). These are the
     // non-secret fields of a half-filled form; losing them meant re-typing a base URL on a watch
     // keyboard. The API KEY below stays `remember` on purpose: a saved-instance bundle is plaintext
@@ -154,31 +186,59 @@ fun ProviderScreen(onBack: () -> Unit) {
     var message by remember { mutableStateOf("") }
     var models by remember { mutableStateOf<List<String>>(emptyList()) }
     var busy by remember { mutableStateOf(false) }
+    var confirmDelete by remember(edit?.id) { mutableStateOf(false) }
     // Guards a double tap while the listener is being created off the UI thread: a second tap would
     // otherwise build a second server and bind a second port.
     var pairingStarting by remember { mutableStateOf(false) }
+    var pairingJob by remember { mutableStateOf<Job?>(null) }
     var validated by remember { mutableStateOf(false) }
     // Pairing listener: exists only while this screen is composed. Never a service, never at boot.
     var pairing by remember { mutableStateOf<PairingServer?>(null) }
     var pairingNote by remember { mutableStateOf("") }
+    var remainingSecs by remember(pairing) { mutableIntStateOf(pairing?.remainingSeconds() ?: 0) }
     // Remote input is what makes typing on a watch tolerable, so advertise it only when the enabled
     // IME list actually contains a provider that supports it.
     val remoteTyping = remember { remoteTypingAvailable(enabledImePackages(context)) }
     val listState = rememberLazyListState()
-    LaunchedEffect(adding, edit?.id) { listState.scrollToItem(0) }
+    BindSimpleRotaryScroll(listState)
+    LaunchedEffect(adding, edit?.id, pairing != null) { listState.scrollToItem(0) }
     LaunchedEffect(type, base, key, edit?.id) { models = emptyList() }
+    LaunchedEffect(pairing) {
+        val server = pairing ?: return@LaunchedEffect
+        while (isActive) {
+            remainingSecs = server.remainingSeconds()
+            if (server.isExpired()) {
+                pairing?.close()
+                pairing = null
+                pairingNote = resources.getString(R.string.provider_pairing_expired)
+                break
+            }
+            delay(500L)
+        }
+    }
     DisposableEffect(Unit) {
         val window = (context as? android.app.Activity)?.window
         window?.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         onDispose {
             key = ""
             // Leaving the screen kills the listener even if the coroutine never resumes.
+            pairingJob?.cancel()
+            pairingJob = null
             pairing?.close()
             pairing = null
-            // The HCE service is bindable at any time, so the emulated tag has to be turned off
-            // here as well as by its own deadline.
-            NfcPairing.bridge.disarm()
             window?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        }
+    }
+    val keepScreenOn = pairing != null
+    DisposableEffect(keepScreenOn) {
+        val window = (context as? android.app.Activity)?.window
+        if (keepScreenOn) {
+            window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+        onDispose {
+            if (keepScreenOn) {
+                window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            }
         }
     }
 
@@ -215,9 +275,10 @@ fun ProviderScreen(onBack: () -> Unit) {
                     adapter.validate(p, candidate)
                 }
             key = ""
-            edit = null
+            editId = null
             adding = false
             models = emptyList()
+            confirmDelete = false
             message =
                 if (cleaned) {
                     resources.getString(R.string.provider_saved_ok)
@@ -233,10 +294,8 @@ fun ProviderScreen(onBack: () -> Unit) {
                 (failure as? SafeProviderException)
                     ?.error
                     ?.let { errorText(resources, it.code(hasText = false)) }
-            // "Previous credential kept." is only true when there WAS one. On a brand-new provider the
-            // failure is a plain require() ("API key required", "Selected model ID required"), and
-            // claiming a credential was kept both lied and hid the reason.
             val hadPrevious = edit != null
+            val localizedValidation = validationErrorText(resources, failure)
             message =
                 when {
                     specific != null && hadPrevious -> {
@@ -247,10 +306,12 @@ fun ProviderScreen(onBack: () -> Unit) {
                         specific
                     }
 
+                    localizedValidation != null -> {
+                        localizedValidation
+                    }
+
                     failure is IllegalArgumentException || failure is IllegalStateException -> {
-                        failure.message
-                            ?.takeIf { it.isNotBlank() }
-                            ?: resources.getString(R.string.provider_check_config)
+                        resources.getString(R.string.provider_check_config)
                     }
 
                     hadPrevious -> {
@@ -267,82 +328,128 @@ fun ProviderScreen(onBack: () -> Unit) {
     }
 
     fun stopPairing(note: String = "") {
+        pairingJob?.cancel()
+        pairingJob = null
+        pairingStarting = false
         // close() shuts the sockets synchronously, which is fast; the worker join it also starts is
         // on its own daemon thread, so this no longer freezes the dial while a peer sits in read().
         pairing?.close()
         pairing = null
-        NfcPairing.bridge.disarm()
         pairingNote = note
     }
+
+    fun stepBack() {
+        if (pairing != null || pairingStarting) {
+            stopPairing()
+        } else {
+            stopPairing()
+            key = ""
+            editId = null
+            adding = false
+            models = emptyList()
+            confirmDelete = false
+            message = ""
+        }
+    }
+
+    val inFormMode = adding || editId != null
+    BackHandler(inFormMode) { stepBack() }
 
     /**
      * Starts the pairing listener WITHOUT blocking the UI thread.
      *
-     * The constructor does real work — SecureRandom, a P-256 KeyPairGenerator, a self-signed
-     * certificate, and a ServerSocket bind — and `start()` spawns the accept loop. Running all of
-     * that inside `onClick` stalled the provider screen on the exact tap that is supposed to respond
-     * instantly. It runs on IO now and reports back on the main thread.
+     * Runs `lanAddress()` + key/cert generation + Socket bind off Main thread and reports back.
      */
     fun startPairing() {
         if (pairingStarting) return
-        val host = lanAddress()
-        if (host == null) {
-            pairingNote = resources.getString(R.string.provider_no_wifi)
-            return
-        }
+        val preset = PairingPreset(type, name.trim(), base.trim(), model.trim())
+        val wasEditingId = edit?.id
         pairingStarting = true
         pairingNote = resources.getString(R.string.provider_pairing_starting)
-        scope.launch {
-            val started =
-                withContext(Dispatchers.IO) {
-                    runCatching {
-                        val created =
-                            PairingServer(host, clock = SystemClock::elapsedRealtime) { payload ->
-                                scope.launch {
-                                    stopPairing(resources.getString(R.string.provider_key_received))
-                                    edit = null
-                                    adding = true
-                                    reveal = false
-                                    validated = false
-                                    models = emptyList()
-                                    type = payload.type
-                                    name = payload.name.ifBlank { resources.getString(payload.type.nameRes()) }
-                                    base = payload.baseUrl
-                                    model = payload.modelId
-                                    // Never repopulate a saved key into an editable field.
-                                    key = ""
-                                    saveProfile(SecretValue(sanitizeKey(payload.apiKey)))
+        pairingJob =
+            scope.launch {
+                val result =
+                    withContext(Dispatchers.IO) {
+                        val host = lanAddress() ?: return@withContext null
+                        runCatching {
+                            val created =
+                                PairingServer(
+                                    host = host,
+                                    clock = SystemClock::elapsedRealtime,
+                                    initialPreset = preset,
+                                    allowLocalHttp = BuildConfig.DEBUG,
+                                    onFetchModels = { req ->
+                                        runBlocking {
+                                            val adapter =
+                                                app.provider(req.type)
+                                                    ?: return@runBlocking ModelDiscoveryResult.Unavailable(
+                                                        ProviderError.PROVIDER_UNSUPPORTED,
+                                                    )
+                                            val temp =
+                                                ProviderProfile(
+                                                    "pairing-fetch",
+                                                    req.type,
+                                                    req.type.name,
+                                                    Endpoints.normalize(req.baseUrl, BuildConfig.DEBUG),
+                                                    "",
+                                                    "00000000-0000-0000-0000-000000000000",
+                                                )
+                                            withTimeoutOrNull(DISCOVERY_BUDGET_MS) {
+                                                adapter.listModels(temp, SecretValue(sanitizeKey(req.apiKey)))
+                                            } ?: ModelDiscoveryResult.Unavailable(ProviderError.TIMEOUT)
+                                        }
+                                    },
+                                ) { payload ->
+                                    scope.launch {
+                                        stopPairing(resources.getString(R.string.provider_key_received))
+                                        editId = wasEditingId
+                                        adding = wasEditingId == null
+                                        reveal = false
+                                        validated = false
+                                        models = emptyList()
+                                        type = payload.type
+                                        name = payload.name.ifBlank { resources.getString(payload.type.nameRes()) }
+                                        base = payload.baseUrl
+                                        model = payload.modelId
+                                        // Never repopulate a saved key into an editable field.
+                                        key = ""
+                                        saveProfile(SecretValue(sanitizeKey(payload.apiKey)))
+                                    }
                                 }
+                            try {
+                                if (!currentCoroutineContext().isActive) throw CancellationException()
+                                created.start()
+                                if (!currentCoroutineContext().isActive) throw CancellationException()
+                                host to created
+                            } catch (t: Throwable) {
+                                runCatching { created.close() }
+                                throw t
                             }
-                        try {
-                            if (!currentCoroutineContext().isActive) throw CancellationException()
-                            created.start()
-                            if (!currentCoroutineContext().isActive) throw CancellationException()
-                            created
-                        } catch (t: Throwable) {
-                            runCatching { created.close() }
-                            throw t
                         }
                     }
-                }
-            pairingStarting = false
-            started
-                .onSuccess { created ->
-                    pairing = created
-                    // The same capability URL, now also an emulated NDEF tag for the session's life.
-                    NfcPairing.bridge.arm(created.url, SystemClock.elapsedRealtime())
-                    // No long explanation here: the dial has 466 px and the QR needs them. The
-                    // certificate warning, the ECDH note and "same Wi-Fi" all live on the page the
-                    // phone loads, where they are read at the moment they matter. Only the
-                    // short, actionable warning stays on the watch.
+                pairingStarting = false
+                if (result == null) {
                     pairingNote =
-                        if (isPrivateAddress(host)) {
-                            ""
-                        } else {
-                            resources.getString(R.string.provider_not_home_network)
+                        resources.getString(
+                            if (remoteTyping) R.string.provider_no_wifi_remote else R.string.provider_no_wifi,
+                        )
+                    return@launch
+                }
+                result
+                    .onSuccess { (host, created) ->
+                        if (!adding && editId == null) {
+                            runCatching { created.close() }
+                            return@onSuccess
                         }
-                }.onFailure { pairingNote = resources.getString(R.string.provider_pairing_unavailable) }
-        }
+                        pairing = created
+                        pairingNote =
+                            if (isPrivateAddress(host)) {
+                                ""
+                            } else {
+                                resources.getString(R.string.provider_not_home_network)
+                            }
+                    }.onFailure { pairingNote = resources.getString(R.string.provider_pairing_unavailable) }
+            }
     }
 
     LazyColumn(
@@ -356,7 +463,9 @@ fun ProviderScreen(onBack: () -> Unit) {
     ) {
         item {
             val title =
-                if (adding || edit != null) {
+                if (pairing != null) {
+                    stringResource(R.string.provider_setup_from_phone)
+                } else if (adding || edit != null) {
                     stringResource(
                         if (edit != null) R.string.provider_title_edit else R.string.provider_title_add,
                         stringResource(type.nameRes()),
@@ -372,7 +481,7 @@ fun ProviderScreen(onBack: () -> Unit) {
         }
         item {
             Button(
-                onClick = onBack,
+                onClick = { if (inFormMode) stepBack() else onBack() },
                 modifier = Modifier.fillMaxWidth().wrapContentWidth(Alignment.CenterHorizontally),
             ) {
                 Text(stringResource(R.string.provider_back))
@@ -380,8 +489,8 @@ fun ProviderScreen(onBack: () -> Unit) {
         }
         val stateError = state.error
         if (stateError != null) {
-            item { Text(stateError, fontSize = 14.sp) }
-        } else if (!adding && edit == null) {
+            item { Text(errorText(stateError) ?: stateError, fontSize = 14.sp) }
+        } else if (!adding && editId == null) {
             // Save lands here (adding=false). The confirmation must survive the mode flip:
             // keep the same visible result row in list mode so "Saved securely." stays on screen.
             if (message.isNotBlank()) {
@@ -393,18 +502,22 @@ fun ProviderScreen(onBack: () -> Unit) {
                 val presetLabel = stringResource(preset.label)
                 val presetName = stringResource(preset.name)
                 val presetMessage = stringResource(preset.message)
-                Button(onClick = {
-                    adding = true
-                    type = preset.type
-                    name = presetName
-                    base = preset.base
-                    model = ""
-                    key = ""
-                    validated = false
-                    reveal = false
-                    models = emptyList()
-                    message = presetMessage
-                }) { Text(presetLabel) }
+                Button(
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = {
+                        adding = true
+                        editId = null
+                        type = preset.type
+                        name = presetName
+                        base = preset.base
+                        model = ""
+                        key = ""
+                        validated = false
+                        reveal = false
+                        models = emptyList()
+                        message = presetMessage
+                    },
+                ) { Text(presetLabel) }
             }
             items(state.profiles, key = { it.id }) { p ->
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -435,82 +548,111 @@ fun ProviderScreen(onBack: () -> Unit) {
                         )
                     }
                     OutlinedButton(onClick = {
-                        edit = p
+                        editId = p.id
+                        adding = false
                         type = p.type
                         name = p.displayName
                         base = p.baseUrl
-                        model =
-                            p.selectedModelId
+                        model = p.selectedModelId
                         key = ""
                         validated = false
                         reveal = false
                         models = emptyList()
-                        message =
-                            resources.getString(R.string.provider_key_configured)
+                        confirmDelete = false
+                        message = resources.getString(R.string.provider_key_configured)
                     }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.provider_edit_replace_key)) }
+                }
+            }
+        } else if (pairing != null) {
+            item {
+                val server = pairing!!
+                val formattedCountdown =
+                    String.format(Locale.US, "%d:%02d", remainingSecs / 60, remainingSecs % 60)
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        stringResource(R.string.provider_pairing_expires, formattedCountdown),
+                        fontSize = 13.sp,
+                        color = Color(0xFFFFD28A),
+                        modifier = Modifier.fillMaxWidth().wrapContentWidth(Alignment.CenterHorizontally),
+                    )
+                    Text(
+                        stringResource(R.string.provider_pairing_hint),
+                        fontSize = 13.sp,
+                        color = Color(0xFFB8BDC6),
+                    )
+                    if (pairingNote.isNotBlank()) {
+                        Text(pairingNote, fontSize = 13.sp, color = Color(0xFFFFD28A))
+                    }
+                    Button(
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = {
+                            pairingNote = resources.getString(R.string.provider_opening_on_phone)
+                            scope.launch {
+                                val opened = openUrlOnPairedPhone(context, server.url)
+                                pairingNote =
+                                    resources.getString(
+                                        if (opened.isSuccess) {
+                                            R.string.provider_opened_on_phone
+                                        } else {
+                                            R.string.provider_open_on_phone_failed
+                                        },
+                                    )
+                            }
+                        },
+                    ) {
+                        Text(stringResource(R.string.provider_open_on_phone), fontSize = 14.sp)
+                    }
+                    // Drawn from the SAME capability URL the phone page is served from, centered
+                    // inside the 466 px circular safe area so corners are never bezel-clipped.
+                    val qr = remember(server.url) { QrCode.matrix(server.url) }
+                    val qrLabel = stringResource(R.string.provider_pairing_qr)
+                    Canvas(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 24.dp, vertical = 4.dp)
+                            .aspectRatio(1f)
+                            .semantics { contentDescription = qrLabel },
+                    ) {
+                        val side = QrCode.sidePx(qr, minOf(size.width, size.height).toInt())
+                        if (side <= 0) return@Canvas
+                        val module = side.toFloat() / qr.size
+                        val left = ((size.width.toInt() - side) / 2).toFloat()
+                        val top = ((size.height.toInt() - side) / 2).toFloat()
+                        drawRect(Color.White, Offset(left, top), Size(side.toFloat(), side.toFloat()))
+                        for (y in 0 until qr.size) {
+                            for (x in 0 until qr.size) {
+                                if (qr.isDark(x, y)) {
+                                    drawRect(
+                                        Color.Black,
+                                        Offset(left + x * module, top + y * module),
+                                        Size(module, module),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    OutlinedButton(
+                        onClick = { stopPairing() },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(stringResource(R.string.provider_cancel_pairing), fontSize = 14.sp)
+                    }
+                    // Kept as the last resort and for URL verification on untrusted Wi-Fi.
+                    Text(server.url, fontSize = 14.sp, color = Color(0xFFA8C7FA))
                 }
             }
         } else {
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
-                        enabled = !busy || pairing != null,
-                        onClick = { if (pairing == null) startPairing() else stopPairing() },
+                        enabled = !busy && !pairingStarting,
+                        onClick = { startPairing() },
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Text(
-                            stringResource(
-                                if (pairing == null) {
-                                    R.string.provider_setup_from_phone
-                                } else {
-                                    R.string.provider_cancel_pairing
-                                },
-                            ),
+                            stringResource(R.string.provider_setup_from_phone),
                             fontSize = 14.sp,
                         )
-                    }
-                    pairing?.let { server ->
-                        Text(
-                            stringResource(R.string.provider_pairing_nfc),
-                            fontSize = 13.sp,
-                            color = Color(0xFFB8BDC6),
-                        )
-                        // Drawn from the SAME capability URL the phone page is served from, so a
-                        // scan and a tap are the same session; the token is not duplicated.
-                        val qr = remember(server.url) { QrCode.matrix(server.url) }
-                        val qrLabel = stringResource(R.string.provider_pairing_qr)
-                        // White plate, black modules: a code scanner needs dark-on-light, so the
-                        // plate is the code's background rather than the screen's.
-                        Canvas(
-                            Modifier
-                                .fillMaxWidth()
-                                .aspectRatio(1f)
-                                .padding(4.dp)
-                                .semantics { contentDescription = qrLabel },
-                        ) {
-                            // Integer module size from the SAME function the JVM test decodes, so
-                            // the pixels proven scannable are the pixels the watch draws.
-                            val side = QrCode.sidePx(qr, minOf(size.width, size.height).toInt())
-                            if (side <= 0) return@Canvas
-                            val module = side.toFloat() / qr.size
-                            val left = ((size.width.toInt() - side) / 2).toFloat()
-                            val top = ((size.height.toInt() - side) / 2).toFloat()
-                            drawRect(Color.White, Offset(left, top), Size(side.toFloat(), side.toFloat()))
-                            for (y in 0 until qr.size) {
-                                for (x in 0 until qr.size) {
-                                    if (qr.isDark(x, y)) {
-                                        drawRect(
-                                            Color.Black,
-                                            Offset(left + x * module, top + y * module),
-                                            Size(module, module),
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                        // Kept as the last resort: a phone without a camera or NFC still needs a
-                        // way in, and the token comparison the warning above asks for needs the URL.
-                        Text(server.url, fontSize = 14.sp, color = Color(0xFFA8C7FA))
                     }
                     if (pairingNote.isNotBlank()) Text(pairingNote, fontSize = 13.sp, color = Color(0xFFB8BDC6))
                 }
@@ -550,9 +692,7 @@ fun ProviderScreen(onBack: () -> Unit) {
                             validated = false
                         }
                     }
-                    if (edit !=
-                        null
-                    ) {
+                    if (edit != null) {
                         Text(
                             stringResource(R.string.provider_configured_replace),
                             fontSize = 14.sp,
@@ -585,12 +725,10 @@ fun ProviderScreen(onBack: () -> Unit) {
                 }
             }
             item {
-                OutlinedButton(modifier = Modifier.fillMaxWidth(), enabled = !busy && pairing == null, onClick = {
+                OutlinedButton(modifier = Modifier.fillMaxWidth(), enabled = !busy, onClick = {
                     scope.launch {
                         busy = true
                         message = ""
-                        // Profiles are frozen at request time, so only a mode change can retarget
-                        // this request; that is exactly what the staleness check compares.
                         val input = Triple(type, base, key)
                         val inputProfileId = edit?.id
                         try {
@@ -600,10 +738,6 @@ fun ProviderScreen(onBack: () -> Unit) {
                                 message = resources.getString(R.string.provider_type_unavailable)
                                 return@launch
                             }
-                            // A whole-operation budget, not just the client's per-socket limits:
-                            // discovery pages, so a slow endpoint could keep this screen in
-                            // "Discovering…" for minutes. On expiry the user is told to type the
-                            // model, which is the same advice a failed discovery already gives.
                             val result =
                                 withTimeoutOrNull(DISCOVERY_BUDGET_MS) {
                                     adapter.listModels(p, secret(p))
@@ -612,27 +746,44 @@ fun ProviderScreen(onBack: () -> Unit) {
                             when (result) {
                                 is ModelDiscoveryResult.Models -> {
                                     models = result.ids
-                                    message =
-                                        resources.getString(R.string.provider_models_listed)
+                                    message = resources.getString(R.string.provider_models_listed)
                                 }
 
                                 is ModelDiscoveryResult.Unavailable -> {
                                     models = emptyList()
+                                    val specific = errorText(resources, result.error.code(hasText = false))
                                     message =
-                                        resources.getString(R.string.provider_models_unavailable)
+                                        if (specific != null) {
+                                            resources.getString(R.string.provider_models_unavailable_reason, specific)
+                                        } else {
+                                            resources.getString(R.string.provider_models_unavailable)
+                                        }
                                 }
                             }
                         } catch (cancelled: CancellationException) {
                             throw cancelled
-                        } catch (_: Exception) {
+                        } catch (failure: Exception) {
                             if (input == Triple(type, base, key) && inputProfileId == edit?.id) {
-                                message = resources.getString(R.string.provider_check_url_key)
+                                message =
+                                    validationErrorText(resources, failure)
+                                        ?: resources.getString(R.string.provider_check_url_key)
                             }
                         } finally {
                             busy = false
                         }
                     }
                 }) { Text(stringResource(R.string.provider_discover_models)) }
+            }
+            item {
+                if (message.isNotBlank()) Text(message, fontSize = 14.sp, color = Color(0xFFFFD28A))
+            }
+            if (models.isNotEmpty()) {
+                item {
+                    OutlinedButton(
+                        onClick = { models = emptyList() },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text(stringResource(R.string.provider_hide_models), fontSize = 13.sp) }
+                }
             }
             items(models, key = { it }) { id ->
                 Button(onClick = {
@@ -642,17 +793,13 @@ fun ProviderScreen(onBack: () -> Unit) {
                 }, modifier = Modifier.fillMaxWidth()) { Text(id, fontSize = 14.sp) }
             }
             item {
-                OutlinedButton(modifier = Modifier.fillMaxWidth(), enabled = !busy && pairing == null, onClick = {
+                OutlinedButton(modifier = Modifier.fillMaxWidth(), enabled = !busy, onClick = {
                     scope.launch {
                         busy = true
                         validated = false
                         message = ""
                         try {
                             val p = profile()
-                            // Snapshot what is actually being validated. The key field is NOT disabled
-                            // while busy, so it can change during the request — and this is a real
-                            // (billable) generation, so the result belongs to the snapshot, not to
-                            // whatever the fields hold when it returns.
                             val inputKey = key
                             val inputProfileId = edit?.id
                             val adapter = app.provider(p.type)
@@ -661,11 +808,6 @@ fun ProviderScreen(onBack: () -> Unit) {
                                 return@launch
                             }
                             val error = adapter.validate(p, secret(p))
-                            // Any field changed under the request invalidates its result. Without this
-                            // an edited key still got "Connected. Selected model generated
-                            // successfully." for the OLD key, and a brand-new profile is saved
-                            // without a replacement probe, so the never-validated key was persisted
-                            // under a success message and then failed with 401.
                             if (p.type != type || p.displayName != name.trim() ||
                                 p.baseUrl != Endpoints.normalize(base, BuildConfig.DEBUG) ||
                                 p.selectedModelId != model.trim() ||
@@ -683,11 +825,10 @@ fun ProviderScreen(onBack: () -> Unit) {
                         } catch (cancelled: CancellationException) {
                             throw cancelled
                         } catch (failure: Exception) {
-                            // Name the failing field: ProviderError already separates a rejected key from a
-                            // missing model, and collapsing both into one string made the fix a guess.
                             message =
                                 validationCause(failure)
                                     ?.let { errorText(resources, it.code(hasText = false)) }
+                                    ?: validationErrorText(resources, failure)
                                     ?: resources.getString(R.string.provider_error_check_fields)
                         } finally {
                             busy = false
@@ -695,23 +836,7 @@ fun ProviderScreen(onBack: () -> Unit) {
                     }
                 }) { Text(stringResource(R.string.provider_validate)) }
             }
-            // One shared result row, right after the action buttons. It used to sit at the list
-            // tail below Save/Delete, so Validate/Discover output was invisible without a long
-            // scroll and taps looked dead on the watch during live testing.
             item {
-                if (message.isNotBlank()) Text(message, fontSize = 14.sp, color = Color(0xFFFFD28A))
-            }
-            item {
-                // Validate is ADVISORY, not a gate on Save.
-                //
-                // The gate read `!needsValidation || validated`, i.e. Save stayed disabled until a live
-                // call succeeded — while this very screen tells the user "Models unavailable. Enter model
-                // manually; chat still allowed". A BYOK client that cannot save a profile because the
-                // watch is offline, behind a captive portal, or the provider is briefly down is broken;
-                // it also made the four setup tests unable to reach Save at all (measured on the AVD:
-                // enabled=false with every field filled). What is required now is the data a profile
-                // needs; an unvalidated save is announced, and a wrong key surfaces at the first send as
-                // an error row on the conversation, which is visible and recoverable.
                 val original = edit
                 val connectivityChanged =
                     original == null ||
@@ -743,26 +868,38 @@ fun ProviderScreen(onBack: () -> Unit) {
             val deleting = edit
             if (deleting != null) {
                 item {
-                    OutlinedButton(modifier = Modifier.fillMaxWidth(), enabled = !busy && pairing == null, onClick = {
-                        scope.launch {
-                            busy = true
-                            try {
-                                app.settings.delete(deleting.id)
-                                edit = null
-                                key = ""
-                                message =
-                                    resources.getString(R.string.provider_deleted)
-                            } catch (
-                                cancelled: CancellationException,
-                            ) {
-                                throw cancelled
-                            } catch (_: Exception) {
-                                message = resources.getString(R.string.provider_delete_failed)
-                            } finally {
-                                busy = false
+                    OutlinedButton(
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !busy,
+                        onClick = {
+                            if (!confirmDelete) {
+                                confirmDelete = true
+                                return@OutlinedButton
                             }
-                        }
-                    }) { Text(stringResource(R.string.provider_delete)) }
+                            scope.launch {
+                                busy = true
+                                try {
+                                    app.settings.delete(deleting.id)
+                                    editId = null
+                                    key = ""
+                                    confirmDelete = false
+                                    message = resources.getString(R.string.provider_deleted)
+                                } catch (cancelled: CancellationException) {
+                                    throw cancelled
+                                } catch (_: Exception) {
+                                    message = resources.getString(R.string.provider_delete_failed)
+                                } finally {
+                                    busy = false
+                                }
+                            }
+                        },
+                    ) {
+                        Text(
+                            stringResource(
+                                if (confirmDelete) R.string.provider_delete_confirm else R.string.provider_delete,
+                            ),
+                        )
+                    }
                 }
             }
         }

@@ -41,6 +41,12 @@ class PairingCertificateContractTest {
         val san = cert.subjectAlternativeNames.map { entry -> (entry[0] as Int) to entry[1].toString() }
         assertTrue("no IP SAN in $san", san.any { it.first == 7 && it.second == address.hostAddress })
         assertTrue("no DNS SAN in $san", san.any { it.first == 2 && it.second == host })
+        assertTrue("id-kp-serverAuth EKU must be present for iOS Safari", cert.extendedKeyUsage.orEmpty().contains("1.3.6.1.5.5.7.3.1"))
+
+        val ipOnlyCert = SelfSignedCert.mint(keyPair(), "192.168.1.42", address)
+        val ipOnlySan = ipOnlyCert.subjectAlternativeNames.map { entry -> (entry[0] as Int) to entry[1].toString() }
+        assertTrue("raw IP cert must include IP SAN", ipOnlySan.any { it.first == 7 && it.second == "192.168.1.42" })
+        assertFalse("raw IP cert must not place IP literal in dNSName", ipOnlySan.any { it.first == 2 })
     }
 
     /**

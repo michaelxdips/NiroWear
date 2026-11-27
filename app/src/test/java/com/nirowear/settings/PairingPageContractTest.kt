@@ -70,4 +70,12 @@ class PairingPageContractTest {
         assertTrue(page.contains("unauthenticated"))
         assertTrue(page.contains("manual entry on untrusted networks"))
     }
+
+    @Test
+    fun pageIncludesEncryptedModelFetcherAndPresetSwitcher() {
+        assertTrue("Fetch models button must be present", page.contains("id=\"fetchModels\"") && page.contains("Fetch models"))
+        assertTrue("Model dropdown must be present", page.contains("id=\"models\""))
+        assertTrue("Type switcher must update presets", page.contains("el('type').onchange"))
+        assertTrue("Encrypted /models route must be wired", page.contains("/models"))
+    }
 }

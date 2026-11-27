@@ -27,14 +27,11 @@ object NativeMathRenderer : MathRenderer {
     private val mutex = Mutex() // JLaTeXMath maintains shared parser/font state.
 
     /**
-     * Last results, most recently used last. Small on purpose: each entry is a bitmap, and a watch
-     * gives us a few megabytes at most. Eight covers the formulas on one screen, which is what the
-     * scroll-out/scroll-in flash needs; anything older re-typesets once.
-     *
-     * ponytail: 8 entries, in-memory only. Add a disk cache only if re-typesetting a long answer's
-     * formulas after a process restart is proven to matter.
+     * Last results, most recently used last. JLaTeXMath holds vector `TeXIcon` trees (no Bitmap
+     * allocation), so 64 covers multi-paragraph math answers without scroll eviction thrash, while
+     * caching negative results avoids re-running failed parses on every scroll-in.
      */
-    private const val CACHE_ENTRIES = 8
+    private const val CACHE_ENTRIES = 64
 
     // Bitmap bounds. Width alone is NOT the risk: a wide formula is exactly what the contract wants
     // panned rather than shrunk, so a bound below what a real 200-term fraction typesets at 18 sp
@@ -48,30 +45,57 @@ object NativeMathRenderer : MathRenderer {
     /** The last rung of the math contract ("modest scaling") — never smaller than this. */
     private const val MIN_SCALE = 0.5f
 
+    private sealed interface CacheEntry {
+        data class Hit(
+            val drawable: Drawable,
+        ) : CacheEntry
+
+        data object Miss : CacheEntry
+    }
+
     private val cache =
-        object : LinkedHashMap<Pair<String, Float>, Drawable>(CACHE_ENTRIES, 0.75f, true) {
-            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Pair<String, Float>, Drawable>) =
+        object : LinkedHashMap<Pair<String, Float>, CacheEntry>(CACHE_ENTRIES, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Pair<String, Float>, CacheEntry>) =
                 size > CACHE_ENTRIES
         }
 
     override fun cached(
         source: String,
         textSizePx: Float,
-    ): Drawable? = synchronized(cache) { cache[source to textSizePx] }
+    ): Drawable? = synchronized(cache) { (cache[source to textSizePx] as? CacheEntry.Hit)?.drawable }
+
+    private fun cachedEntry(
+        source: String,
+        textSizePx: Float,
+    ): CacheEntry? = synchronized(cache) { cache[source to textSizePx] }
 
     override suspend fun render(
         source: String,
         textSizePx: Float,
     ): Drawable? =
         withContext(Dispatchers.Default) {
-            if (!NativeMathGuard.isSafe(source)) return@withContext null
-            cached(source, textSizePx)?.let { return@withContext it }
+            cachedEntry(source, textSizePx)?.let { entry ->
+                return@withContext (entry as? CacheEntry.Hit)?.drawable
+            }
+            if (!NativeMathGuard.isSafe(source)) {
+                rememberMiss(source, textSizePx)
+                return@withContext null
+            }
 
             mutex.withLock {
-                cached(source, textSizePx)?.let { return@withLock it }
-                val first = layout(source, textSizePx) ?: return@withLock null
+                cachedEntry(source, textSizePx)?.let { entry ->
+                    return@withLock (entry as? CacheEntry.Hit)?.drawable
+                }
+                val first =
+                    layout(source, textSizePx) ?: run {
+                        rememberMiss(source, textSizePx)
+                        return@withLock null
+                    }
                 if (fits(first)) return@withLock remember(source, textSizePx, first)
-                if (first.intrinsicWidth <= 0 || first.intrinsicHeight <= 0) return@withLock null
+                if (first.intrinsicWidth <= 0 || first.intrinsicHeight <= 0) {
+                    rememberMiss(source, textSizePx)
+                    return@withLock null
+                }
                 // Scale down within MIN_SCALE before falling back to source text for tall/wide formulas.
                 val ratio =
                     minOf(
@@ -79,10 +103,20 @@ object NativeMathRenderer : MathRenderer {
                         MAX_HEIGHT.toFloat() / first.intrinsicHeight,
                         sqrt(MAX_PIXELS.toFloat() / (first.intrinsicWidth.toLong() * first.intrinsicHeight)),
                     )
-                if (ratio <= MIN_SCALE) return@withLock null
+                if (ratio <= MIN_SCALE) {
+                    rememberMiss(source, textSizePx)
+                    return@withLock null
+                }
                 val scaledSize = textSizePx * ratio.coerceIn(MIN_SCALE, 1f)
-                if (scaledSize >= textSizePx) return@withLock null
+                if (scaledSize >= textSizePx) {
+                    rememberMiss(source, textSizePx)
+                    return@withLock null
+                }
                 layout(source, scaledSize)?.takeIf { fits(it) }?.let { remember(source, textSizePx, it) }
+                    ?: run {
+                        rememberMiss(source, textSizePx)
+                        null
+                    }
             }
         }
 
@@ -124,7 +158,14 @@ object NativeMathRenderer : MathRenderer {
         textSizePx: Float,
         drawable: Drawable,
     ): Drawable {
-        synchronized(cache) { cache[source to textSizePx] = drawable }
+        synchronized(cache) { cache[source to textSizePx] = CacheEntry.Hit(drawable) }
         return drawable
+    }
+
+    private fun rememberMiss(
+        source: String,
+        textSizePx: Float,
+    ) {
+        synchronized(cache) { cache[source to textSizePx] = CacheEntry.Miss }
     }
 }

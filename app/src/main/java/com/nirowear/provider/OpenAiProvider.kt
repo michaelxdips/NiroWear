@@ -38,7 +38,11 @@ class OpenAiProvider(
         secret: SecretValue,
     ): ModelDiscoveryResult =
         try {
-            val body = http.fetch(authenticated(profile, secret, "models").build())
+            val body =
+                http.fetch(
+                    authenticated(profile, secret, "models").build(),
+                    decodeError = { _, errBody -> openAiHttpError(errBody) },
+                )
             // Official /models has no pagination or text capability fields. Do not infer from names.
             // One malformed entry must not discard an otherwise valid list.
             val ids =
@@ -264,13 +268,9 @@ internal class OpenAiStreamDecoder {
                     // "cut at the output limit" reported a CONTENT-FILTERED answer as a length cap, and a
                     // zero-text incomplete produced an empty SUCCESS row with a note under it.
                     val reason =
-                        root["response"]
-                            ?.jsonObject
-                            ?.get("incomplete_details")
-                            ?.jsonObject
+                        ((root["response"] as? JsonObject)?.get("incomplete_details") as? JsonObject)
                             ?.get("reason")
-                            ?.jsonPrimitive
-                            ?.contentOrNull
+                            ?.stringOrNull()
                     when (reason) {
                         // The provider stopped for policy, not for length: same meaning as a
                         // content-filtered finish in the compatible adapter.

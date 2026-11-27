@@ -53,14 +53,13 @@ data class OpenAiContinuation(
 
 const val SYSTEM_INSTRUCTION =
     // AGENTS.md, UX contract: "Never shorten an answer merely because the screen is small. Solve small
-    // screens with layout, scrolling, typography and content transformation." The previous text asked
-    // for "the shortest answer" BY DEFAULT *because* the reader is a watch, which is exactly the
-    // forbidden reason — it capped answer length for the device rather than for the question. This
-    // version asks for STRUCTURE instead of brevity: the reader renders headings, lists, tables, code
-    // and display math as separate blocks on a 466 px round screen, so a long answer stays navigable
-    // without being cut.
-    "You are answering on a smartwatch. Length is set by the question, never by the screen: give the " +
-        "full answer the question needs, and never drop required facts, caveats, steps, examples, code, " +
+    // screens with layout, scrolling, typography and content transformation." Ask for direct, accurate
+    // answers without filler or unsolicited lecturing, and use STRUCTURE (headings, lists, tables,
+    // code, display math) so long answers stay navigable on a 466 px round screen without truncation.
+    "You are answering on a smartwatch. Be accurate, direct, and strictly to the point: answer the " +
+        "user's actual question immediately without filler, unsolicited lecturing, moralizing, or " +
+        "unnecessary caveats. Length is set by the question, never by the screen: give the full " +
+        "answer the question needs, and never drop required facts, caveats, steps, examples, code, " +
         "math or table rows to make it look shorter. Make a long answer readable with STRUCTURE: lead " +
         "with the answer, then use short paragraphs, headings, bullet or numbered lists, tables, fenced " +
         "code and display math instead of one wall of prose. Avoid repetition, unnecessary preamble, " +

@@ -5,15 +5,14 @@ import android.content.Intent
 import android.content.res.Resources
 import android.graphics.drawable.Drawable
 import android.widget.Toast
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -27,7 +26,8 @@ import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
@@ -176,30 +176,24 @@ fun DocumentBlock(
 
         is ContentBlock.Quote -> {
             val quoteLabel = LocalResources.current.getString(R.string.renderer_quote)
-            // One label, on the merged quote. The decorative bar used to carry its OWN
-            // contentDescription, so TalkBack stopped on a 2dp bar labelled "Quote" and then announced
-            // the same label again on the text node next to it. The label stays on the parent because
-            // QuoteSemanticsTest requires a localized label on the node that holds the text.
-            Row(
-                // IntrinsicSize.Min so the bar spans the WHOLE quote: a fixed 24dp bar covered only the
-                // first line of any multi-line quote, and a multi-paragraph quote showed detached
-                // dashes.
+            // Drawn directly via drawBehind instead of Row(IntrinsicSize.Min) + child Box so inline math
+            // inside quotes (which uses BoxWithConstraints/SubcomposeLayout) never throws an intrinsics
+            // IllegalStateException, while saving two layout nodes and a double measure pass.
+            Box(
                 Modifier
-                    .height(IntrinsicSize.Min)
-                    .semantics(mergeDescendants = true) { contentDescription = quoteLabel },
+                    .fillMaxWidth()
+                    .semantics(mergeDescendants = true) { contentDescription = quoteLabel }
+                    .drawBehind {
+                        val barWidth = 2.dp.toPx()
+                        val left = if (layoutDirection == LayoutDirection.Rtl) size.width - barWidth else 0f
+                        drawRect(
+                            color = Color(0xFF99AABB),
+                            topLeft = Offset(left, 0f),
+                            size = Size(barWidth, size.height),
+                        )
+                    }.padding(start = 10.dp),
             ) {
-                Box(
-                    Modifier
-                        .width(2.dp)
-                        .fillMaxHeight()
-                        .background(Color(0xFF99AABB))
-                        .clearAndSetSemantics {},
-                )
-                RichText(
-                    block.content,
-                    Modifier.padding(start = 8.dp),
-                    measurer = measurer,
-                )
+                RichText(block.content, measurer = measurer)
             }
         }
 
@@ -271,59 +265,64 @@ fun DocumentBlock(
     }
 }
 
+/** Draws edge fades and slate cue bars only along directions where [scroll] can pan. */
+internal fun Modifier.horizontalPanCues(scroll: ScrollState): Modifier =
+    drawWithCache {
+        val cueColor = Color(0xFF99AABB)
+        val barWidth = 2.dp.toPx()
+        val fadeWidth = 18.dp.toPx().coerceAtMost(size.width / 3f)
+        val insetY = 6.dp.toPx().coerceAtMost(size.height / 4f)
+        val barHeight = (size.height - insetY * 2f).coerceAtLeast(0f)
+        val rightBrush =
+            Brush.horizontalGradient(
+                colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f)),
+                startX = size.width - fadeWidth,
+                endX = size.width,
+            )
+        val leftBrush =
+            Brush.horizontalGradient(
+                colors = listOf(Color.Black.copy(alpha = 0.85f), Color.Transparent),
+                startX = 0f,
+                endX = fadeWidth,
+            )
+        onDrawWithContent {
+            drawContent()
+            if (barHeight <= 0f) return@onDrawWithContent
+            val isRtl = layoutDirection == LayoutDirection.Rtl
+            val hasRightCue = if (isRtl) scroll.canScrollBackward else scroll.canScrollForward
+            val hasLeftCue = if (isRtl) scroll.canScrollForward else scroll.canScrollBackward
+            if (hasRightCue) {
+                drawRect(
+                    brush = rightBrush,
+                    topLeft = Offset(size.width - fadeWidth, 0f),
+                    size = Size(fadeWidth, size.height),
+                )
+                drawRect(
+                    color = cueColor,
+                    topLeft = Offset(size.width - barWidth, insetY),
+                    size = Size(barWidth, barHeight),
+                )
+            }
+            if (hasLeftCue) {
+                drawRect(
+                    brush = leftBrush,
+                    topLeft = Offset.Zero,
+                    size = Size(fadeWidth, size.height),
+                )
+                drawRect(
+                    color = cueColor,
+                    topLeft = Offset(0f, insetY),
+                    size = Size(barWidth, barHeight),
+                )
+            }
+        }
+    }
+
 /** Renders horizontally scrollable code with edge fades and slate cue bars only along directions that can pan. */
 @Composable
 private fun CodeBlockScrollable(code: String) {
     val scroll = rememberScrollState()
-    val cueColor = Color(0xFF99AABB)
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .drawWithContent {
-                drawContent()
-                val isRtl = layoutDirection == LayoutDirection.Rtl
-                val hasRightCue = if (isRtl) scroll.canScrollBackward else scroll.canScrollForward
-                val hasLeftCue = if (isRtl) scroll.canScrollForward else scroll.canScrollBackward
-                val barWidth = 2.dp.toPx()
-                val fadeWidth = 18.dp.toPx().coerceAtMost(size.width / 3f)
-                val insetY = 6.dp.toPx()
-                val barHeight = (size.height - insetY * 2f).coerceAtLeast(0f)
-                if (hasRightCue && barHeight > 0f) {
-                    drawRect(
-                        brush =
-                            Brush.horizontalGradient(
-                                colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f)),
-                                startX = size.width - fadeWidth,
-                                endX = size.width,
-                            ),
-                        topLeft = Offset(size.width - fadeWidth, 0f),
-                        size = Size(fadeWidth, size.height),
-                    )
-                    drawRect(
-                        color = cueColor,
-                        topLeft = Offset(size.width - barWidth, insetY),
-                        size = Size(barWidth, barHeight),
-                    )
-                }
-                if (hasLeftCue && barHeight > 0f) {
-                    drawRect(
-                        brush =
-                            Brush.horizontalGradient(
-                                colors = listOf(Color.Black.copy(alpha = 0.85f), Color.Transparent),
-                                startX = 0f,
-                                endX = fadeWidth,
-                            ),
-                        topLeft = Offset.Zero,
-                        size = Size(fadeWidth, size.height),
-                    )
-                    drawRect(
-                        color = cueColor,
-                        topLeft = Offset(0f, insetY),
-                        size = Size(barWidth, barHeight),
-                    )
-                }
-            },
-    ) {
+    Box(Modifier.fillMaxWidth().horizontalPanCues(scroll)) {
         Text(
             code,
             fontFamily = FontFamily.Monospace,
@@ -355,7 +354,7 @@ internal fun RenderUnitView(
         is RenderUnit.CodeChunk -> {
             Column {
                 unit.language?.let { Text(it, fontSize = 12.sp, color = Color(0xFFAACCCC)) }
-                CodeBlockScrollable(unit.lines.joinToString("\n"))
+                CodeBlockScrollable(unit.text)
             }
         }
 
@@ -413,17 +412,17 @@ private fun RichText(
     heading: Int? = null,
     measurer: TextMeasurer = rememberTextMeasurer(),
 ) {
-    val links = content.mapNotNull { it.link }.filter { isOpenableLink(it) }.distinct()
+    val links = remember(content) { content.mapNotNull { it.link }.filter { isOpenableLink(it) }.distinct() }
     val linkActions = links.isNotEmpty()
     if (content.none { it.math }) {
         if (linkActions) {
             Column {
-                InlineRichText(content, List(content.size) { null }, heading, modifier)
+                InlineRichText(content, emptyList(), heading, modifier)
                 LinkActions(links)
             }
             return
         }
-        InlineRichText(content, List(content.size) { null }, heading, modifier)
+        InlineRichText(content, emptyList(), heading, modifier)
         return
     }
     val density = LocalDensity.current
@@ -616,7 +615,7 @@ private fun InlineRichText(
             buildAnnotatedString {
                 append(paragraphDirectionMarker(content))
                 content.forEachIndexed { index, span ->
-                    if (math[index] != null) {
+                    if (math.getOrNull(index) != null) {
                         appendInlineContent("math$index", span.text)
                         return@forEachIndexed
                     }

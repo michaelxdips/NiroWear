@@ -1,5 +1,8 @@
 package com.nirowear.renderer
 
+import androidx.compose.runtime.Immutable
+
+@Immutable
 data class InlineContent(
     val text: String,
     val bold: Boolean = false,
@@ -9,6 +12,7 @@ data class InlineContent(
     val math: Boolean = false,
 )
 
+@Immutable
 sealed interface ContentBlock {
     data class Paragraph(
         val content: List<InlineContent>,

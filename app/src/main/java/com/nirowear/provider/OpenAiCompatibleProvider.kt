@@ -51,7 +51,7 @@ class OpenAiCompatibleProvider(
                 .header("Authorization", "Bearer ${secret.forRequest()}")
                 .build()
         return try {
-            val body = http.fetch(request)
+            val body = http.fetch(request, decodeError = { _, errBody -> openAiHttpError(errBody) })
             val ids =
                 Json
                     .parseToJsonElement(body)
@@ -210,17 +210,22 @@ class CompatibleStreamDecoder {
                     require(noToolCalls && noFunctionCall)
                     val contentEl = delta["content"]
                     val refusalEl = delta["refusal"]
+                    val reasoningEl = delta["reasoning_content"] ?: delta["reasoning"]
                     val finishEl = choice["finish_reason"]
                     require(
                         (contentEl == null || contentEl == JsonNull || contentEl.stringOrNull() != null) &&
                             (refusalEl == null || refusalEl == JsonNull || refusalEl.stringOrNull() != null) &&
                             (finishEl == null || finishEl == JsonNull || finishEl.stringOrNull() != null),
                     )
-                    val text = contentEl.stringOrNull() ?: refusalEl.stringOrNull()
+                    val text = contentEl.stringOrNull()?.takeIf { it.isNotEmpty() } ?: refusalEl.stringOrNull()
                     val finish = finishEl.stringOrNull()
                     if (!text.isNullOrEmpty()) hasText = true
                     buildList {
-                        if (!text.isNullOrEmpty()) add(StreamEvent.TextDelta(text))
+                        if (!text.isNullOrEmpty()) {
+                            add(StreamEvent.TextDelta(text))
+                        } else if (finish == null && !reasoningEl.stringOrNull().isNullOrEmpty()) {
+                            add(StreamEvent.Working)
+                        }
                         // `length` is the documented "hit the output cap" reason, i.e. the answer was
                         // CUT. It used to complete silently here, which made this adapter the one
                         // provider that never disclosed a cut answer (Anthropic max_tokens, Gemini
