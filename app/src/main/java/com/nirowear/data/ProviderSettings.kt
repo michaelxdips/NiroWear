@@ -92,11 +92,13 @@ class ProviderSettings(
     suspend fun recover() =
         mutex.withLock {
             withContext(Dispatchers.IO) {
-                val current = state.first()
+                val prefs = store.data.first()
+                val raw = prefs[profilesKey] ?: "[]"
+                val valid = runCatching { decode(raw) }.isSuccess
                 // Same rule as save(): refs of entries this build cannot parse are still referenced,
                 // so recover() must not delete their ciphertext either.
-                if (current.error == null) {
-                    secrets.cleanup(referencedCredentialRefs(store.data.first()[profilesKey] ?: "[]"))
+                if (valid) {
+                    secrets.cleanup(referencedCredentialRefs(raw))
                 }
             }
         }
@@ -109,8 +111,12 @@ class ProviderSettings(
         )? = null,
     ) = mutex.withLock {
         withContext(Dispatchers.IO) {
-            require(profile.displayName.isNotBlank() && profile.displayName.length <= 100)
-            require(profile.selectedModelId.isNotBlank() && profile.selectedModelId.length <= 256)
+            require(profile.displayName.isNotBlank() && profile.displayName.length <= 100) {
+                "Display name required"
+            }
+            require(profile.selectedModelId.isNotBlank() && profile.selectedModelId.length <= 256) {
+                "Selected model ID required"
+            }
             val current = state.first()
             check(current.error == null) { "Provider settings unavailable" }
             val previous = current.profiles.find { it.id == profile.id }

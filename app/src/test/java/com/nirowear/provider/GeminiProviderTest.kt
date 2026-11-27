@@ -298,4 +298,14 @@ class GeminiProviderTest {
                 assertEquals(0, client.dispatcher.runningCallsCount())
             }
         }
+
+    @Test fun jsonNullOptionalFieldsDoNotAbortStream() {
+        val decoder = GeminiStreamDecoder()
+        assertEquals(
+            listOf(StreamEvent.TextDelta("ok"), StreamEvent.Completed),
+            decoder.accept(
+                """{"error":null,"promptFeedback":null,"candidates":[{"index":0,"content":{"role":"model","parts":[{"text":"ok"}]},"finishReason":"STOP"}]}""",
+            ),
+        )
+    }
 }

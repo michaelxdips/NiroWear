@@ -50,7 +50,7 @@ fun rememberMath(
             value = null
             return@produceState
         }
-        if (initial == null) value = mathRenderer.render(source, px)
+        value = initial ?: mathRenderer.render(source, px)
     }.value
 }
 
@@ -64,8 +64,14 @@ fun MathContent(
     // A display inside a list item keeps the item's indentation. The bullet itself is gone — the
     // formula is extracted before the list is parsed — but a flush-left formula under an indented
     // paragraph reads as a different document.
+    val scroll = rememberScrollState()
     Column(Modifier.padding(start = (depth.coerceIn(0, 4) * 16).dp)) {
-        Box(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .horizontalPanCues(scroll)
+                .horizontalScroll(scroll),
+        ) {
             if (drawable == null) {
                 Text(source, fontFamily = FontFamily.Monospace, fontSize = 16.sp)
             } else {

@@ -1,5 +1,7 @@
 package com.nirowear.renderer
 
+import androidx.compose.runtime.Immutable
+
 /** Maximum code fence lines per LazyColumn item to bound each measure pass. */
 internal const val CODE_LINES_PER_ITEM = 24
 
@@ -13,6 +15,7 @@ internal const val TABLE_ROWS_PER_ITEM = 1
  * happen per ITEM. A block that is cheap to compose is one `Whole`; a table or a long code fence
  * expands into many, so the cost of a huge one is paid as the reader reaches it.
  */
+@Immutable
 internal sealed interface RenderUnit {
     /** Stable identity for `LazyColumn(key=)` and the height map. */
     val key: String
@@ -32,6 +35,7 @@ internal sealed interface RenderUnit {
         /** Non-null only on the first chunk, so the language label appears once. */
         val language: String?,
         val lines: List<String>,
+        val text: String = lines.joinToString("\n"),
     ) : RenderUnit
 
     data class TableRowUnit(
@@ -64,11 +68,13 @@ internal sealed interface RenderUnit {
 internal fun renderUnitsFor(
     blocks: List<Pair<Long, ContentBlock>>,
     keys: List<String>,
+    startBlockIndex: Int = 0,
 ): List<RenderUnit> {
     require(blocks.size == keys.size) { "one key per block" }
     val units = ArrayList<RenderUnit>(blocks.size)
-    blocks.forEachIndexed { index, (_, block) ->
-        val key = keys[index]
+    blocks.forEachIndexed { localIndex, (_, block) ->
+        val index = startBlockIndex + localIndex
+        val key = keys[localIndex]
         when (block) {
             is ContentBlock.Code -> {
                 val lines = block.source.lines()

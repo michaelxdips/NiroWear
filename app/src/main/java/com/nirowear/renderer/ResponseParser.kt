@@ -58,9 +58,10 @@ object ResponseParser {
                                 val end = scanner.position()
                                 val found = if (dollar) scanner.next('$') else scanner.next("\\)")
                                 if (found) {
-                                    val source = scanner.getSource(contentStart, end).content
-                                    if (source.isNotBlank() && !source.last().isWhitespace() &&
-                                        (!dollar || !scanner.peek().isDigit())
+                                    val raw = scanner.getSource(contentStart, end).content
+                                    val source = if (dollar) raw else raw.trim()
+                                    if (source.isNotBlank() &&
+                                        (!dollar || (!raw.last().isWhitespace() && !scanner.peek().isDigit()))
                                     ) {
                                         return@InlineContentParser ParsedInline.of(
                                             MathInline(source),
@@ -69,7 +70,7 @@ object ResponseParser {
                                     }
                                     break
                                 }
-                                if (dollar && scanner.next('\\')) {
+                                if (scanner.next('\\')) {
                                     if (scanner.hasNext() && scanner.peek() != '\n') scanner.next()
                                 } else {
                                     scanner.next()
@@ -828,10 +829,14 @@ object ResponseParser {
                         while (true) {
                             val close = closingIndex(container, "$$", cursor)
                             if (close < 0) {
-                                // Unclosed on this line: the display continues on the following lines.
-                                // Kotlin's StringBuilder has no (CharSequence, start, end) constructor;
-                                // append range keeps this allocation-free of an intermediate String.
-                                math = StringBuilder().append(container, cursor, container.length)
+                                // Flush preceding prose before entering multi-line math so block order is preserved,
+                                // and keep the line break when inline tail text starts on the opener line.
+                                flush()
+                                math =
+                                    StringBuilder().apply {
+                                        append(container, cursor, container.length)
+                                        if (cursor < container.length) append('\n')
+                                    }
                                 break
                             }
                             // Flush first so the buffered prose keeps its place above the formula.
@@ -913,12 +918,14 @@ object ResponseParser {
      * top-level boundary (`\n\n` or plain column-0 `- <word>` bullet) with no link reference
      * definitions. Always falls back to full [parse] when any ambiguity exists.
      */
+    private val REFERENCE_DEF_LINE = Regex("(?m)^ {0,3}\\[[^\\]\\n]+\\]:")
+
     internal fun parseIncremental(
         previous: IncrementalParseState?,
         source: String,
     ): Pair<IncrementalParseState?, List<ContentBlock>> {
         val normalized = if (source.indexOf('\r') >= 0) source.replace("\r\n", "\n") else source
-        if (normalized.length < MIN_INCREMENTAL_PREFIX_CHARS || normalized.indexOf("]:") >= 0) {
+        if (normalized.length < MIN_INCREMENTAL_PREFIX_CHARS || REFERENCE_DEF_LINE.containsMatchIn(normalized)) {
             return null to parse(normalized)
         }
         val base =

@@ -61,6 +61,7 @@ internal class ProviderHttp(
     suspend fun fetch(
         request: Request,
         timeoutMs: Long? = null,
+        decodeError: ((Int, String) -> ProviderError?)? = null,
     ): String =
         suspendCancellableCoroutine { continuation ->
             val call = client.newCall(request)
@@ -90,7 +91,15 @@ internal class ProviderHttp(
                         val result =
                             runCatching {
                                 response.use {
-                                    if (!it.isSuccessful) throw SafeProviderException(httpError(it.code))
+                                    if (!it.isSuccessful) {
+                                        val mapped =
+                                            decodeError?.let { hook ->
+                                                runCatching {
+                                                    hook(it.code, it.peekBody(8 * 1024).string())
+                                                }.getOrNull()
+                                            }
+                                        throw SafeProviderException(mapped ?: httpError(it.code))
+                                    }
                                     val source = it.body.source()
                                     if (source.request(
                                             1024 * 1024 + 1L,
@@ -184,7 +193,8 @@ internal class ProviderHttp(
 
                                         suspend fun dispatch(): Boolean {
                                             if (frame.isEmpty()) return false
-                                            val events = decode(frame.toString().removeSuffix("\n"))
+                                            if (frame[frame.length - 1] == '\n') frame.setLength(frame.length - 1)
+                                            val events = decode(frame.toString())
                                             frame.clear()
                                             if (events.isNotEmpty()) lastFrameAtNs = nanoClock()
                                             for (event in events) {
@@ -240,7 +250,8 @@ internal class ProviderHttp(
                                                 // frame carried anything.
                                                 if (dispatch()) return@launch
                                             } else if (line.startsWith("data:")) {
-                                                frame.append(line.removePrefix("data:").removePrefix(" ")).append('\n')
+                                                val start = if (line.length > 5 && line[5] == ' ') 6 else 5
+                                                frame.append(line, start, line.length).append('\n')
                                             }
                                             // Two different bounds, deliberately:
                                             //

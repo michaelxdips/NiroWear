@@ -120,4 +120,28 @@ class ResponseParserTest {
             parenNewline.filterIsInstance<ContentBlock.Paragraph>().flatMap { it.content }.none { it.math },
         )
     }
+
+    @Test fun spacedParenthesizedMathAndEscapesParseCleanly() {
+        val spans =
+            (ResponseParser.parse("Evaluate \\( x^2 + \\{1\\} \\) now.").single() as ContentBlock.Paragraph).content
+        assertEquals(listOf("x^2 + \\{1\\}"), spans.filter { it.math }.map { it.text })
+    }
+
+    @Test fun unclosedMidlineDisplayMathPreservesProseOrderAndNewline() {
+        val blocks = ResponseParser.parse("The integral is \$\$\n\\int_0^1 x\\,dx\n\$\$")
+        assertTrue("Prose must precede display math: $blocks", blocks[0] is ContentBlock.Paragraph)
+        assertTrue("Display math follows prose: $blocks", blocks[1] is ContentBlock.Math)
+        assertEquals("\\int_0^1 x\\,dx", (blocks[1] as ContentBlock.Math).source)
+
+        val inlineStart = ResponseParser.parse("Compute \$\$\\alpha\nx\$\$")
+        assertEquals("\\alpha\nx", (inlineStart[1] as ContentBlock.Math).source)
+    }
+
+    @Test fun codeColonsInsideBracketsDoNotDisableIncrementalParse() {
+        val prefix = "Summary line " + "word ".repeat(85) + "\n\n"
+        val source = prefix + "Map lookup `arr[k]:` stays incremental."
+        val (nextState, blocks) = ResponseParser.parseIncremental(null, source)
+        assertNotNull("Non-definition ']:' in prose/code must keep incremental caching active", nextState)
+        assertEquals(ResponseParser.parse(source), blocks)
+    }
 }

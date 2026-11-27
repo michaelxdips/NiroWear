@@ -117,7 +117,13 @@ fun ChatDatabase.searchMessages(
             ).use { cursor ->
                 val hits = mutableListOf<SearchHit>()
                 while (cursor.moveToNext()) {
-                    hits += SearchHit(cursor.getLong(0), cursor.getString(1), cursor.getString(2), cursor.getString(3))
+                    hits +=
+                        SearchHit(
+                            cursor.getLong(0),
+                            cursor.getString(1),
+                            cursor.getString(2),
+                            extractSearchSnippet(cursor.getString(3), terms),
+                        )
                 }
                 hits
             }
@@ -148,6 +154,9 @@ interface ChatDao {
 
     @Query("SELECT * FROM conversations ORDER BY updatedAt DESC")
     fun conversations(): Flow<List<Conversation>>
+
+    @Query("SELECT * FROM conversations ORDER BY updatedAt DESC LIMIT 1")
+    suspend fun latestConversation(): Conversation?
 
     @Query("SELECT * FROM messages WHERE conversationId = :id ORDER BY id")
     fun messages(id: String): Flow<List<StoredMessage>>
@@ -262,7 +271,10 @@ interface ChatDao {
     @Query("UPDATE messages SET status = 'STOPPED' WHERE status = 'STREAMING'")
     suspend fun markStreamingStopped()
 
-    @Query("DELETE FROM openai_phases WHERE messageId IN (SELECT id FROM messages WHERE status != 'SUCCESS')")
+    @Query(
+        "DELETE FROM openai_phases " +
+            "WHERE EXISTS (SELECT 1 FROM messages m WHERE m.id = openai_phases.messageId AND m.status != 'SUCCESS')",
+    )
     suspend fun deletePhasesOfNonSuccessful()
 
     /**
@@ -362,6 +374,7 @@ interface ChatDao {
     ): Long {
         if (prompt != null) {
             insertMessage(StoredMessage(conversationId = conversationId, role = "USER", rawContent = prompt))
+            if (prompt.isNotBlank()) retitleIfUnnamed(conversationId, prompt.take(60))
             if (consumeComposerDraft) clearComposerDraft()
         }
         touch(conversationId, System.currentTimeMillis())

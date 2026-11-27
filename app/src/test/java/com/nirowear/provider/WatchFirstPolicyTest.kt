@@ -68,6 +68,18 @@ class WatchFirstPolicyTest {
     }
 
     @Test
+    fun demandsDirectAccurateAnswersWithoutLecturing() {
+        assertTrue(
+            "policy must ask for accurate direct answers",
+            policy.contains("accurate, direct, and strictly to the point"),
+        )
+        assertTrue(
+            "policy must forbid unsolicited lecturing",
+            policy.contains("unsolicited lecturing"),
+        )
+    }
+
+    @Test
     fun keepsTheQualityGuidanceThatIsNotAboutLength() {
         assertTrue("policy must discourage repetition", policy.contains("Avoid repetition"))
         assertTrue("policy must discourage preamble", policy.contains("preamble"))

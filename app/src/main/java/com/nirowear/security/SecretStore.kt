@@ -23,11 +23,18 @@ class SecretStore(
     context: Context,
     private val keyAlias: String = KEY_ALIAS,
 ) {
-    private val directory = File(context.noBackupFilesDir, "credentials")
+    private val appContext = context.applicationContext
+
+    @Volatile private var directory: File? = null
+
+    private fun directory(): File =
+        directory ?: synchronized(this) {
+            directory ?: File(appContext.noBackupFilesDir, "credentials").also { directory = it }
+        }
 
     private fun file(ref: String): AtomicFile {
         require(credentialRefPattern.matches(ref)) { "Invalid credential reference" }
-        return AtomicFile(File(directory, ref))
+        return AtomicFile(File(directory(), ref))
     }
 
     @Synchronized
@@ -82,7 +89,8 @@ class SecretStore(
         // ciphertext became permanently undecryptable. Losing one save is recoverable; losing every
         // provider's key is not.
         try {
-            check(directory.isDirectory || directory.mkdirs())
+            val dir = directory()
+            check(dir.isDirectory || dir.mkdirs())
             val target = file(ref)
             val output = target.startWrite()
             try {
@@ -138,7 +146,7 @@ class SecretStore(
     /** Caller serializes against profile saves; keep referenced base, discard stale sidecars/orphans. */
     @Synchronized
     fun cleanup(referenced: Set<String>) {
-        directory.listFiles()?.forEach { payload ->
+        directory().listFiles()?.forEach { payload ->
             val ref = payload.name.removeSuffix(".new").removeSuffix(".bak")
             if (!credentialRefPattern.matches(ref)) return@forEach
             if (ref !in referenced) {

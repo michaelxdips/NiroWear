@@ -33,8 +33,8 @@ android {
         applicationId = "com.nirowear"
         minSdk = 30
         targetSdk = 37
-        versionCode = 18
-        versionName = "0.3.2"
+        versionCode = 19
+        versionName = "0.3.3"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         testInstrumentationRunnerArguments["notAnnotation"] = "com.nirowear.HostDrivenGate"
     }
@@ -125,6 +125,8 @@ dependencies {
     // test uses to prove the rendered pixels scan — an encoder alone could only prove
     // self-consistency. Apache-2.0, pure JVM (no Android dependency), ~340 KB.
     implementation("com.google.zxing:core:3.5.4")
+    // 1-tap "Open on phone" over Wear OS Bluetooth bridge; official Jetpack Wear library (Apache-2.0), no companion phone app required.
+    implementation("androidx.wear:wear-remote-interactions:1.2.0")
     testImplementation("junit:junit:4.13.2")
     // GPL v2-or-later WITH an independent-module linking exception: the exception permits linking
     // with MIT code and distributing the executable under terms of our choice. Notices + source

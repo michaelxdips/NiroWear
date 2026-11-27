@@ -37,6 +37,8 @@ internal object SelfSignedCert {
     private const val OID_BASIC_CONSTRAINTS = "2.5.29.19"
     private const val OID_KEY_USAGE = "2.5.29.15"
     private const val OID_SUBJECT_ALT_NAME = "2.5.29.17"
+    private const val OID_EXT_KEY_USAGE = "2.5.29.37"
+    private const val OID_SERVER_AUTH = "1.3.6.1.5.5.7.3.1"
 
     /**
      * Fixed validity window, deliberately NOT derived from the device clock.
@@ -69,24 +71,27 @@ internal object SelfSignedCert {
         val algorithm = der(0x30, oid(OID_ECDSA_SHA256))
         val name = der(0x30, der(0x31, der(0x30, oid(OID_CN) + der(0x0C, host.toByteArray(Charsets.UTF_8)))))
         val validity = der(0x30, utcTime(NOT_BEFORE) + utcTime(NOT_AFTER))
+        val sanEntries =
+            if (host == address.hostAddress) {
+                der(0x87, address.address)
+            } else {
+                der(0x87, address.address) + der(0x82, host.toByteArray(Charsets.US_ASCII))
+            }
         val extensions =
             der(
                 0xA3,
                 der(
                     0x30,
                     extension(OID_BASIC_CONSTRAINTS, critical = true, value = der(0x30, ByteArray(0))) +
-                        // keyUsage: digitalSignature | keyEncipherment, five unused bits.
-                        extension(OID_KEY_USAGE, critical = true, value = der(0x03, byteArrayOf(5, 0xA0.toByte()))) +
+                        // ECDSA uses digitalSignature only (bit 0, 7 unused bits).
+                        extension(OID_KEY_USAGE, critical = true, value = der(0x03, byteArrayOf(7, 0x80.toByte()))) +
+                        extension(OID_EXT_KEY_USAGE, critical = false, value = der(0x30, oid(OID_SERVER_AUTH))) +
                         extension(
                             OID_SUBJECT_ALT_NAME,
                             critical = false,
                             // The phone types an IP, so the IP must be in the SAN or the browser reports
                             // a name mismatch on top of the unknown-issuer warning.
-                            value =
-                                der(
-                                    0x30,
-                                    der(0x87, address.address) + der(0x82, host.toByteArray(Charsets.US_ASCII)),
-                                ),
+                            value = der(0x30, sanEntries),
                         ),
                 ),
             )

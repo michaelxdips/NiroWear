@@ -1,11 +1,18 @@
 package com.nirowear.settings
 
+import com.nirowear.provider.Endpoints
+import com.nirowear.provider.ModelDiscoveryResult
 import com.nirowear.provider.ProviderType
 import com.nirowear.provider.SecretValue
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 import java.io.Closeable
 import java.io.InputStream
 import java.net.InetAddress
@@ -51,10 +58,26 @@ internal data class PairingPayload(
     val apiKey: String,
 )
 
+internal data class PairingPreset(
+    val type: ProviderType,
+    val name: String,
+    val baseUrl: String,
+    val modelId: String,
+)
+
+internal data class PairingModelRequest(
+    val type: ProviderType,
+    val baseUrl: String,
+    val apiKey: String,
+)
+
 internal class PairingServer(
     private val host: String,
     private val clock: () -> Long = System::currentTimeMillis,
     private val ttlMillis: Long = 120_000,
+    private val initialPreset: PairingPreset? = null,
+    private val allowLocalHttp: Boolean = false,
+    private val onFetchModels: ((PairingModelRequest) -> ModelDiscoveryResult)? = null,
     private val onPayload: (PairingPayload) -> Unit,
 ) : Closeable {
     private val token = ByteArray(16).also { SecureRandom().nextBytes(it) }
@@ -105,6 +128,10 @@ internal class PairingServer(
     private var worker: Thread? = null
 
     val port: Int get() = socket.localPort
+
+    fun remainingSeconds(): Int = (((deadline - clock()).coerceAtLeast(0L) + 999L) / 1000L).toInt()
+
+    fun isExpired(): Boolean = clock() >= deadline
 
     /**
      * Capability URL. The token is a path segment, not something the server hands out: whoever can
@@ -257,6 +284,7 @@ internal class PairingServer(
             !authorised -> respond(client, 404, TEXT, "not found")
             method == "GET" && path == "$prefix/" -> respond(client, 200, HTML, PAIRING_PAGE)
             method == "GET" && path == "$prefix/handshake" -> respond(client, 200, JSON, handshake())
+            method == "POST" && path == "$prefix/models" -> fetchModels(client, body)
             method == "POST" && path == "$prefix/pair" -> pair(client, body)
             else -> respond(client, 404, TEXT, "not found")
         }
@@ -267,33 +295,101 @@ internal class PairingServer(
      * the caller already had to know in order to reach this route, and echoing it back would hand
      * the session to anyone who could merely connect.
      */
-    private fun handshake(): String = """{"v":1,"pub":"${b64(uncompressed(pair.public as ECPublicKey))}"}"""
+    private fun handshake(): String =
+        buildJsonObject {
+            put("v", 1)
+            put("pub", b64(uncompressed(pair.public as ECPublicKey)))
+            initialPreset?.let { preset ->
+                put(
+                    "preset",
+                    buildJsonObject {
+                        put("type", preset.type.name)
+                        put("name", preset.name)
+                        put("base", preset.baseUrl)
+                        put("model", preset.modelId)
+                    },
+                )
+            }
+        }.toString()
+
+    private fun verifyEnvelope(
+        client: Socket,
+        body: ByteArray,
+    ): JsonObject? {
+        // Expiry is checked before the token so a late request cannot burn the session's only use.
+        // `>=`, not `>`: `deadline` is the instant the session stops being valid, so a request
+        // arriving exactly at it is late.
+        if (clock() >= deadline) {
+            respond(client, 410, JSON, """{"ok":false}""")
+            return null
+        }
+        if (closed) return null
+        if (consumed.get()) {
+            respond(client, 401, JSON, """{"ok":false}""")
+            return null
+        }
+        val root =
+            runCatching { Json.parseToJsonElement(String(body, Charsets.UTF_8)).jsonObject }.getOrNull()
+                ?: run {
+                    respond(client, 400, JSON, """{"ok":false}""")
+                    return null
+                }
+        val presented = runCatching { unb64(root.getValue("t").jsonPrimitive.content) }.getOrNull()
+        // Constant-time, before any crypto work: a wrong token must not even reach ECDH.
+        if (presented == null || !MessageDigest.isEqual(token, presented)) {
+            respond(client, 401, JSON, """{"ok":false}""")
+            return null
+        }
+        return root
+    }
+
+    /** Encrypted non-consuming model discovery proxy so the browser avoids CORS and plaintext keys. */
+    private fun fetchModels(
+        client: Socket,
+        body: ByteArray,
+    ) {
+        val root = verifyEnvelope(client, body) ?: return
+        val request =
+            try {
+                decryptJson(root)?.let(::toModelRequest)
+            } catch (_: Exception) {
+                null
+            }
+        if (request == null) return respond(client, 400, JSON, """{"ok":false}""")
+        val fetcher =
+            onFetchModels ?: return respond(client, 501, JSON, """{"ok":false,"code":"UNAVAILABLE"}""")
+        val outcome =
+            runCatching { fetcher(request) }
+                .getOrElse { ModelDiscoveryResult.Unavailable(com.nirowear.provider.ProviderError.PROTOCOL) }
+        val response =
+            when (outcome) {
+                is ModelDiscoveryResult.Models -> {
+                    buildJsonObject {
+                        put("ok", true)
+                        put("models", JsonArray(outcome.ids.map { JsonPrimitive(it) }))
+                    }.toString()
+                }
+
+                is ModelDiscoveryResult.Unavailable -> {
+                    buildJsonObject {
+                        put("ok", false)
+                        put("code", outcome.error.name)
+                    }.toString()
+                }
+            }
+        respond(client, 200, JSON, response)
+    }
 
     private fun pair(
         client: Socket,
         body: ByteArray,
     ) {
-        // Expiry is checked before the token so a late request cannot burn the session's only use.
-        // `>=`, not `>`: `deadline` is the instant the session stops being valid, so a request
-        // arriving exactly at it is late. With the strict form a zero-TTL session (and any request
-        // landing in the same clock tick as a real deadline) was still accepted — the test that
-        // drives a ttl of 0 got a 200 instead of a 410 whenever the clock had not ticked yet.
-        if (clock() >= deadline) return respond(client, 410, JSON, """{"ok":false}""")
-        if (closed) return
-        if (consumed.get()) return respond(client, 401, JSON, """{"ok":false}""")
-        val root =
-            runCatching { Json.parseToJsonElement(String(body, Charsets.UTF_8)).jsonObject }.getOrNull()
-                ?: return respond(client, 400, JSON, """{"ok":false}""")
-        val presented = runCatching { unb64(root.getValue("t").jsonPrimitive.content) }.getOrNull()
-        // Constant-time, before any crypto work: a wrong token must not even reach ECDH.
-        if (presented == null || !MessageDigest.isEqual(token, presented)) {
-            return respond(client, 401, JSON, """{"ok":false}""")
-        }
-        // Only a payload that actually decrypts consumes the session. Marking it consumed before
-        // decryption let one garbage body burn the remaining TTL and block the real phone.
+        val root = verifyEnvelope(client, body) ?: return
+        // Only a payload that actually decrypts and validates consumes the session. Marking it
+        // consumed before validation let one garbage body burn the TTL and block the real phone.
         val payload =
             try {
-                decrypt(root)
+                decryptJson(root)?.let(::toPayload)
             } catch (_: Exception) {
                 null
             }
@@ -309,7 +405,7 @@ internal class PairingServer(
         runCatching { onPayload(payload) }
     }
 
-    private fun decrypt(root: kotlinx.serialization.json.JsonObject): PairingPayload? {
+    private fun decryptJson(root: JsonObject): String? {
         if (root["v"]?.jsonPrimitive?.intOrNull != 1) return null
         val browserKey = decodePoint(unb64(root.getValue("pub").jsonPrimitive.content)) ?: return null
         val iv = unb64(root.getValue("iv").jsonPrimitive.content)
@@ -329,11 +425,27 @@ internal class PairingServer(
                 shared.fill(0)
             }
         return try {
-            toPayload(String(plain, Charsets.UTF_8))
+            String(plain, Charsets.UTF_8)
         } finally {
             plain.fill(0)
         }
     }
+
+    private fun toModelRequest(json: String): PairingModelRequest? =
+        runCatching {
+            val root = Json.parseToJsonElement(json).jsonObject
+            val rawType = root.getValue("type").jsonPrimitive.content
+            require(rawType.length <= 32)
+            val type = ProviderType.valueOf(rawType)
+            val rawBase = root.getValue("base").jsonPrimitive.content
+            val baseRaw = rawBase.trim()
+            require(baseRaw.isNotEmpty() && baseRaw.length <= 2048)
+            val normalizedBase = Endpoints.normalize(baseRaw, allowLocalHttp)
+            val apiKey = root.getValue("key").jsonPrimitive.content
+            require(apiKey.length <= 8192)
+            SecretValue(apiKey)
+            PairingModelRequest(type = type, baseUrl = normalizedBase, apiKey = apiKey)
+        }.getOrNull()
 
     private fun toPayload(json: String): PairingPayload? =
         runCatching {
@@ -348,13 +460,17 @@ internal class PairingServer(
                 return value
             }
             val type = ProviderType.valueOf(field("type", 32))
+            val baseRaw = field("base", 2048).trim()
+            val modelId = field("model", 256).trim()
+            require(baseRaw.isNotEmpty() && modelId.isNotBlank()) { "base and model required" }
+            val normalizedBase = Endpoints.normalize(baseRaw, allowLocalHttp)
             val apiKey = field("key", 8192)
             SecretValue(apiKey) // Storage contract stays the gate: throws on non-printable or blank.
             PairingPayload(
                 type = type,
                 name = field("name", 100).trim(),
-                baseUrl = field("base", 2048).trim(),
-                modelId = field("model", 256).trim(),
+                baseUrl = normalizedBase,
+                modelId = modelId,
                 apiKey = apiKey,
             )
         }.getOrNull()
@@ -515,12 +631,17 @@ label{display:block;font-size:12px;color:#9aa0a6;margin:12px 0 4px}
 input,select{width:100%;box-sizing:border-box;padding:11px;font-size:15px;border-radius:8px;
 border:1px solid #41454d;background:#202124;color:#fff}
 button{width:100%;margin-top:22px;padding:14px;font-size:16px;border-radius:8px;border:0;
-background:#a8c7fa;color:#062e6f;font-weight:600}
+background:#a8c7fa;color:#062e6f;font-weight:600;cursor:pointer}
+button.secondary{margin-top:12px;background:#282a2f;color:#d2e3fc;border:1px solid #41454d;font-size:14px;padding:11px}
+button:disabled{opacity:.55;cursor:default}
+.hidden{display:none}
+#modelFilter{margin-top:8px}
+#models{margin-top:8px}
 #out{margin-top:16px;font-size:13px;color:#ffd28a;min-height:18px}
 </style></head><body>
 <h1>NiroWear</h1>
 <p>Send this provider to your watch. It is encrypted before it leaves this page.</p>
-<p>Same Wi-Fi only. The watch serves its own certificate, so your browser warns that it is not trusted — accept it to load this page. Nothing is sent until you press Send. Encrypted with ECDH P-256 + AES-GCM, but the handshake is unauthenticated — confirm the URL on the watch matches. Prefer manual entry on untrusted networks.</p>
+<p>Same Wi-Fi only. The watch serves its own certificate, so your browser warns that it is not trusted — accept it to load this page. Nothing is sent until you press Fetch models or Send. Encrypted with ECDH P-256 + AES-GCM, but the handshake is unauthenticated — confirm the URL on the watch matches. Prefer manual entry on untrusted networks.</p>
 <label>Provider</label>
 <select id="type">
 <option value="OPENAI">OpenAI</option>
@@ -530,9 +651,14 @@ background:#a8c7fa;color:#062e6f;font-weight:600}
 </select>
 <label>Name</label><input id="name" value="OpenAI">
 <label>Base URL</label><input id="base" value="https://api.openai.com/v1">
-<label>Model ID</label><input id="model" placeholder="required — e.g. gpt-4o-mini">
 <label>API key</label><input id="key" type="password" autocomplete="off" spellcheck="false">
-<button id="go">Send to watch</button>
+<button id="fetchModels" type="button" class="secondary">Fetch models</button>
+<div id="modelPickBox" class="hidden">
+<input id="modelFilter" class="hidden" placeholder="Filter fetched models...">
+<select id="models"></select>
+</div>
+<label>Model ID</label><input id="model" placeholder="required — e.g. gpt-4o-mini">
+<button id="go" type="button">Send to watch</button>
 <div id="out"></div>
 <script>
 function b64u(buf){var b='',u=new Uint8Array(buf),i;
@@ -540,13 +666,72 @@ for(i=0;i<u.length;i++){b+=String.fromCharCode(u[i]);}
 return btoa(b).replace(/\+/g,'-').replace(/\//g,'_').split('=').join('');}
 function unb64u(s){s=s.replace(/-/g,'+').replace(/_/g,'/');var b=atob(s),u=new Uint8Array(b.length),i;
 for(i=0;i<b.length;i++){u[i]=b.charCodeAt(i);}return u;}
-var ready=null;
+var PRESETS={
+ OPENAI:{name:'OpenAI',base:'https://api.openai.com/v1'},
+ ANTHROPIC:{name:'Anthropic',base:'https://api.anthropic.com/v1'},
+ GEMINI:{name:'Gemini',base:'https://generativelanguage.googleapis.com/v1beta'},
+ OPENAI_COMPATIBLE:{name:'Custom provider',base:''}
+};
+var ready=null,allModels=[],lastType='OPENAI';
 // The capability token is the first path segment the user was given. Reading it from our own URL
 // keeps it out of the handshake response, so an unauthenticated caller can never learn it.
 var CAP=decodeURIComponent(location.pathname.split('/')[1]||'');
+function el(id){return document.getElementById(id);}
+function clearModels(){
+ allModels=[];
+ el('modelPickBox').className='hidden';
+ el('modelFilter').className='hidden';
+ el('modelFilter').value='';
+ el('models').innerHTML='';
+}
+function renderModels(){
+ var q=el('modelFilter').value.trim().toLowerCase();
+ var filtered=q?allModels.filter(function(m){return m.toLowerCase().indexOf(q)>=0;}):allModels;
+ var sel=el('models');
+ sel.innerHTML='';
+ var ph=document.createElement('option');
+ ph.value='';
+ ph.textContent='-- Select a model ('+filtered.length+') --';
+ sel.appendChild(ph);
+ for(var i=0;i<filtered.length;i++){
+  var opt=document.createElement('option');
+  opt.value=filtered[i];
+  opt.textContent=filtered[i];
+  if(filtered[i]===el('model').value){opt.selected=true;}
+  sel.appendChild(opt);
+ }
+}
+async function encryptBody(obj){
+ // A FRESH nonce per request. Reusing a nonce under the same ECDH key violates AES-GCM.
+ var iv=crypto.getRandomValues(new Uint8Array(12));
+ var ct=await crypto.subtle.encrypt({name:'AES-GCM',iv:iv,additionalData:ready.aad},
+  ready.aes,new TextEncoder().encode(JSON.stringify(obj)));
+ return JSON.stringify({v:1,t:b64u(ready.aad),pub:ready.pub,iv:b64u(iv),ct:b64u(ct)});
+}
+el('type').onchange=function(){
+ var next=el('type').value;
+ var prevP=PRESETS[lastType]||{name:'',base:''};
+ var nextP=PRESETS[next]||{name:'',base:''};
+ var n=el('name').value.trim(),b=el('base').value.trim();
+ if(!n||n===prevP.name){el('name').value=nextP.name;}
+ if(!b||b===prevP.base){el('base').value=nextP.base;}
+ lastType=next;
+ clearModels();
+};
+el('modelFilter').oninput=renderModels;
+el('models').onchange=function(){
+ if(el('models').value){el('model').value=el('models').value;}
+};
 async function init(){
  if(!CAP){throw new Error('missing capability');}
  var hs=await (await fetch('/'+CAP+'/handshake')).json();
+ if(hs.preset&&PRESETS[hs.preset.type]){
+  el('type').value=hs.preset.type;
+  lastType=hs.preset.type;
+  if(hs.preset.name){el('name').value=hs.preset.name;}
+  if(typeof hs.preset.base==='string'){el('base').value=hs.preset.base;}
+  if(hs.preset.model){el('model').value=hs.preset.model;}
+ }
  var wp=await crypto.subtle.importKey('raw',unb64u(hs.pub),{name:'ECDH',namedCurve:'P-256'},false,[]);
  var mine=await crypto.subtle.generateKey({name:'ECDH',namedCurve:'P-256'},true,['deriveBits']);
  var shared=await crypto.subtle.deriveBits({name:'ECDH',public:wp},mine.privateKey,256);
@@ -554,25 +739,56 @@ async function init(){
  ready={aes:aes,pub:b64u(await crypto.subtle.exportKey('raw',mine.publicKey)),
   aad:unb64u(CAP)};
 }
-document.getElementById('go').onclick=async function(){
- var out=document.getElementById('out');
+function fetchErrorText(code){
+ if(code==='INVALID_CREDENTIAL')return 'API key rejected. Enter model ID manually or fix key.';
+ if(code==='PERMISSION_DENIED')return 'Provider permission denied. Enter model ID manually.';
+ if(code==='NETWORK_UNAVAILABLE')return 'Watch cannot reach provider. Check watch network.';
+ if(code==='TIMEOUT')return 'Provider timed out. Enter model ID manually.';
+ return 'Models unavailable. Enter model ID manually.';
+}
+el('fetchModels').onclick=async function(){
+ var out=el('out'),btn=el('fetchModels');
  if(!ready){out.textContent='Still connecting. Wait a moment and try again.';return;}
- var body=JSON.stringify({type:document.getElementById('type').value,
-  name:document.getElementById('name').value,base:document.getElementById('base').value,
-  model:document.getElementById('model').value,key:document.getElementById('key').value});
+ var base=el('base').value.trim(),key=el('key').value.trim();
+ if(!base||!key){out.textContent='Enter Base URL and API key first.';return;}
+ btn.disabled=true;
+ out.textContent='Fetching models...';
  try{
-  // A FRESH nonce per send. Reusing a page-load nonce meant a second Send (the normal recovery
-  // path after a rejected key) encrypted two different plaintexts under the same key and nonce —
-  // the one thing AES-GCM must never see, because it leaks the XOR of the plaintexts and enables
-  // forgery.
-  var iv=crypto.getRandomValues(new Uint8Array(12));
-  var ct=await crypto.subtle.encrypt({name:'AES-GCM',iv:iv,additionalData:ready.aad},
-   ready.aes,new TextEncoder().encode(body));
-  var r=await fetch('/'+CAP+'/pair',{method:'POST',headers:{'Content-Type':'application/json'},
-   body:JSON.stringify({v:1,t:b64u(ready.aad),pub:ready.pub,iv:b64u(iv),ct:b64u(ct)})});
-  out.textContent=r.ok?'Sent. Finish on the watch.':'Rejected. Restart pairing on the watch.';
-  if(r.ok){document.getElementById('key').value='';}
- }catch(e){out.textContent='Could not send. Restart pairing on the watch.';}
+  var body=await encryptBody({type:el('type').value,base:base,key:key});
+  var r=await fetch('/'+CAP+'/models',{method:'POST',headers:{'Content-Type':'application/json'},body:body});
+  if(r.status===401||r.status===410){out.textContent='Pairing expired. Restart pairing on the watch.';return;}
+  if(!r.ok){out.textContent='Check Base URL and API key format.';return;}
+  var res=await r.json();
+  if(res.ok&&Array.isArray(res.models)&&res.models.length>0){
+   allModels=res.models;
+   el('modelPickBox').className='';
+   el('modelFilter').className=allModels.length>12?'':'hidden';
+   renderModels();
+   out.textContent=allModels.length+' models loaded. Select one or enter below.';
+  }else{
+   clearModels();
+   out.textContent=fetchErrorText(res.code);
+  }
+ }catch(e){
+  clearModels();
+  out.textContent='Could not fetch models. Enter model ID manually.';
+ }finally{
+  btn.disabled=false;
+ }
+};
+el('go').onclick=async function(){
+ var out=el('out'),btn=el('go'),fetchBtn=el('fetchModels');
+ if(!ready){out.textContent='Still connecting. Wait a moment and try again.';return;}
+ var base=el('base').value.trim(),model=el('model').value.trim(),key=el('key').value.trim();
+ if(!base||!model||!key){out.textContent='Base URL, Model ID, and API key are required.';return;}
+ btn.disabled=true;
+ try{
+  var body=await encryptBody({type:el('type').value,
+   name:el('name').value,base:base,model:model,key:key});
+  var r=await fetch('/'+CAP+'/pair',{method:'POST',headers:{'Content-Type':'application/json'},body:body});
+  out.textContent=r.ok?'Sent. Finish on the watch.':'Rejected. Check Base URL/key or restart pairing.';
+  if(r.ok){el('key').value='';fetchBtn.disabled=true;}else{btn.disabled=false;}
+ }catch(e){btn.disabled=false;out.textContent='Could not send. Restart pairing on the watch.';}
 };
 init().catch(function(e){
   // WebCrypto (crypto.subtle) only exists in a secure context. This page is served over https with a
@@ -580,7 +796,7 @@ init().catch(function(e){
   // accepted the warning; a browser that refused the certificate never runs this script at all.
   // Reaching this branch therefore means the handshake itself failed, and saying "plain HTTP" here
   // would send the user after a cause that no longer exists.
-  var o=document.getElementById('out');
+  var o=el('out');
   if(!window.isSecureContext || typeof crypto==='undefined' || !crypto.subtle){
     o.textContent='This browser will not run crypto on this page, so the key cannot be '+
       'encrypted here. Enter the key on the watch instead (Cancel pairing below).';

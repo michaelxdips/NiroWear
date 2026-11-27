@@ -7,6 +7,7 @@ import android.os.Bundle
 import android.speech.RecognizerIntent
 import android.view.InputDevice
 import android.view.MotionEvent
+import android.view.ViewConfiguration
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -17,7 +18,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.scrollBy
-import androidx.compose.foundation.interaction.collectIsDraggedAsState
+import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -54,6 +55,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -125,6 +127,25 @@ import kotlinx.coroutines.launch
 // CompositionLocal if a second activity or split-screen reader ever exists.
 private var rotary: ((Float) -> Boolean)? = null
 
+@Composable
+internal fun BindSimpleRotaryScroll(listState: androidx.compose.foundation.lazy.LazyListState) {
+    val scope = rememberCoroutineScope()
+    DisposableEffect(listState) {
+        val handler: (Float) -> Boolean = { delta ->
+            scope.launch { listState.scrollBy(delta) }
+            true
+        }
+        rotary = handler
+        onDispose { if (rotary === handler) rotary = null }
+    }
+}
+
+private class CachedMessageUnits(
+    val blockStart: Int,
+    val blocks: List<Pair<Long, ContentBlock>>,
+    val units: List<com.nirowear.renderer.RenderUnit>,
+)
+
 /** A filled field value with the caret after the text — what a programmatic fill must look like. */
 private fun fieldOf(text: String) = TextFieldValue(text, TextRange(text.length))
 
@@ -134,7 +155,8 @@ class MainActivity : ComponentActivity() {
             event.source and InputDevice.SOURCE_ROTARY_ENCODER == InputDevice.SOURCE_ROTARY_ENCODER
         ) {
             val delta = event.getAxisValue(MotionEvent.AXIS_SCROLL)
-            if (delta != 0f && rotary?.invoke(delta) == true) return true
+            val scaled = -delta * ViewConfiguration.get(this).scaledVerticalScrollFactor
+            if (scaled != 0f && rotary?.invoke(scaled) == true) return true
         }
         return super.onGenericMotionEvent(event)
     }
@@ -177,7 +199,6 @@ private fun ChatReader(
     val chatState by chat.state.collectAsStateWithLifecycle()
     val providerState by chat.settings.collectAsStateWithLifecycle(initialValue = ProviderSettingsState())
     val storedMessages by chat.messages.collectAsStateWithLifecycle()
-    val conversations by chat.conversations.collectAsStateWithLifecycle(initialValue = emptyList())
     var providerScreen by rememberSaveable { mutableStateOf(false) }
     var historyScreen by rememberSaveable { mutableStateOf(false) }
     // NOT saveable, deliberately. After process death the ViewModel re-opens the NEWEST conversation,
@@ -221,16 +242,12 @@ private fun ChatReader(
         val attempt = lastEditAttempt ?: return@LaunchedEffect
         if (chatState.generating) return@LaunchedEffect
         val stored = storedMessages.firstOrNull { it.id == attempt.first }?.rawContent
-        if (stored == attempt.second) {
-            lastEditAttempt = null
-            return@LaunchedEffect
-        }
-        if (chatState.error != null && stored != null) {
+        if (stored != attempt.second && chatState.error != null && stored != null) {
             editField = fieldOf(attempt.second)
             editedId = attempt.first
             editing = true
-            lastEditAttempt = null
         }
+        lastEditAttempt = null
     }
     val menuState = rememberLazyListState()
     val labState = rememberLazyListState()
@@ -287,6 +304,7 @@ private fun ChatReader(
                 .limitedParallelism(1)
         }
     val streamPrefixCache = remember { HashMap<Long, ResponseParser.IncrementalParseState>() }
+    val unitCache = remember { HashMap<Long, CachedMessageUnits>() }
     var footerHeight by remember { androidx.compose.runtime.mutableIntStateOf(0) }
     // Precomputed on parseDispatcher alongside historyBlocks so streaming checkpoints do not
     // rebuild RenderUnit/range structures on the Main thread.
@@ -372,89 +390,100 @@ private fun ChatReader(
             if (wait > 0) kotlinx.coroutines.delay(wait)
         }
 
-        val rows =
-            kotlinx.coroutines.withContext(parseDispatcher) {
-                if (localeChanged) streamPrefixCache.clear()
-                val activeIds = messages.mapNotNull { if (it.conversationId == id) it.id else null }.toSet()
-                streamPrefixCache.keys.retainAll(activeIds)
-                messages.filter { it.conversationId == id }.associateWith { message ->
-                    previous[message] ?: run {
-                        val label =
-                            if (message.role == "USER") {
-                                youHoldToEditLabel
-                            } else {
-                                // Provenance is optional: a turn that failed before a profile was
-                                // resolved has neither field, and the old interpolation printed the
-                                // literal "null · null" under it.
-                                listOfNotNull(message.providerLabel, message.modelId)
-                                    .joinToString(" · ")
-                                    .ifBlank { answerLabel }
-                            }
-                        val parsedBlocks =
-                            if (message.status == "STREAMING") {
-                                val (nextPrefix, blocks) =
-                                    ResponseParser.parseIncremental(streamPrefixCache[message.id], message.rawContent)
-                                if (nextPrefix != null) {
-                                    streamPrefixCache[message.id] = nextPrefix
-                                } else {
-                                    streamPrefixCache.remove(message.id)
-                                }
-                                blocks
-                            } else {
-                                streamPrefixCache.remove(message.id)
-                                ResponseParser.parse(message.rawContent)
-                            }
-                        listOf(message.id to ContentBlock.Heading(4, listOf(InlineContent(label)))) +
-                            parsedBlocks.map { message.id to it } +
-                            if (message.status == "STOPPED" ||
-                                message.error != null
-                            ) {
-                                // The status line must match the row's actual content. A Stop that lands before any
-                                // row exists (the credential read window) records a STOPPED row with no
-                                // text, and the generic "partial answer kept" claimed a partial answer
-                                // that did not exist — the same lie this fix set out to remove, just
-                                // persisted instead of transient.
-                                listOf(
-                                    message.id to
-                                        ContentBlock.Paragraph(
-                                            listOf(
-                                                InlineContent(
-                                                    errorText(errorResources, message.error)
-                                                        ?: if (message.rawContent.isBlank()) {
-                                                            stoppedBeforeStart
-                                                        } else {
-                                                            stoppedPartial
-                                                        },
-                                                ),
-                                            ),
-                                        ),
-                                )
-                            } else {
-                                emptyList()
-                            }
-                    }
-                }
-            }
-        currentCoroutineContext().ensureActive()
-        if (currentSource != (id to messages)) return@LaunchedEffect
         val parsedLayout =
             kotlinx.coroutines.withContext(parseDispatcher) {
-                val flatBlocks = rows.values.flatten()
-                val flatKeys = historyKeysFor(flatBlocks)
-                val flatUnits = renderUnitsFor(flatBlocks, flatKeys)
+                if (localeChanged) {
+                    streamPrefixCache.clear()
+                    unitCache.clear()
+                }
+                val activeIds = messages.mapNotNull { if (it.conversationId == id) it.id else null }.toSet()
+                streamPrefixCache.keys.retainAll(activeIds)
+                unitCache.keys.retainAll(activeIds)
+                val builtRows = LinkedHashMap<com.nirowear.data.StoredMessage, List<Pair<Long, ContentBlock>>>()
+                val flatBlocks = ArrayList<Pair<Long, ContentBlock>>()
+                val flatKeys = ArrayList<String>()
+                val flatUnits = ArrayList<com.nirowear.renderer.RenderUnit>()
+                for (message in messages) {
+                    if (message.conversationId != id) continue
+                    val msgBlocks =
+                        previous[message] ?: run {
+                            val label =
+                                if (message.role == "USER") {
+                                    youHoldToEditLabel
+                                } else {
+                                    listOfNotNull(message.providerLabel, message.modelId)
+                                        .joinToString(" · ")
+                                        .ifBlank { answerLabel }
+                                }
+                            val parsedBlocks =
+                                if (message.status == "STREAMING") {
+                                    val (nextPrefix, blocks) =
+                                        ResponseParser.parseIncremental(
+                                            streamPrefixCache[message.id],
+                                            message.rawContent,
+                                        )
+                                    if (nextPrefix != null) {
+                                        streamPrefixCache[message.id] = nextPrefix
+                                    } else {
+                                        streamPrefixCache.remove(message.id)
+                                    }
+                                    blocks
+                                } else {
+                                    streamPrefixCache.remove(message.id)
+                                    ResponseParser.parse(message.rawContent)
+                                }
+                            listOf(message.id to ContentBlock.Heading(4, listOf(InlineContent(label)))) +
+                                parsedBlocks.map { message.id to it } +
+                                if (message.status == "STOPPED" || message.error != null) {
+                                    listOf(
+                                        message.id to
+                                            ContentBlock.Paragraph(
+                                                listOf(
+                                                    InlineContent(
+                                                        errorText(errorResources, message.error)
+                                                            ?: if (message.rawContent.isBlank()) {
+                                                                stoppedBeforeStart
+                                                            } else {
+                                                                stoppedPartial
+                                                            },
+                                                    ),
+                                                ),
+                                            ),
+                                    )
+                                } else {
+                                    emptyList()
+                                }
+                        }
+                    builtRows[message] = msgBlocks
+                    val blockStart = flatBlocks.size
+                    flatBlocks.addAll(msgBlocks)
+                    val msgKeys = List(msgBlocks.size) { localIdx -> "${message.id}:$localIdx" }
+                    flatKeys.addAll(msgKeys)
+                    val cached = unitCache[message.id]
+                    val msgUnits =
+                        if (cached != null && cached.blockStart == blockStart && cached.blocks === msgBlocks) {
+                            cached.units
+                        } else {
+                            renderUnitsFor(msgBlocks, msgKeys, startBlockIndex = blockStart).also { built ->
+                                unitCache[message.id] = CachedMessageUnits(blockStart, msgBlocks, built)
+                            }
+                        }
+                    flatUnits.addAll(msgUnits)
+                }
                 val flatRanges = unitRangeByBlock(flatUnits, flatBlocks.size)
-                Triple(flatBlocks, flatKeys, flatUnits to flatRanges)
+                Triple(builtRows, flatBlocks to flatKeys, flatUnits to flatRanges)
             }
         currentCoroutineContext().ensureActive()
         if (currentSource != (id to messages)) return@LaunchedEffect
         lastParseAt = System.currentTimeMillis()
+        val rows = parsedLayout.first
         // Merge before evicting so switching between recent chats stays cached without unbounded memory growth.
         val merged = mergeParsed(parsedRows, rows, recentConversations, id)
         recentConversations = merged.second
         parsedRows = merged.first
         (anchors.keys - (recentConversations + listOfNotNull(id)).toSet()).forEach { anchors.remove(it) }
-        historyBlocks = parsedLayout.first
-        historyKeys = parsedLayout.second
+        historyBlocks = parsedLayout.second.first
+        historyKeys = parsedLayout.second.second
         renderUnits = parsedLayout.third.first
         unitRanges = parsedLayout.third.second
         parsedConversation = id
@@ -524,32 +553,35 @@ private fun ChatReader(
         lifecycle.addObserver(observer)
         onDispose { lifecycle.removeObserver(observer) }
     }
-    val dragging by listState.interactionSource.collectIsDraggedAsState()
-    var userScrolled by remember { mutableStateOf(false) }
-    LaunchedEffect(dragging) {
-        // Detach only when the drag can actually move the list backwards, the same guard the crown
-        // uses. A drag on a conversation that fits on screen scrolled nothing, yet it hid `following`
-        // and raised the "Jump to latest" arrow over an unmoved reader.
-        if (dragging && !sectionMenu && !historyScreen && !providerScreen && !renderLab &&
-            listState.canScrollBackward
-        ) {
-            following = false
-            followNewConversation = false
-            userScrolled = true
+    LaunchedEffect(listState, sectionMenu, historyScreen, providerScreen, renderLab) {
+        var dragging = false
+        var userScrolled = false
+        launch {
+            listState.interactionSource.interactions.collect { interaction ->
+                when (interaction) {
+                    is DragInteraction.Start -> {
+                        dragging = true
+                        if (!sectionMenu && !historyScreen && !providerScreen && !renderLab &&
+                            listState.canScrollBackward
+                        ) {
+                            following = false
+                            followNewConversation = false
+                            userScrolled = true
+                        }
+                    }
+
+                    is DragInteraction.Stop, is DragInteraction.Cancel -> {
+                        dragging = false
+                    }
+                }
+            }
         }
-    }
-    LaunchedEffect(listState.isScrollInProgress) {
-        if (!listState.isScrollInProgress && !dragging && userScrolled) {
-            userScrolled = false
-            // "At the bottom" means the list cannot scroll forward any more. The previous test was
-            // "the last content block's bottom is inside the viewport", which stays TRUE when the
-            // reader scrolls UP one notch during streaming — the block merely moves up and remains
-            // visible — so following flipped straight back to true and the next delta snapped the
-            // reader to the newest token. One crown notch could never detach, which contradicts the
-            // rule that scrolling up must not pull the reader back down. canScrollBackward is not the
-            // test either: with a long answer it is still true at the bottom.
-            following = !listState.canScrollForward
-            saveReaderPosition()
+        snapshotFlow { listState.isScrollInProgress }.collect { inProgress ->
+            if (!inProgress && !dragging && userScrolled) {
+                userScrolled = false
+                following = !listState.canScrollForward
+                saveReaderPosition()
+            }
         }
     }
     val draftScope = rememberCoroutineScope()
@@ -643,6 +675,7 @@ private fun ChatReader(
         if (providerScreen) {
             ProviderScreen { providerScreen = false }
         } else if (historyScreen) {
+            val conversations by chat.conversations.collectAsStateWithLifecycle(initialValue = emptyList())
             HistoryScreen(
                 conversations = conversations,
                 generating = chatState.generating,
@@ -845,9 +878,17 @@ private fun ChatReader(
             // blocks inside one message.
             val blockHeights =
                 remember(chatState.conversationId, LocalDensity.current) {
-                    androidx.compose.runtime.mutableStateMapOf<String, Int>()
+                    if (BuildConfig.DEBUG) {
+                        androidx.compose.runtime.mutableStateMapOf<String, Int>()
+                    } else {
+                        HashMap<String, Int>()
+                    }
                 }
-            LaunchedEffect(historyKeys) { blockHeights.keys.retainAll(historyKeys.toSet()) }
+            LaunchedEffect(renderUnits) {
+                if (blockHeights.size > renderUnits.size + 16) {
+                    blockHeights.keys.retainAll(renderUnits.mapTo(HashSet()) { it.key })
+                }
+            }
             val spacingPx = with(LocalDensity.current) { 12.dp.roundToPx() }
             // Height of a trailing action row (`ReaderAction` is a 48 dp box); used to leave room for
             // the Retry row below the answer instead of scrolling the answer itself off screen.
@@ -879,7 +920,8 @@ private fun ChatReader(
                 !renderLab && storedMessages.isEmpty() && chatState.rawMarkdown == null &&
                     (chatState.conversationId == null || parsedConversation == chatState.conversationId)
             val retryRowShown =
-                !renderLab && !chatState.generating && storedMessages.lastOrNull()?.role == "ASSISTANT"
+                !renderLab && !chatState.generating && !chatState.unsaved &&
+                    storedMessages.lastOrNull()?.role == "ASSISTANT"
             val streamingRowShown = !renderLab && (chatState.generating || transientStopped)
             val noticeRowShown = notice.isNotEmpty()
             // Memoised like its two neighbours: it used to allocate an index list, a filter result and
@@ -1001,26 +1043,32 @@ private fun ChatReader(
                     listState
                 }
             // The crown scrolls whichever list owns the screen; cleared when the editor takes over.
-            DisposableEffect(sectionMenu, renderLab) {
-                rotary = { delta ->
+            DisposableEffect(sectionMenu, renderLab, editing) {
+                val handler: (Float) -> Boolean = { delta ->
                     if (editing) {
                         false
                     } else {
                         // Only detach when the crown can actually move the list backwards: an upward
                         // tick on a conversation that fits on screen scrolled nothing, yet it used to
                         // hide following and raise the jump-to-latest arrow over an unmoved reader.
-                        if (delta < 0 && !renderLab && !sectionMenu && rotaryList.canScrollBackward) {
+                        if (delta < 0f && !renderLab && !sectionMenu && rotaryList.canScrollBackward) {
                             following = false
                             followNewConversation = false
-                            // Let the scroll-end effect re-decide following by position, the same way
-                            // a finger drag does.
-                            userScrolled = true
                         }
-                        rotaryScope.launch { rotaryList.scrollBy(delta) }
+                        rotaryScope.launch {
+                            rotaryList.scrollBy(delta)
+                            if (!renderLab && !sectionMenu) {
+                                if (delta > 0f && !rotaryList.canScrollForward) {
+                                    following = true
+                                }
+                                saveReaderPosition()
+                            }
+                        }
                         true
                     }
                 }
-                onDispose { rotary = null }
+                rotary = handler
+                onDispose { if (rotary === handler) rotary = null }
             }
             // The LazyColumn's `semantics` lambda is not a composable scope.
             val navMenuLabel = stringResource(R.string.chat_nav_menu)
@@ -1216,7 +1264,7 @@ private fun ChatReader(
                         ) { _, unit ->
                             val messageId = historyBlocks.getOrNull(unit.blockIndex)?.first
                             val message = messageId?.let { messageById[it] }
-                            val editable = message?.role == "USER" && !chatState.generating
+                            val editable = message?.role == "USER" && !chatState.generating && !chatState.unsaved
                             val editLabel =
                                 if (editable) stringResource(R.string.chat_edit_message) else null
                             val openEditor: () -> Unit = {
@@ -1246,9 +1294,12 @@ private fun ChatReader(
                                     Modifier
                                 }
                             Box(
-                                Modifier.onSizeChanged { blockHeights[unit.key] = it.height }.then(
-                                    editModifier,
-                                ),
+                                Modifier
+                                    .onSizeChanged {
+                                        if (blockHeights[unit.key] != it.height) {
+                                            blockHeights[unit.key] = it.height
+                                        }
+                                    }.then(editModifier),
                             ) { RenderUnitView(unit, readerTextMeasurer) }
                         }
                     }
@@ -1350,7 +1401,9 @@ private fun ChatReader(
                             footerHeight = it.height
                         }.padding(
                             bottom =
-                                if (idleLatest) {
+                                if (idleLatest ||
+                                    (chatState.generating && !renderLab && !following && !chatState.unsaved)
+                                ) {
                                     48.dp
                                 } else if (compactChrome) {
                                     12.dp
@@ -1387,7 +1440,7 @@ private fun ChatReader(
                                     // button at Rect(161,314,305,410) — 17 px left of centre, which
                                     // is the "Stop is slightly not centred" report. A text-only
                                     // button needs no leading icon reserve.
-                                    contentPadding = PaddingValues(0.dp),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
                                 ) {
                                     // The button's minimum width is wider than the word, and the
                                     // content ROW starts at the left edge, so the label has to claim
@@ -1410,7 +1463,7 @@ private fun ChatReader(
                                     .size(48.dp)
                                     .semantics { contentDescription = keyboardInputLabel }
                                     // Keeps unsent draft intact on Back while dropping any stale edit target.
-                                    .clickable(role = Role.Button, onClick = {
+                                    .clickable(enabled = !chatState.unsaved, role = Role.Button, onClick = {
                                         saveReaderPosition()
                                         openComposer(null)
                                     }),
@@ -1428,7 +1481,7 @@ private fun ChatReader(
                                 Modifier
                                     .size(48.dp)
                                     .semantics { contentDescription = voiceInputLabel }
-                                    .clickable(role = Role.Button, onClick = {
+                                    .clickable(enabled = !chatState.unsaved, role = Role.Button, onClick = {
                                         saveReaderPosition()
                                         // A launch while a draft operation is settling could hand the
                                         // recogniser a stale prompt; the guard makes that impossible.
@@ -1515,8 +1568,9 @@ private fun HistoryScreen(
             searched = query
         }
     }
+    BindSimpleRotaryScroll(listState)
     LazyColumn(
-        Modifier.fillMaxSize(),
+        Modifier.fillMaxSize().imePadding(),
         state = listState,
         contentPadding = PaddingValues(horizontal = 30.dp, vertical = 30.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -1551,6 +1605,7 @@ private fun HistoryScreen(
                         .padding(12.dp)
                         .semantics { contentDescription = searchLabel },
                 singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                 textStyle = TextStyle(color = Color.White, fontSize = 16.sp),
                 cursorBrush =
                     androidx.compose.ui.graphics
@@ -1581,7 +1636,7 @@ private fun HistoryScreen(
                 item { Text(stringResource(R.string.chat_no_matches), fontSize = 14.sp) }
             }
             items(hits, key = { "hit-${it.messageId}" }) { hit ->
-                val label = hit.rawContent.replace(WHITESPACE_RUN, " ").take(80)
+                val label = hit.rawContent
                 val roleLabel =
                     stringResource(if (hit.role == "USER") R.string.chat_you else R.string.chat_answer)
                 // Same guard as the conversation rows: opening during generation is refused by the
@@ -1611,9 +1666,6 @@ private fun HistoryScreen(
 }
 
 private const val SEARCH_DEBOUNCE_MS = 250L
-
-/** Compiled once: a per-row `Regex(...)` re-compiled the pattern for every hit on every frame. */
-private val WHITESPACE_RUN = Regex("\\s+")
 
 /** ponytail: 40 hits; a watch list never shows more without another query. */
 private const val SEARCH_LIMIT = 40

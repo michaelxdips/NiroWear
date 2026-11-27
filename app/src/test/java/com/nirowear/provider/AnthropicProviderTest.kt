@@ -291,17 +291,20 @@ class AnthropicProviderTest {
             MockWebServer().use { server ->
                 val p = profile.copy(baseUrl = server.url("/v1").toString())
                 val provider = AnthropicProvider(allowLocalHttp = true)
-                for (failure in listOf(
-                    MockResponse().setResponseCode(404),
-                    MockResponse().setBody("""{"not":"a number"}"""),
-                    MockResponse().setBody("""{"max_tokens":0}"""),
-                )) {
+                val scenarios =
+                    listOf(
+                        "selected-404" to MockResponse().setResponseCode(404),
+                        "selected-nan" to MockResponse().setBody("""{"not":"a number"}"""),
+                        "selected-zero" to MockResponse().setBody("""{"max_tokens":0}"""),
+                    )
+                for ((modelId, failure) in scenarios) {
+                    val caseProfile = p.copy(selectedModelId = modelId)
                     server.enqueue(failure)
                     server.enqueue(sse(start, block, delta, endBlock, end("end_turn"), stop))
                     assertEquals(
                         "metadata failure must not block generation",
                         listOf(StreamEvent.TextDelta("α answer"), StreamEvent.Completed),
-                        provider.streamChat(chat, p, secret).toList(),
+                        provider.streamChat(chat, caseProfile, secret).toList(),
                     )
                     server.takeRequest()
                     assertEquals(
@@ -314,12 +317,20 @@ class AnthropicProviderTest {
                             .jsonPrimitive.int,
                     )
                 }
+                // Deterministic 404 metadata fallback is cached so the second turn does NOT pay another GET.
+                server.enqueue(sse(start, block, delta, endBlock, end("end_turn"), stop))
+                assertEquals(
+                    listOf(StreamEvent.TextDelta("α answer"), StreamEvent.Completed),
+                    provider.streamChat(chat, p.copy(selectedModelId = "selected-404"), secret).toList(),
+                )
+                assertEquals("/v1/messages", server.takeRequest().path)
                 // A real credential failure still fails on the messages call itself.
+                val authProfile = p.copy(selectedModelId = "selected-auth")
                 server.enqueue(MockResponse().setResponseCode(404))
                 server.enqueue(MockResponse().setResponseCode(401).setBody("anthropic-controlled-key"))
                 assertEquals(
                     listOf(StreamEvent.Failure(ProviderError.INVALID_CREDENTIAL)),
-                    provider.streamChat(chat, p, secret).toList(),
+                    provider.streamChat(chat, authProfile, secret).toList(),
                 )
             }
         }
@@ -448,4 +459,10 @@ class AnthropicProviderTest {
                 )
             }
         }
+
+    @Test fun refusalWithoutTextFailsAsPromptBlocked() {
+        val decoder = AnthropicStreamDecoder()
+        val events = decoder.accept(start) + decoder.accept(end("refusal")) + decoder.accept(stop)
+        assertEquals(listOf(StreamEvent.Failure(ProviderError.PROMPT_BLOCKED)), events)
+    }
 }

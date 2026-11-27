@@ -442,4 +442,13 @@ class OpenAiProviderTest {
                 )
             }
         }
+
+    @Test fun jsonNullIncompleteDetailsDoesNotThrowProtocolError() {
+        val decoder = OpenAiStreamDecoder()
+        decoder.accept(delta("partial"))
+        assertEquals(
+            listOf(StreamEvent.Truncated),
+            decoder.accept("""{"type":"response.incomplete","response":{"incomplete_details":null}}"""),
+        )
+    }
 }

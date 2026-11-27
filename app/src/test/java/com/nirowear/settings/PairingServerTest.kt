@@ -1,5 +1,6 @@
 package com.nirowear.settings
 
+import com.nirowear.provider.ModelDiscoveryResult
 import com.nirowear.provider.ProviderError
 import com.nirowear.provider.ProviderType
 import com.nirowear.provider.SafeProviderException
@@ -455,5 +456,39 @@ class PairingServerTest {
         assertEquals(ProviderError.INVALID_CREDENTIAL, com.nirowear.provider.httpError(401))
         assertEquals(ProviderError.MODEL_UNAVAILABLE, com.nirowear.provider.httpError(404))
         assertEquals(ProviderError.RATE_LIMITED, com.nirowear.provider.httpError(429))
+    }
+
+    @Test
+    fun handshakeCarriesPresetAndEncryptedModelsFetchDoesNotConsumeSession() {
+        val received = AtomicReference<PairingPayload?>(null)
+        val preset = PairingPreset(ProviderType.ANTHROPIC, "Anthropic", "https://api.anthropic.com/v1", "claude-sonnet-4")
+        PairingServer(
+            host = "127.0.0.1",
+            initialPreset = preset,
+            onFetchModels = { req ->
+                assertEquals(ProviderType.ANTHROPIC, req.type)
+                assertEquals("https://api.anthropic.com/v1", req.baseUrl)
+                ModelDiscoveryResult.Models(listOf("claude-sonnet-4", "claude-haiku-3-5"))
+            },
+        ) { received.set(it) }.apply { start() }.use { pairing ->
+            val hs = get(pairing.url + "handshake").second
+            val hsObj = Json.parseToJsonElement(hs).jsonObject
+            assertEquals("ANTHROPIC", hsObj.getValue("preset").jsonObject.getValue("type").jsonPrimitive.content)
+            assertTrue("handshake must never echo token", !hsObj.containsKey("token"))
+
+            val browser = Browser(hs, capability(pairing.url))
+            val modelReq = """{"type":"ANTHROPIC","base":"https://api.anthropic.com/v1","key":"sk-ant-test"}"""
+            val (mCode, mBody) = post(pairing.url + "models", browser.encrypt(modelReq))
+            assertEquals(200, mCode)
+            assertTrue(mBody.contains("claude-sonnet-4"))
+            assertNull("fetching models must not consume pairing", received.get())
+
+            // Invalid payload must get 400 and still keep session alive for a subsequent valid /pair.
+            val invalidModelPayload =
+                """{"v":1,"type":"OPENAI","name":"Test","base":"https://api.openai.com/v1","model":"","key":"sk-valid"}"""
+            assertEquals(400, post(pairing.url + "pair", browser.encrypt(invalidModelPayload)).first)
+            assertEquals(200, post(pairing.url + "pair", browser.encrypt(payload())).first)
+            assertEquals("Phone sent", received.get()?.name)
+        }
     }
 }

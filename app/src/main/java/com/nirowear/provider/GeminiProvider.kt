@@ -52,7 +52,12 @@ class GeminiProvider(
                             "1000",
                         ).apply { token?.let { addQueryParameter("pageToken", it) } }
                         .build()
-                val root = Json.parseToJsonElement(http.fetch(authenticated(url, secret).build())).jsonObject
+                val bodyText =
+                    http.fetch(
+                        authenticated(url, secret).build(),
+                        decodeError = { errCode, errBody -> geminiHttpError(errCode, errBody) },
+                    )
+                val root = Json.parseToJsonElement(bodyText).jsonObject
                 // One malformed entry must not discard an otherwise valid list.
                 root["models"]?.jsonArray?.forEach { element ->
                     val model = element as? JsonObject ?: return@forEach
@@ -184,12 +189,12 @@ internal fun geminiHttpError(
     body: String,
 ): ProviderError? {
     val error =
-        runCatching { Json.parseToJsonElement(body).jsonObject["error"]?.jsonObject }.getOrNull()
+        runCatching { Json.parseToJsonElement(body).jsonObject["error"] as? JsonObject }.getOrNull()
             ?: return null
-    val status = error["status"]?.jsonPrimitive?.contentOrNull.orEmpty()
+    val status = error["status"].stringOrNull().orEmpty()
     val reasons =
-        error["details"]?.jsonArray.orEmpty().mapNotNull {
-            it.jsonObject["reason"]?.jsonPrimitive?.contentOrNull
+        (error["details"] as? JsonArray).orEmpty().mapNotNull {
+            (it as? JsonObject)?.get("reason").stringOrNull()
         }
     return when {
         status == "UNAUTHENTICATED" || reasons.any { it.startsWith("API_KEY") } -> ProviderError.INVALID_CREDENTIAL
@@ -208,17 +213,16 @@ internal class GeminiStreamDecoder {
     fun accept(payload: String): List<StreamEvent> =
         try {
             val root = Json.parseToJsonElement(payload).jsonObject
-            root["error"]?.let {
-                val body = it.jsonObject
+            (root["error"] as? JsonObject)?.let { body ->
                 val code = body["code"]?.jsonPrimitive?.intOrNull
                 // Gemini answers a rejected key with HTTP 400 and INVALID_ARGUMENT, and a missing model
                 // with 404. The status code alone therefore cannot separate "wrong key" from "bad
                 // request", so the reason string is checked first — it is the only place
                 // API_KEY_INVALID appears.
-                val status = body["status"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                val status = body["status"].stringOrNull().orEmpty()
                 val reasons =
-                    body["details"]?.jsonArray.orEmpty().mapNotNull {
-                        it.jsonObject["reason"]?.jsonPrimitive?.contentOrNull
+                    (body["details"] as? JsonArray).orEmpty().mapNotNull {
+                        (it as? JsonObject)?.get("reason").stringOrNull()
                     }
                 val mapped =
                     when {
@@ -247,19 +251,19 @@ internal class GeminiStreamDecoder {
             }
             // `promptFeedback.blockReason` means the PROMPT was filtered, not that the request was
             // malformed. `!= null` also matched JSON null, which is a legal absent value.
-            if (root["promptFeedback"]?.jsonObject?.get("blockReason")?.stringOrNull() != null) {
+            if ((root["promptFeedback"] as? JsonObject)?.get("blockReason")?.stringOrNull() != null) {
                 return listOf(StreamEvent.Failure(ProviderError.PROMPT_BLOCKED))
             }
-            val candidates = root["candidates"]?.jsonArray ?: return emptyList()
+            val candidates = root["candidates"] as? JsonArray ?: return emptyList()
             if (candidates.isEmpty()) return emptyList()
-            val candidate = candidates.first().jsonObject
+            val candidate = candidates.first() as? JsonObject ?: return emptyList()
             var sawThought = false
             val text =
                 buildString {
-                    candidate["content"]?.jsonObject?.let { content ->
+                    (candidate["content"] as? JsonObject)?.let { content ->
                         // role may legitimately be absent on a single-turn reply.
-                        require(content["role"]?.jsonPrimitive?.contentOrNull in listOf(null, "model"))
-                        content["parts"]?.jsonArray?.forEach { element ->
+                        require(content["role"].stringOrNull() in listOf(null, "model"))
+                        (content["parts"] as? JsonArray)?.forEach { element ->
                             val part = element.jsonObject
                             // No key whitelist: Part has many documented members (inlineData,
                             // fileData, functionCall, executableCode, ...). Requiring an exact set

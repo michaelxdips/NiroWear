@@ -111,7 +111,12 @@ class AnthropicProvider(
                         .addQueryParameter("limit", "1000")
                         .apply { cursor?.let { addQueryParameter("after_id", it) } }
                         .build()
-                val root = Json.parseToJsonElement(http.fetch(authenticated(url, secret).build())).jsonObject
+                val payloadText =
+                    http.fetch(
+                        authenticated(url, secret).build(),
+                        decodeError = { _, body -> anthropicHttpError(body) },
+                    )
+                val root = Json.parseToJsonElement(payloadText).jsonObject
                 // One malformed entry must not discard an otherwise valid list.
                 root["data"]?.jsonArray.orEmpty().forEach { element ->
                     val id = (element as? JsonObject)?.get("id").stringOrNull()
@@ -166,9 +171,13 @@ class AnthropicProvider(
                 // Cached per endpoint+model for the process: this GET sits on the critical path of EVERY
                 // turn, so an uncached watch paid a radio wakeup per send before the first token.
                 val metadataKey = profile.baseUrl + "|" + profile.selectedModelId
+                val cachedTokens = maxTokensByModel[metadataKey]
                 val reportedMaxTokens =
-                    maxTokensByModel[metadataKey]
-                        ?: (
+                    if (cachedTokens != null) {
+                        cachedTokens
+                    } else {
+                        var deterministic = false
+                        val fetched =
                             try {
                                 val modelUrl =
                                     Endpoints
@@ -176,22 +185,37 @@ class AnthropicProvider(
                                         .newBuilder()
                                         .addPathSegment(profile.selectedModelId)
                                         .build()
-                                Json
-                                    .parseToJsonElement(
-                                        http.fetch(authenticated(modelUrl, secret).build(), METADATA_TIMEOUT_MS),
-                                    ).jsonObject["max_tokens"]
-                                    ?.jsonPrimitive
-                                    ?.intOrNull
+                                val parsed =
+                                    Json
+                                        .parseToJsonElement(
+                                            http.fetch(
+                                                authenticated(modelUrl, secret).build(),
+                                                METADATA_TIMEOUT_MS,
+                                                decodeError = { _, body -> anthropicHttpError(body) },
+                                            ),
+                                        ).jsonObject["max_tokens"]
+                                        ?.jsonPrimitive
+                                        ?.intOrNull
+                                deterministic = true
+                                parsed
                             } catch (cancelled: CancellationException) {
                                 throw cancelled
+                            } catch (error: SafeProviderException) {
+                                if (error.error == ProviderError.MODEL_UNAVAILABLE) deterministic = true
+                                null
                             } catch (_: Exception) {
                                 null
                             }
-                        ).let { reported ->
-                            // Only a POSITIVE answer is cached: a transport failure must not pin the
-                            // fallback for the whole session.
-                            reported?.takeIf { it > 0 }?.also { maxTokensByModel[metadataKey] = it }
+                        if (fetched != null && fetched > 0) {
+                            maxTokensByModel[metadataKey] = fetched
+                            fetched
+                        } else if (deterministic) {
+                            maxTokensByModel[metadataKey] = -1
+                            -1
+                        } else {
+                            null
                         }
+                    }
                 // Fallback output budget when model metadata is unavailable.
                 //
                 // 4096, not 8192: metadata is the only honest source, and a value ABOVE a model's own
@@ -372,7 +396,11 @@ internal class AnthropicStreamDecoder {
                     // the reason is absent — a stream that ends here having said nothing proves
                     // nothing, and saving it as SUCCESS left a permanently blank answer.
                     require(started && block == null && (reason == null || reason in KNOWN_STOP_REASONS))
-                    if (reason == null && !hasText) {
+                    if (reason == "refusal") {
+                        listOf(
+                            if (hasText) StreamEvent.Truncated else StreamEvent.Failure(ProviderError.PROMPT_BLOCKED),
+                        )
+                    } else if (reason == null && !hasText) {
                         listOf(StreamEvent.Failure(ProviderError.PROTOCOL))
                     } else if (reason in CUT_STOP_REASONS) {
                         listOf(StreamEvent.Truncated)

@@ -244,4 +244,18 @@ class CompatibleProviderTest {
             runCatching { Endpoints.normalize("http://localhost:11434/v1") }.isFailure,
         )
     }
+
+    @Test
+    fun refusalWithEmptyContentAndReasoningDeltasAreHandled() {
+        val decoder = CompatibleStreamDecoder()
+        assertEquals(
+            listOf(StreamEvent.Working),
+            decoder.accept("""{"choices":[{"delta":{"content":"","reasoning_content":"thinking..."}}]}"""),
+        )
+        assertEquals(
+            listOf(StreamEvent.TextDelta("I cannot assist with that.")),
+            decoder.accept("""{"choices":[{"delta":{"content":"","refusal":"I cannot assist with that."}}]}"""),
+        )
+        assertEquals(listOf(StreamEvent.Completed), decoder.accept("[DONE]"))
+    }
 }
