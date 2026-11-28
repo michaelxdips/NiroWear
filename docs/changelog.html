@@ -222,15 +222,49 @@ p:last-child{margin-bottom:0}
     <p>
       Published builds in reverse chronological order, recording the artifact identity and the tests actually run for each cut.
     </p>
-    <p class="meta">Synced to tag v0.3.3 and main · Updated 2026-11-27</p>
+    <p class="meta">Synced to tag v0.3.4 and main · Updated 2026-11-28</p>
   </div>
+
+  <!-- 0.3.4 -->
+  <article class="release">
+    <div class="rside">
+      <span class="rver">0.3.4</span>
+      <span class="rdate">2026-11-28</span>
+      <span class="rtag">Latest release</span>
+    </div>
+    <div class="rbody">
+      <h2>Incremental parser parity, pairing/streaming lifecycle fixes, and Compose/GPU optimizations</h2>
+      <p>
+        Maintenance and reliability cut landing deep bug fixes across <code>ResponseParser</code>, <code>ChatViewModel</code>, <code>ProviderHttp</code>, pairing/provider adapters, and Compose GPU caching, alongside 22 additional regression tests.
+      </p>
+      <ul>
+        <li><strong>Markdown/LaTeX streaming parity (<code>ResponseParser</code>):</strong> Keep <code>listContentIndent</code> frozen inside open fences so nested YAML/list fences never swallow display math; align <code>findSafePrefixCut()</code> across table <code>$$</code>, indented code <code>$$</code>, depth-2 list <code>\[...\]</code>, mid-line <code>$$...$$</code> before fences/Type 1-5 HTML blocks, blank lines inside lists, and multi-line link definitions.</li>
+        <li><strong>Streaming, storage &amp; pairing lifecycle:</strong> Prevent out-of-order UI flushes (<code>advanceLiveContent</code>), scope <code>isLivePersisted</code> by conversation and eliminate <code>retrySaving()</code> stale <code>STREAMING</code> flashes; stop active pairing on profile delete and track <code>sent</code> in <code>PAIRING_PAGE</code>; use <code>AtomicReference</code> cancellation in <code>ProviderHttp</code>; guard non-primitive JSON across provider adapters; delegate <code>SecretStore.read()</code> to <code>AtomicFile.readFully()</code> for <code>.bak</code> recovery; zero PKCS12 keystore passwords in <code>SelfSignedCert</code>.</li>
+        <li><strong>Compose, search &amp; math optimizations:</strong> Cache <code>drawWithCache</code> geometry in QR and <code>ReaderAction</code>; retain <code>rememberMath</code> drawables across LRU eviction; bound <code>\rule[raise]</code> in <code>NativeMathGuard</code>; fix <code>SearchQuery</code> integer overflow &amp; trailing spaces; deflake <code>PairingHostileTest</code> Linux close timing.</li>
+      </ul>
+      <dl class="ident">
+        <div><dt>versionCode</dt><dd>20</dd></div>
+        <div><dt>size</dt><dd>4,076,023 B</dd></div>
+        <div><dt>sha256</dt><dd>e1611d40b3972629b4c514855ba1e6b0bf1bf1ff5c7239e546da4b2e6d881d9c</dd></div>
+        <div><dt>certificate</dt><dd>CN=NiroWear Release (0dc50fc0…86543e)</dd></div>
+      </dl>
+      <table class="gate">
+        <thead><tr><th scope="col">Check</th><th scope="col">Result</th></tr></thead>
+        <tbody>
+          <tr><td>JVM unit tests</td><td>342 passed, 1 skipped (343 tests across 50 suites, 0 failures; opt-in <code>LiveProviderSmokeTest</code> skipped)</td></tr>
+          <tr><td>ktlint &amp; lintDebug</td><td><code>ktlintCheck</code> 0 violations; <code>lintDebug</code> 0 errors, 0 source-code warnings (7 pinned dependency advisories)</td></tr>
+          <tr><td>CI instrumented (Wear OS 5)</td><td>10/10 classes green on Wear OS 5 API 34 (466 x 466) on PR #104 before merge</td></tr>
+          <tr><td>Xiaomi Watch 2 HW (v0.3.4 signed)</td><td>In-place upgrade over signed <code>v0.3.3</code> (<code>0 FATAL</code>, <code>versionCode 20</code>, <code>nfc_has_nirowear=False</code>, 3-item Menu): cold start median <strong>520 ms</strong> (<code>554, 520, 492, 505, 611 ms</code>, <code>WaitTime</code> 526 ms), warm <code>HOT</code> <strong>64 ms</strong> (<code>64, 82, 62, 63, 86 ms</code>, <code>WaitTime</code> 68 ms), <strong>PSS 26,134 KB</strong> (<code>RSS 107,016 KB</code>), Providers 18-swipe <code>gfxinfo</code> <strong>216 frames, 0 janky (0.00%)</strong> (P50 5 ms, P90 5 ms, P95 6 ms, P99 8 ms), <code>Thermal Status: 0</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </article>
 
   <!-- 0.3.3 -->
   <article class="release">
     <div class="rside">
       <span class="rver">0.3.3</span>
       <span class="rdate">2026-11-27</span>
-      <span class="rtag">Latest release</span>
     </div>
     <div class="rbody">
       <h2>Direct watch prompt policy, faster ART startup &amp; streaming, Open on phone + pairing model fetcher</h2>
