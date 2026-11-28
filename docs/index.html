@@ -855,7 +855,7 @@ button:disabled,input:disabled{cursor:not-allowed;opacity:.55}
 
     <div class="nav-actions">
       <button class="tbtn" id="themeBtn" type="button" aria-pressed="false">Dark mode</button>
-      <a class="nav-cta" href="#install">Install v0.3.3</a>
+      <a class="nav-cta" href="#install">Install v0.3.4</a>
       <button class="menu-btn" id="menuBtn" type="button" aria-expanded="false" aria-controls="mobileNav">Menu</button>
     </div>
   </div>
@@ -866,7 +866,7 @@ button:disabled,input:disabled{cursor:not-allowed;opacity:.55}
     <a href="#pipeline">Architecture pipeline</a>
     <a href="#providers">Providers &amp; pairing</a>
     <a href="#evidence">Verification ledger</a>
-    <a href="#install">Install v0.3.3</a>
+    <a href="#install">Install v0.3.4</a>
     <a href="changelog.html">Changelog</a>
   </nav>
 </header>
@@ -883,12 +883,12 @@ button:disabled,input:disabled{cursor:not-allowed;opacity:.55}
             NiroWear is a standalone bring-your-own-key chat client built for circular Wear OS screens. Connect directly to OpenAI, Gemini, Anthropic, or compatible endpoints with encrypted on-device keys and zero truncation tricks.
           </p>
           <div class="hero-cta-row">
-            <a class="btn-primary" href="#install">Install v0.3.3 APK</a>
+            <a class="btn-primary" href="#install">Install v0.3.4 APK</a>
             <a class="btn-secondary" href="#workbench">Try the watch workbench</a>
           </div>
 
           <dl class="hero-ledger">
-            <div><dt>Release APK</dt><dd class="tnum">3.9 MB (v0.3.3)</dd></div>
+            <div><dt>Release APK</dt><dd class="tnum">3.9 MB (v0.3.4)</dd></div>
             <div><dt>Protocols</dt><dd>4 SSE adapters</dd></div>
             <div><dt>Localization</dt><dd class="tnum">143 EN / ID keys</dd></div>
             <div><dt>Key storage</dt><dd>Keystore AES-GCM</dd></div>
@@ -1295,21 +1295,21 @@ Private keys stay hardware-backed; Room stores encrypted token refs.
         <span class="chapter-label">05 · Empirical measurements &amp; boundaries</span>
         <h2>Verification ledger from Gradle XML and adb logs</h2>
         <p class="sub">
-          Host gates cover the signed <code>v0.3.3</code> cut; emulator metrics come from Wear OS 5 AVD <code>nirowear-b</code> (466 x 466 px @ 320 dpi, headless SwiftShader); physical Xiaomi Watch 2 hardware runs sit separately.
+          Host gates cover the signed <code>v0.3.4</code> cut; emulator metrics come from Wear OS 5 AVD <code>nirowear-b</code> (466 x 466 px @ 320 dpi, headless SwiftShader); physical Xiaomi Watch 2 hardware runs sit separately.
         </p>
       </div>
 
       <div class="ev-controls">
         <div class="btn-group" role="group" aria-label="Filter verification scope" style="margin:0">
           <button class="seg-btn" type="button" data-scope="all" aria-pressed="true">All</button>
-          <button class="seg-btn" type="button" data-scope="avd" aria-pressed="false">v0.3.3 &amp; AVD</button>
+          <button class="seg-btn" type="button" data-scope="avd" aria-pressed="false">v0.3.4 &amp; AVD</button>
           <button class="seg-btn" type="button" data-scope="host" aria-pressed="false">Host &amp; CI</button>
           <button class="seg-btn" type="button" data-scope="watch" aria-pressed="false">Watch 2</button>
         </div>
 
         <div class="search-field">
           <label for="evidenceSearch">Filter ledger rows</label>
-          <input id="evidenceSearch" type="search" placeholder="e.g. 516 ms, Room, ktlint, Watch 2">
+          <input id="evidenceSearch" type="search" placeholder="e.g. 520 ms, Room, ktlint, Watch 2">
         </div>
       </div>
 
@@ -1325,13 +1325,13 @@ Private keys stay hardware-backed; Room stores encrypted token refs.
           <tbody>
             <tr data-cat="host">
               <td>Release &amp; JVM suite</td>
-              <td>Host &amp; CI (<code>v0.3.3</code>)</td>
-              <td><code>v0.3.3</code> tag cut (<code>versionCode 19</code>, <code>4,076,023 B</code>, SHA-256 <code>93fbbb70...995d4c44</code>, <code>CN=NiroWear Release</code>, <code>assets/dexopt/baseline.prof</code>): <strong>321</strong> JVM tests / <strong>50</strong> suites (<strong>320 passed, 1 skipped, 0 failures</strong>), <code>ktlintCheck</code> <strong>0 violations</strong>, <code>lintDebug</code> <strong>0 errors, 0 source warnings</strong> (<strong>7</strong> pinned dependency advisories).</td>
+              <td>Host &amp; CI (<code>v0.3.4</code>)</td>
+              <td><code>v0.3.4</code> tag cut (<code>versionCode 20</code>, <code>4,076,023 B</code>, SHA-256 <code>e1611d40...6d881d9c</code>, <code>CN=NiroWear Release</code>, <code>assets/dexopt/baseline.prof</code>): <strong>343</strong> JVM tests / <strong>50</strong> suites (<strong>342 passed, 1 skipped, 0 failures</strong>), <code>ktlintCheck</code> <strong>0 violations</strong>, <code>lintDebug</code> <strong>0 errors, 0 source warnings</strong> (<strong>7</strong> pinned dependency advisories).</td>
             </tr>
             <tr data-cat="avd">
               <td>CI instrumented &amp; Wear OS 5 AVD</td>
-              <td>AVD 466 px (<code>v0.3.3</code> / <code>v0.3.0</code>)</td>
-              <td><code>v0.3.3</code> PR #102 CI instrumented smoke passes <strong>10/10 classes</strong> on Wear OS 5 API 34 (<code>466 x 466</code>). <code>v0.3.0</code> closeout baseline recorded <strong>11/11 classes (19/19 tests)</strong>, <code>0 FATAL</code> upgrade from <code>v0.2.1</code>, cold start median <strong>549 ms</strong>, first frame <strong>365.993 ms</strong>, warm <strong>37 ms</strong>, signed scroll <strong>2.92% jank</strong> (377 frames), PSS <strong>30,836 KB</strong>.</td>
+              <td>AVD 466 px (<code>v0.3.4</code> / <code>v0.3.0</code>)</td>
+              <td><code>v0.3.4</code> PR #104 CI instrumented smoke passes <strong>10/10 classes</strong> on Wear OS 5 API 34 (<code>466 x 466</code>). <code>v0.3.0</code> closeout baseline recorded <strong>11/11 classes (19/19 tests)</strong>, <code>0 FATAL</code> upgrade from <code>v0.2.1</code>, cold start median <strong>549 ms</strong>, first frame <strong>365.993 ms</strong>, warm <strong>37 ms</strong>, signed scroll <strong>2.92% jank</strong> (377 frames), PSS <strong>30,836 KB</strong>.</td>
             </tr>
             <tr data-cat="avd">
               <td>5,000-msg upgrade &amp; search scale</td>
@@ -1344,9 +1344,9 @@ Private keys stay hardware-backed; Room stores encrypted token refs.
               <td>Exact EN/ID resource string parity in <code>values/strings.xml</code> and <code>values-in/strings.xml</code> + <code>renderer_strings.xml</code> (0 missing/extra); locale-change <code>streamPrefixCache.clear()</code> confined to <code>parseDispatcher</code>; TalkBack traversal <code>Menu -&gt; Reader -&gt; Footer</code> verified (<code>TalkBackTraversalOrderTest</code>); code-block right-edge pan cue verified (<code>CodeBlockPanCueTest</code>).</td>
             </tr>
             <tr data-cat="watch">
-              <td>Xiaomi Watch 2 (v0.3.3 signed + v0.3.2 debug)</td>
+              <td>Xiaomi Watch 2 (v0.3.4 signed + v0.3.2 debug)</td>
               <td>Watch 2 HW (<code>armeabi-v7a</code>, API 34)</td>
-              <td>Signed <code>v0.3.3</code> installed in-place over signed <code>v0.3.2</code> (<code>0 FATAL</code>, <code>versionCode 19</code>, non-<code>DEBUGGABLE</code>, <code>dumpsys nfc</code> clean, 3-item Menu): cold start median <strong>516 ms</strong> (<code>598, 600, 516, 513, 511 ms</code>; <code>WaitTime</code> <strong>550 ms</strong>, vs <code>721 ms</code> on <code>v0.3.2</code> and <code>694 ms</code> on <code>v0.3.1</code>), warm <code>HOT</code> <strong>79 ms</strong> (<code>87, 74, 79, 76, 81 ms</code>), <strong>PSS 22,060 KB</strong> (<code>RSS 107,312 KB</code>), Providers 18-swipe <code>gfxinfo</code> <strong>209 frames, 0 janky (0.00%)</strong> (P50 <code>5 ms</code>, P95 <code>6 ms</code>, P99 <code>10 ms</code>), <code>Thermal Status: 0</code>. Prior <code>v0.3.2</code>-prep Watch 2 debug sweep closed <code>#62</code> &amp; <code>#84</code> (<code>InputResultUiTest</code> <strong>8/8</strong>, <code>CompatibleChatTest</code> <strong>4/4</strong>, <code>ReaderNavigationTest</code> <strong>7/7</strong> pre-notice-scroll).</td>
+              <td>Signed <code>v0.3.4</code> installed in-place over signed <code>v0.3.3</code> (<code>0 FATAL</code>, <code>versionCode 20</code>, non-<code>DEBUGGABLE</code>, <code>dumpsys nfc</code> clean, 3-item Menu): cold start median <strong>520 ms</strong> (<code>554, 520, 492, 505, 611 ms</code>; <code>WaitTime</code> <strong>526 ms</strong>; <code>v0.3.3</code> was <code>516 ms</code> vs <code>721 ms</code> on <code>v0.3.2</code>), warm <code>HOT</code> <strong>64 ms</strong> (<code>64, 82, 62, 63, 86 ms</code>, <code>WaitTime</code> <strong>68 ms</strong>), <strong>PSS 26,134 KB</strong> (<code>RSS 107,016 KB</code>), Providers 18-swipe <code>gfxinfo</code> <strong>216 frames, 0 janky (0.00%)</strong> (P50 <code>5 ms</code>, P90 <code>5 ms</code>, P95 <code>6 ms</code>, P99 <code>8 ms</code>), <code>Thermal Status: 0</code>. Prior <code>v0.3.2</code>-prep Watch 2 debug sweep closed <code>#62</code> &amp; <code>#84</code> (<code>InputResultUiTest</code> <strong>8/8</strong>, <code>CompatibleChatTest</code> <strong>4/4</strong>, <code>ReaderNavigationTest</code> <strong>7/7</strong> pre-notice-scroll).</td>
             </tr>
           </tbody>
         </table>
@@ -1360,7 +1360,7 @@ Private keys stay hardware-backed; Room stores encrypted token refs.
       <div class="boundaries-box">
         <h3>Verified Watch 2 baseline &amp; remaining open boundaries</h3>
         <p>
-          Physical Xiaomi Watch 2 runs closed rotary-absence confirmation (<code>#47</code>), signed <code>v0.3.3</code> in-place upgrade, ART Baseline Profile startup (<code>516 ms</code> cold median, <code>22,060 KB</code> PSS, <code>0.00%</code> scroll jank on Providers), NFC HCE removal, and the <code>v0.3.2</code> debug instrumentation suite including <code>InputResultUiTest</code> 8/8, <code>PairingUiTest</code> replay, and <code>ReaderNavigationTest</code> 7/7 (<code>#62</code>, <code>#84</code>). Only human-operated checks remain open: live spoken voice dictation and TalkBack speaker audio in <code>#27</code> and phone-browser Chrome certificate click-through / Open on phone walkthrough in <code>#28</code>. Pre-upgrade v2 database injection onto the signed container stays blocked by <code>allowBackup="false"</code> and <code>debuggable=false</code>.
+          Physical Xiaomi Watch 2 runs closed rotary-absence confirmation (<code>#47</code>), signed <code>v0.3.4</code> in-place upgrade, ART Baseline Profile startup (<code>520 ms</code> cold median, <code>64 ms</code> warm HOT median, <code>26,134 KB</code> PSS, <code>0.00%</code> scroll jank on Providers), NFC HCE removal, and the <code>v0.3.2</code> debug instrumentation suite including <code>InputResultUiTest</code> 8/8, <code>PairingUiTest</code> replay, and <code>ReaderNavigationTest</code> 7/7 (<code>#62</code>, <code>#84</code>). Only human-operated checks remain open: live spoken voice dictation and TalkBack speaker audio in <code>#27</code> and phone-browser Chrome certificate click-through / Open on phone walkthrough in <code>#28</code>. Pre-upgrade v2 database injection onto the signed container stays blocked by <code>allowBackup="false"</code> and <code>debuggable=false</code>.
         </p>
         <div class="issue-links">
           <a class="issue-link" href="https://github.com/michaelxdips/NiroWear/issues/27">#27 Watch 2 acceptance</a>
@@ -1389,15 +1389,15 @@ Private keys stay hardware-backed; Room stores encrypted token refs.
 
           <div class="ipanel" id="ipApk" role="tabpanel" aria-labelledby="itApk">
             <p style="font-size:14px;color:var(--muted)">
-              Download <code>app-release.apk</code> from the latest GitHub Release and verify SHA-256 before installing. Builds <code>0.1.1</code> through <code>0.3.3</code> share <code>CN=NiroWear Release</code> and upgrade in place.
+              Download <code>app-release.apk</code> from the latest GitHub Release and verify SHA-256 before installing. Builds <code>0.1.1</code> through <code>0.3.4</code> share <code>CN=NiroWear Release</code> and upgrade in place.
             </p>
             <div class="code-box">
               <div class="code-bar"><span>Terminal</span><button class="copy-btn" type="button" data-copy="cmdApk">Copy</button></div>
               <pre id="cmdApk">adb install -r app-release.apk
 sha256sum app-release.apk
-# Expected v0.3.3: 93fbbb70bac8c136181978569e2dd58fa9ef38e8954526b6e8809abc995d4c44</pre>
+# Expected v0.3.4: e1611d40b3972629b4c514855ba1e6b0bf1bf1ff5c7239e546da4b2e6d881d9c</pre>
             </div>
-            <a class="btn-primary" href="https://github.com/michaelxdips/NiroWear/releases/latest">Download v0.3.3 on GitHub Releases</a>
+            <a class="btn-primary" href="https://github.com/michaelxdips/NiroWear/releases/latest">Download v0.3.4 on GitHub Releases</a>
           </div>
 
           <div class="ipanel" id="ipSrc" role="tabpanel" aria-labelledby="itSrc" hidden>
