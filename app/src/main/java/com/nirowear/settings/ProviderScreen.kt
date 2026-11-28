@@ -4,10 +4,10 @@ import android.os.SystemClock
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
 import androidx.annotation.StringRes
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.aspectRatio
@@ -36,10 +36,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -71,8 +74,12 @@ import com.nirowear.provider.ProviderType
 import com.nirowear.provider.SafeProviderException
 import com.nirowear.provider.SecretValue
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -194,6 +201,7 @@ fun ProviderScreen(onBack: () -> Unit) {
     var validated by remember { mutableStateOf(false) }
     // Pairing listener: exists only while this screen is composed. Never a service, never at boot.
     var pairing by remember { mutableStateOf<PairingServer?>(null) }
+    var pairingFetchScope by remember { mutableStateOf<CoroutineScope?>(null) }
     var pairingNote by remember { mutableStateOf("") }
     var remainingSecs by remember(pairing) { mutableIntStateOf(pairing?.remainingSeconds() ?: 0) }
     // Remote input is what makes typing on a watch tolerable, so advertise it only when the enabled
@@ -208,6 +216,8 @@ fun ProviderScreen(onBack: () -> Unit) {
         while (isActive) {
             remainingSecs = server.remainingSeconds()
             if (server.isExpired()) {
+                pairingFetchScope?.cancel()
+                pairingFetchScope = null
                 pairing?.close()
                 pairing = null
                 pairingNote = resources.getString(R.string.provider_pairing_expired)
@@ -221,9 +231,11 @@ fun ProviderScreen(onBack: () -> Unit) {
         window?.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         onDispose {
             key = ""
-            // Leaving the screen kills the listener even if the coroutine never resumes.
+            // Leaving the screen kills the listener and any in-flight model fetch immediately.
             pairingJob?.cancel()
             pairingJob = null
+            pairingFetchScope?.cancel()
+            pairingFetchScope = null
             pairing?.close()
             pairing = null
             window?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
@@ -279,6 +291,7 @@ fun ProviderScreen(onBack: () -> Unit) {
             adding = false
             models = emptyList()
             confirmDelete = false
+            pairingNote = ""
             message =
                 if (cleaned) {
                     resources.getString(R.string.provider_saved_ok)
@@ -331,6 +344,8 @@ fun ProviderScreen(onBack: () -> Unit) {
         pairingJob?.cancel()
         pairingJob = null
         pairingStarting = false
+        pairingFetchScope?.cancel()
+        pairingFetchScope = null
         // close() shuts the sockets synchronously, which is fast; the worker join it also starts is
         // on its own daemon thread, so this no longer freezes the dial while a peer sits in read().
         pairing?.close()
@@ -366,12 +381,15 @@ fun ProviderScreen(onBack: () -> Unit) {
         val wasEditingId = edit?.id
         pairingStarting = true
         pairingNote = resources.getString(R.string.provider_pairing_starting)
+        val fetchScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        pairingFetchScope?.cancel()
+        pairingFetchScope = fetchScope
         pairingJob =
             scope.launch {
                 val result =
                     withContext(Dispatchers.IO) {
                         val host = lanAddress() ?: return@withContext null
-                        runCatching {
+                        try {
                             val created =
                                 PairingServer(
                                     host = host,
@@ -380,23 +398,26 @@ fun ProviderScreen(onBack: () -> Unit) {
                                     allowLocalHttp = BuildConfig.DEBUG,
                                     onFetchModels = { req ->
                                         runBlocking {
-                                            val adapter =
-                                                app.provider(req.type)
-                                                    ?: return@runBlocking ModelDiscoveryResult.Unavailable(
-                                                        ProviderError.PROVIDER_UNSUPPORTED,
-                                                    )
-                                            val temp =
-                                                ProviderProfile(
-                                                    "pairing-fetch",
-                                                    req.type,
-                                                    req.type.name,
-                                                    Endpoints.normalize(req.baseUrl, BuildConfig.DEBUG),
-                                                    "",
-                                                    "00000000-0000-0000-0000-000000000000",
-                                                )
-                                            withTimeoutOrNull(DISCOVERY_BUDGET_MS) {
-                                                adapter.listModels(temp, SecretValue(sanitizeKey(req.apiKey)))
-                                            } ?: ModelDiscoveryResult.Unavailable(ProviderError.TIMEOUT)
+                                            fetchScope
+                                                .async {
+                                                    val adapter =
+                                                        app.provider(req.type)
+                                                            ?: return@async ModelDiscoveryResult.Unavailable(
+                                                                ProviderError.PROVIDER_UNSUPPORTED,
+                                                            )
+                                                    val temp =
+                                                        ProviderProfile(
+                                                            "pairing-fetch",
+                                                            req.type,
+                                                            req.type.name,
+                                                            Endpoints.normalize(req.baseUrl, BuildConfig.DEBUG),
+                                                            "",
+                                                            "00000000-0000-0000-0000-000000000000",
+                                                        )
+                                                    withTimeoutOrNull(DISCOVERY_BUDGET_MS) {
+                                                        adapter.listModels(temp, SecretValue(sanitizeKey(req.apiKey)))
+                                                    } ?: ModelDiscoveryResult.Unavailable(ProviderError.TIMEOUT)
+                                                }.await()
                                         }
                                     },
                                 ) { payload ->
@@ -420,15 +441,23 @@ fun ProviderScreen(onBack: () -> Unit) {
                                 if (!currentCoroutineContext().isActive) throw CancellationException()
                                 created.start()
                                 if (!currentCoroutineContext().isActive) throw CancellationException()
-                                host to created
+                                Result.success(host to created)
                             } catch (t: Throwable) {
                                 runCatching { created.close() }
                                 throw t
                             }
+                        } catch (cancelled: CancellationException) {
+                            fetchScope.cancel()
+                            throw cancelled
+                        } catch (failure: Throwable) {
+                            fetchScope.cancel()
+                            Result.failure(failure)
                         }
                     }
                 pairingStarting = false
                 if (result == null) {
+                    fetchScope.cancel()
+                    if (pairingFetchScope === fetchScope) pairingFetchScope = null
                     pairingNote =
                         resources.getString(
                             if (remoteTyping) R.string.provider_no_wifi_remote else R.string.provider_no_wifi,
@@ -438,6 +467,8 @@ fun ProviderScreen(onBack: () -> Unit) {
                 result
                     .onSuccess { (host, created) ->
                         if (!adding && editId == null) {
+                            fetchScope.cancel()
+                            if (pairingFetchScope === fetchScope) pairingFetchScope = null
                             runCatching { created.close() }
                             return@onSuccess
                         }
@@ -448,7 +479,10 @@ fun ProviderScreen(onBack: () -> Unit) {
                             } else {
                                 resources.getString(R.string.provider_not_home_network)
                             }
-                    }.onFailure { pairingNote = resources.getString(R.string.provider_pairing_unavailable) }
+                    }.onFailure {
+                        if (pairingFetchScope === fetchScope) pairingFetchScope = null
+                        pairingNote = resources.getString(R.string.provider_pairing_unavailable)
+                    }
             }
     }
 
@@ -515,6 +549,7 @@ fun ProviderScreen(onBack: () -> Unit) {
                         validated = false
                         reveal = false
                         models = emptyList()
+                        pairingNote = ""
                         message = presetMessage
                     },
                 ) { Text(presetLabel) }
@@ -559,6 +594,7 @@ fun ProviderScreen(onBack: () -> Unit) {
                         reveal = false
                         models = emptyList()
                         confirmDelete = false
+                        pairingNote = ""
                         message = resources.getString(R.string.provider_key_configured)
                     }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.provider_edit_replace_key)) }
                 }
@@ -589,14 +625,16 @@ fun ProviderScreen(onBack: () -> Unit) {
                             pairingNote = resources.getString(R.string.provider_opening_on_phone)
                             scope.launch {
                                 val opened = openUrlOnPairedPhone(context, server.url)
-                                pairingNote =
-                                    resources.getString(
-                                        if (opened.isSuccess) {
-                                            R.string.provider_opened_on_phone
-                                        } else {
-                                            R.string.provider_open_on_phone_failed
-                                        },
-                                    )
+                                if (pairing === server) {
+                                    pairingNote =
+                                        resources.getString(
+                                            if (opened.isSuccess) {
+                                                R.string.provider_opened_on_phone
+                                            } else {
+                                                R.string.provider_open_on_phone_failed
+                                            },
+                                        )
+                                }
                             }
                         },
                     ) {
@@ -606,31 +644,53 @@ fun ProviderScreen(onBack: () -> Unit) {
                     // inside the 466 px circular safe area so corners are never bezel-clipped.
                     val qr = remember(server.url) { QrCode.matrix(server.url) }
                     val qrLabel = stringResource(R.string.provider_pairing_qr)
-                    Canvas(
+                    Box(
                         Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 24.dp, vertical = 4.dp)
                             .aspectRatio(1f)
-                            .semantics { contentDescription = qrLabel },
-                    ) {
-                        val side = QrCode.sidePx(qr, minOf(size.width, size.height).toInt())
-                        if (side <= 0) return@Canvas
-                        val module = side.toFloat() / qr.size
-                        val left = ((size.width.toInt() - side) / 2).toFloat()
-                        val top = ((size.height.toInt() - side) / 2).toFloat()
-                        drawRect(Color.White, Offset(left, top), Size(side.toFloat(), side.toFloat()))
-                        for (y in 0 until qr.size) {
-                            for (x in 0 until qr.size) {
-                                if (qr.isDark(x, y)) {
-                                    drawRect(
-                                        Color.Black,
-                                        Offset(left + x * module, top + y * module),
-                                        Size(module, module),
-                                    )
+                            .semantics { contentDescription = qrLabel }
+                            .drawWithCache {
+                                val side = QrCode.sidePx(qr, minOf(size.width, size.height).toInt())
+                                if (side <= 0) {
+                                    onDrawBehind {}
+                                } else {
+                                    val module = side.toFloat() / qr.size
+                                    val left = ((size.width.toInt() - side) / 2).toFloat()
+                                    val top = ((size.height.toInt() - side) / 2).toFloat()
+                                    val bgTopLeft = Offset(left, top)
+                                    val bgSize = Size(side.toFloat(), side.toFloat())
+                                    val darkPath =
+                                        Path().apply {
+                                            for (y in 0 until qr.size) {
+                                                val rowTop = top + y * module
+                                                val rowBottom = rowTop + module
+                                                var x = 0
+                                                while (x < qr.size) {
+                                                    if (!qr.isDark(x, y)) {
+                                                        x++
+                                                        continue
+                                                    }
+                                                    val runStart = x
+                                                    while (x < qr.size && qr.isDark(x, y)) x++
+                                                    addRect(
+                                                        Rect(
+                                                            left + runStart * module,
+                                                            rowTop,
+                                                            left + x * module,
+                                                            rowBottom,
+                                                        ),
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    onDrawBehind {
+                                        drawRect(Color.White, bgTopLeft, bgSize)
+                                        drawPath(darkPath, Color.Black)
+                                    }
                                 }
-                            }
-                        }
-                    }
+                            },
+                    )
                     OutlinedButton(
                         onClick = { stopPairing() },
                         modifier = Modifier.fillMaxWidth(),
@@ -742,7 +802,11 @@ fun ProviderScreen(onBack: () -> Unit) {
                                 withTimeoutOrNull(DISCOVERY_BUDGET_MS) {
                                     adapter.listModels(p, secret(p))
                                 } ?: ModelDiscoveryResult.Unavailable(ProviderError.TIMEOUT)
-                            if (input != Triple(type, base, key) || inputProfileId != edit?.id) return@launch
+                            if (input != Triple(type, base, key) || inputProfileId != edit?.id ||
+                                (!adding && editId == null)
+                            ) {
+                                return@launch
+                            }
                             when (result) {
                                 is ModelDiscoveryResult.Models -> {
                                     models = result.ids
@@ -763,7 +827,9 @@ fun ProviderScreen(onBack: () -> Unit) {
                         } catch (cancelled: CancellationException) {
                             throw cancelled
                         } catch (failure: Exception) {
-                            if (input == Triple(type, base, key) && inputProfileId == edit?.id) {
+                            if (input == Triple(type, base, key) && inputProfileId == edit?.id &&
+                                (adding || editId != null)
+                            ) {
                                 message =
                                     validationErrorText(resources, failure)
                                         ?: resources.getString(R.string.provider_check_url_key)
@@ -808,8 +874,9 @@ fun ProviderScreen(onBack: () -> Unit) {
                                 return@launch
                             }
                             val error = adapter.validate(p, secret(p))
+                            if (!adding && editId == null) return@launch
                             if (p.type != type || p.displayName != name.trim() ||
-                                p.baseUrl != Endpoints.normalize(base, BuildConfig.DEBUG) ||
+                                p.baseUrl != runCatching { Endpoints.normalize(base, BuildConfig.DEBUG) }.getOrNull() ||
                                 p.selectedModelId != model.trim() ||
                                 key != inputKey ||
                                 inputProfileId != edit?.id
@@ -825,11 +892,13 @@ fun ProviderScreen(onBack: () -> Unit) {
                         } catch (cancelled: CancellationException) {
                             throw cancelled
                         } catch (failure: Exception) {
-                            message =
-                                validationCause(failure)
-                                    ?.let { errorText(resources, it.code(hasText = false)) }
-                                    ?: validationErrorText(resources, failure)
-                                    ?: resources.getString(R.string.provider_error_check_fields)
+                            if (adding || editId != null) {
+                                message =
+                                    validationCause(failure)
+                                        ?.let { errorText(resources, it.code(hasText = false)) }
+                                        ?: validationErrorText(resources, failure)
+                                        ?: resources.getString(R.string.provider_error_check_fields)
+                            }
                         } finally {
                             busy = false
                         }
@@ -877,6 +946,7 @@ fun ProviderScreen(onBack: () -> Unit) {
                                 return@OutlinedButton
                             }
                             scope.launch {
+                                stopPairing()
                                 busy = true
                                 try {
                                     app.settings.delete(deleting.id)

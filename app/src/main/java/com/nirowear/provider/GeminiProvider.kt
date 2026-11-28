@@ -8,17 +8,15 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import okhttp3.HttpUrl
-import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -150,7 +148,7 @@ class GeminiProvider(
         val wire =
             authenticated(url, secret)
                 .header("Accept", "text/event-stream")
-                .post(payload.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
+                .post(payload.toString().toRequestBody(JSON_MEDIA_TYPE))
                 .build()
         return flow {
             emitAll(
@@ -176,6 +174,23 @@ class GeminiProvider(
         .header("x-goog-api-key", secret.forRequest())
 }
 
+private fun geminiStatusError(
+    status: String,
+    reasons: List<String>,
+): ProviderError? =
+    when {
+        status == "UNAUTHENTICATED" || reasons.any { it.startsWith("API_KEY") } -> ProviderError.INVALID_CREDENTIAL
+        status == "PERMISSION_DENIED" -> ProviderError.PERMISSION_DENIED
+        status == "RESOURCE_EXHAUSTED" -> ProviderError.RATE_LIMITED
+        status == "NOT_FOUND" -> ProviderError.MODEL_UNAVAILABLE
+        else -> null
+    }
+
+private fun geminiErrorReasons(error: JsonObject): List<String> =
+    (error["details"] as? JsonArray).orEmpty().mapNotNull {
+        (it as? JsonObject)?.get("reason").stringOrNull()
+    }
+
 /**
  * Maps a NON-2xx Gemini response body to an error, or null when the status says everything.
  *
@@ -192,19 +207,12 @@ internal fun geminiHttpError(
         runCatching { Json.parseToJsonElement(body).jsonObject["error"] as? JsonObject }.getOrNull()
             ?: return null
     val status = error["status"].stringOrNull().orEmpty()
-    val reasons =
-        (error["details"] as? JsonArray).orEmpty().mapNotNull {
-            (it as? JsonObject)?.get("reason").stringOrNull()
+    return geminiStatusError(status, geminiErrorReasons(error))
+        ?: when (code) {
+            401 -> ProviderError.INVALID_CREDENTIAL
+            403 -> ProviderError.PERMISSION_DENIED
+            else -> null
         }
-    return when {
-        status == "UNAUTHENTICATED" || reasons.any { it.startsWith("API_KEY") } -> ProviderError.INVALID_CREDENTIAL
-        status == "PERMISSION_DENIED" -> ProviderError.PERMISSION_DENIED
-        status == "RESOURCE_EXHAUSTED" -> ProviderError.RATE_LIMITED
-        status == "NOT_FOUND" -> ProviderError.MODEL_UNAVAILABLE
-        code == 401 -> ProviderError.INVALID_CREDENTIAL
-        code == 403 -> ProviderError.PERMISSION_DENIED
-        else -> null
-    }
 }
 
 internal class GeminiStreamDecoder {
@@ -214,39 +222,19 @@ internal class GeminiStreamDecoder {
         try {
             val root = Json.parseToJsonElement(payload).jsonObject
             (root["error"] as? JsonObject)?.let { body ->
-                val code = body["code"]?.jsonPrimitive?.intOrNull
+                val code = (body["code"] as? JsonPrimitive)?.intOrNull
                 // Gemini answers a rejected key with HTTP 400 and INVALID_ARGUMENT, and a missing model
                 // with 404. The status code alone therefore cannot separate "wrong key" from "bad
                 // request", so the reason string is checked first — it is the only place
                 // API_KEY_INVALID appears.
                 val status = body["status"].stringOrNull().orEmpty()
-                val reasons =
-                    (body["details"] as? JsonArray).orEmpty().mapNotNull {
-                        (it as? JsonObject)?.get("reason").stringOrNull()
-                    }
                 val mapped =
-                    when {
-                        status == "UNAUTHENTICATED" || "API_KEY_INVALID" in reasons ||
-                            "API_KEY_EXPIRED" in reasons || "API_KEY_SERVICE_BLOCKED" in reasons -> {
-                            ProviderError.INVALID_CREDENTIAL
+                    geminiStatusError(status, geminiErrorReasons(body))
+                        ?: when {
+                            code == 400 && status == "INVALID_ARGUMENT" -> ProviderError.HTTP
+                            code != null -> httpError(code)
+                            else -> ProviderError.HTTP
                         }
-
-                        status == "PERMISSION_DENIED" -> {
-                            ProviderError.PERMISSION_DENIED
-                        }
-
-                        code == 400 && status == "INVALID_ARGUMENT" -> {
-                            ProviderError.HTTP
-                        }
-
-                        code != null -> {
-                            httpError(code)
-                        }
-
-                        else -> {
-                            ProviderError.HTTP
-                        }
-                    }
                 return listOf(StreamEvent.Failure(mapped))
             }
             // `promptFeedback.blockReason` means the PROMPT was filtered, not that the request was
@@ -262,14 +250,15 @@ internal class GeminiStreamDecoder {
                 buildString {
                     (candidate["content"] as? JsonObject)?.let { content ->
                         // role may legitimately be absent on a single-turn reply.
-                        require(content["role"].stringOrNull() in listOf(null, "model"))
+                        val role = content["role"].stringOrNull()
+                        require(role == null || role == "model")
                         (content["parts"] as? JsonArray)?.forEach { element ->
                             val part = element.jsonObject
                             // No key whitelist: Part has many documented members (inlineData,
                             // fileData, functionCall, executableCode, ...). Requiring an exact set
                             // turned one unrecognised-but-legal field into a failed answer. Only
                             // text contributes canonical content; thought parts are not rendered.
-                            if (part["thought"]?.jsonPrimitive?.booleanOrNull != true) {
+                            if ((part["thought"] as? JsonPrimitive)?.booleanOrNull != true) {
                                 part["text"].stringOrNull()?.let { append(it) }
                             } else {
                                 sawThought = true
@@ -286,7 +275,7 @@ internal class GeminiStreamDecoder {
                     // to render, so the idle deadline must see it as progress.
                     add(StreamEvent.Working)
                 }
-                when (candidate["finishReason"]?.jsonPrimitive?.contentOrNull) {
+                when (candidate["finishReason"].stringOrNull()) {
                     null, "FINISH_REASON_UNSPECIFIED" -> {
                         Unit
                     }

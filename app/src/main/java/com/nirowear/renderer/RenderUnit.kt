@@ -77,11 +77,10 @@ internal fun renderUnitsFor(
         val key = keys[localIndex]
         when (block) {
             is ContentBlock.Code -> {
-                val lines = block.source.lines()
-                if (lines.size <= CODE_LINES_PER_ITEM) {
+                if (!hasMoreLinesThan(block.source, CODE_LINES_PER_ITEM)) {
                     units += RenderUnit.Whole(key, index, block)
                 } else {
-                    lines.chunked(CODE_LINES_PER_ITEM).forEachIndexed { chunk, part ->
+                    block.source.lines().chunked(CODE_LINES_PER_ITEM).forEachIndexed { chunk, part ->
                         units +=
                             RenderUnit.CodeChunk(
                                 key = "$key/c$chunk",
@@ -144,4 +143,23 @@ internal fun unitRangeByBlock(
             if (existing.isEmpty()) unitIndex..unitIndex else existing.first..unitIndex
     }
     return ranges
+}
+
+private fun hasMoreLinesThan(
+    source: String,
+    maxLines: Int,
+): Boolean {
+    var breaks = 0
+    var i = 0
+    while (i < source.length) {
+        val c = source[i]
+        if (c == '\n') {
+            if (++breaks >= maxLines) return true
+        } else if (c == '\r') {
+            if (i + 1 < source.length && source[i + 1] == '\n') i++
+            if (++breaks >= maxLines) return true
+        }
+        i++
+    }
+    return false
 }

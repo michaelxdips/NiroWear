@@ -10,7 +10,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.produceState
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.platform.LocalDensity
@@ -38,20 +42,17 @@ fun rememberMath(
     complete: Boolean = true,
 ): Drawable? {
     val px = with(LocalDensity.current) { 18.sp.toPx() }
-    val initial = if (complete) mathRenderer.cached(source, px) else null
-    // Seed from cache to prevent a raw LaTeX flash on scroll re-entry when already complete.
-    return produceState<Drawable?>(
-        initialValue = initial,
-        source,
-        complete,
-        px,
-    ) {
-        if (!complete) {
-            value = null
-            return@produceState
+    // Seed synchronously on cache hit (avoiding a raw LaTeX flash and skipping coroutine launch),
+    // and retain the rendered Drawable in state so LRU cache eviction never flashes raw LaTeX.
+    var drawable by remember(source, complete, px) {
+        mutableStateOf(if (complete) mathRenderer.cached(source, px) else null)
+    }
+    if (complete && drawable == null) {
+        LaunchedEffect(source, px) {
+            drawable = mathRenderer.render(source, px)
         }
-        value = initial ?: mathRenderer.render(source, px)
-    }.value
+    }
+    return drawable
 }
 
 @Composable

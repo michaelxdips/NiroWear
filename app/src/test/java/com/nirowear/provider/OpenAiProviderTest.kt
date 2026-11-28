@@ -451,4 +451,14 @@ class OpenAiProviderTest {
             decoder.accept("""{"type":"response.incomplete","response":{"incomplete_details":null}}"""),
         )
     }
+
+    @Test fun nonStringErrorCodeMapsToHttpInsteadOfProtocolException() {
+        val decoder = OpenAiStreamDecoder()
+        assertEquals(
+            listOf(StreamEvent.Failure(ProviderError.HTTP)),
+            decoder.accept("""{"type":"error","code":{"nested":1}}"""),
+        )
+        assertEquals(null, openAiHttpError("""{"error":{"code":{"nested":1}}}"""))
+        assertEquals(ProviderError.HTTP, openAiError(Json.parseToJsonElement("""{"code":[1,2]}""")))
+    }
 }

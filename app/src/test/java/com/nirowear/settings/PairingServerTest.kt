@@ -4,6 +4,8 @@ import com.nirowear.provider.ModelDiscoveryResult
 import com.nirowear.provider.ProviderError
 import com.nirowear.provider.ProviderType
 import com.nirowear.provider.SafeProviderException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancel
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -489,6 +491,86 @@ class PairingServerTest {
             assertEquals(400, post(pairing.url + "pair", browser.encrypt(invalidModelPayload)).first)
             assertEquals(200, post(pairing.url + "pair", browser.encrypt(payload())).first)
             assertEquals("Phone sent", received.get()?.name)
+        }
+    }
+
+    @Test
+    fun malformedOrNegativeContentLengthIsRejectedWith400() {
+        val received = AtomicReference<PairingPayload?>(null)
+        server(received).use { pairing ->
+            val path = "/" + pairing.url.substringAfter("://").substringAfter("/") + "pair"
+            for (badLength in listOf("-5", "not-a-number", "99999999999999999999999")) {
+                val socket = trustAll.socketFactory.createSocket("127.0.0.1", pairing.port)
+                socket.soTimeout = 5000
+                socket.use { s ->
+                    val req = "POST $path HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: $badLength\r\n\r\n"
+                    s.getOutputStream().write(req.toByteArray(Charsets.US_ASCII))
+                    s.getOutputStream().flush()
+                    val statusLine = s.getInputStream().bufferedReader().readLine().orEmpty()
+                    assertTrue("Expected 400 for Content-Length: $badLength, got: $statusLine", statusLine.contains(" 400 "))
+                }
+            }
+            assertNull(received.get())
+        }
+    }
+
+    @Test
+    fun nonStringJsonFieldsAreRejectedWith400AndCloseCancelsSlowModelFetch() {
+        val received = AtomicReference<PairingPayload?>(null)
+        val fetchStarted = java.util.concurrent.CountDownLatch(1)
+        val fetchCancelled = java.util.concurrent.CountDownLatch(1)
+        val fetchScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
+        val pairing =
+            PairingServer(
+                host = "127.0.0.1",
+                allowLocalHttp = true,
+                onFetchModels = {
+                    kotlinx.coroutines.runBlocking {
+                        fetchScope
+                            .async {
+                                fetchStarted.countDown()
+                                try {
+                                    kotlinx.coroutines.delay(30_000)
+                                    ModelDiscoveryResult.Models(listOf("never"))
+                                } catch (c: kotlinx.coroutines.CancellationException) {
+                                    fetchCancelled.countDown()
+                                    throw c
+                                }
+                            }.await()
+                    }
+                },
+            ) { received.set(it) }.apply { start() }
+        try {
+            val hs = get(pairing.url + "handshake").second
+            val browser = Browser(hs, capability(pairing.url))
+            val nullNamePayload =
+                """{"type":"OPENAI","name":null,"base":"https://api.openai.com/v1","model":"gpt-4o","key":"sk-valid"}"""
+            assertEquals(400, post(pairing.url + "pair", browser.encrypt(nullNamePayload)).first)
+            val numBasePayload =
+                """{"type":"OPENAI","name":"Test","base":123,"model":"gpt-4o","key":"sk-valid"}"""
+            assertEquals(400, post(pairing.url + "pair", browser.encrypt(numBasePayload)).first)
+            assertNull("non-string JSON fields must not be accepted", received.get())
+
+            // Start a slow /models request, then cancel fetchScope + close server cleanly.
+            val reqThread =
+                Thread {
+                    runCatching {
+                        val modelReq = """{"type":"OPENAI","base":"https://api.openai.com/v1","key":"sk-valid"}"""
+                        post(pairing.url + "models", browser.encrypt(modelReq))
+                    }
+                }.apply {
+                    isDaemon = true
+                    start()
+                }
+            assertTrue("fetch callback must start", fetchStarted.await(5, java.util.concurrent.TimeUnit.SECONDS))
+            fetchScope.cancel()
+            pairing.close()
+            assertTrue("cancelling fetchScope must abort slow discovery", fetchCancelled.await(5, java.util.concurrent.TimeUnit.SECONDS))
+            reqThread.join(5000)
+            assertTrue("request thread must exit promptly on close", !reqThread.isAlive)
+        } finally {
+            fetchScope.cancel()
+            pairing.close()
         }
     }
 }

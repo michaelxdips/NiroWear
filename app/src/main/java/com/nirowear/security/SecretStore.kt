@@ -94,7 +94,7 @@ class SecretStore(
             val target = file(ref)
             val output = target.startWrite()
             try {
-                output.write(byteArrayOf(1))
+                output.write(1)
                 output.write(iv)
                 CredentialPromotionProbe.reached("CANDIDATE_WRITING")
                 output.write(encrypted)
@@ -111,17 +111,23 @@ class SecretStore(
 
     @Synchronized
     fun read(ref: String): SecretValue {
-        // A missing payload (rotated-away or deleted ref) says nothing about the key: an
-        // in-flight reader holding a stale ref must not nuke the live Keystore entry that
-        // siblings still decrypt with.
-        if (!file(ref).baseFile.exists()) throw CredentialUnavailable()
+        val target = file(ref)
+        val payload =
+            try {
+                // Delegate directly to AtomicFile.readFully() so an interrupted write's .bak
+                // backup is recovered automatically instead of failing on baseFile.exists().
+                target.readFully()
+            } catch (_: Exception) {
+                // A missing or unreadable payload file is a filesystem failure, not a Keystore
+                // failure: keep the cached Keystore handle intact for sibling credentials.
+                throw CredentialUnavailable()
+            }
         try {
-            val payload = file(ref).readFully()
             require(payload.size in 30..16384 && payload[0] == 1.toByte())
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-            cipher.init(Cipher.DECRYPT_MODE, key(create = false), GCMParameterSpec(128, payload.copyOfRange(1, 13)))
+            cipher.init(Cipher.DECRYPT_MODE, key(create = false), GCMParameterSpec(128, payload, 1, 12))
             cipher.updateAAD(ref.toByteArray(Charsets.UTF_8))
-            val plaintext = cipher.doFinal(payload.copyOfRange(13, payload.size))
+            val plaintext = cipher.doFinal(payload, 13, payload.size - 13)
             return try {
                 SecretValue(plaintext.toString(Charsets.UTF_8))
             } finally {

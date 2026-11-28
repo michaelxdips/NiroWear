@@ -36,8 +36,14 @@ class LanAddressTest {
         assertTrue(isPrivateAddress("10.1.2.3"))
         assertTrue(isPrivateAddress("192.168.8.2"))
         assertTrue(isPrivateAddress("172.16.0.1"))
+        assertTrue(isPrivateAddress("172.20.1.1"))
         assertTrue(isPrivateAddress("172.31.255.254"))
+        assertTrue(isPrivateAddress("169.254.1.1"))
+        assertFalse("172.15 is public", isPrivateAddress("172.15.255.255"))
         assertFalse("172.32 is public", isPrivateAddress("172.32.0.1"))
+        assertFalse("leading zero is rejected", isPrivateAddress("172.016.0.1"))
+        assertFalse("three-digit octet is rejected", isPrivateAddress("172.160.0.1"))
         assertFalse(isPrivateAddress("8.8.8.8"))
+        assertFalse(isPrivateAddress(""))
     }
 }

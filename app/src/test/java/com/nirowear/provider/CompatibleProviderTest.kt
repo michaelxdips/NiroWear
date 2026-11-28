@@ -258,4 +258,14 @@ class CompatibleProviderTest {
         )
         assertEquals(listOf(StreamEvent.Completed), decoder.accept("[DONE]"))
     }
+
+    @Test
+    fun listModelsReturnsUnavailableOnInvalidBaseUrlLikeNativeAdapters() =
+        runBlocking {
+            val bad = profile.copy(baseUrl = "http://example.com/v1")
+            assertEquals(
+                ModelDiscoveryResult.Unavailable(ProviderError.PROTOCOL),
+                OpenAiCompatibleProvider(allowLocalHttp = false).listModels(bad, SecretValue("test")),
+            )
+        }
 }

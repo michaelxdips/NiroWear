@@ -156,12 +156,13 @@ class ProviderSettings(
                 currentCoroutineContext().ensureActive()
                 withContext(NonCancellable) {
                     store.edit { prefs ->
+                        val raw = prefs[profilesKey] ?: "[]"
                         val profiles =
-                            decode(prefs[profilesKey] ?: "[]").filterNot { it.id == profile.id } +
+                            decode(raw).filterNot { it.id == profile.id } +
                                 profile.copy(credentialRef = ref)
                         // Preserve entries this build cannot decode instead of erasing them: an erased
                         // entry loses its credential reference, and cleanup would then delete its key.
-                        prefs[profilesKey] = encodePreserving(profiles, prefs[profilesKey] ?: "[]")
+                        prefs[profilesKey] = encodePreserving(profiles, raw)
                         // Selecting is a separate, explicit action (select()). Replacing a key on an
                         // existing profile must not retarget the next send: editing provider B while
                         // A is active used to silently make B the active provider and model, which is
@@ -174,7 +175,7 @@ class ProviderSettings(
                         // exists at all; otherwise the user picks with select().
                         if (previous == null && !prefs.contains(selectedKey)) prefs[selectedKey] = profile.id
                     }
-                    ; promoted = true
+                    promoted = true
                 }
             } finally {
                 withContext(NonCancellable) {
@@ -211,31 +212,32 @@ class ProviderSettings(
             withContext(Dispatchers.IO + NonCancellable) {
                 val current = state.first()
                 check(current.error == null) { "Provider settings unavailable" }
-                val previous = current.profiles.find { it.id == id } ?: return@withContext
-                store.edit { prefs ->
-                    // Encode from the document as it is NOW, and carry forward entries this build
-                    // cannot decode — otherwise removing one provider silently erases the others'
-                    // unreadable entries and takes their keys with them.
-                    val kept = decode(prefs[profilesKey] ?: "[]").filterNot { it.id == id }
-                    val raw = prefs[profilesKey] ?: "[]"
-                    prefs[profilesKey] = encodePreserving(kept, raw)
-                    // Deleting the ACTIVE provider used to just drop the selection, leaving the app
-                    // with no provider and nothing on screen saying so until the next send failed.
-                    // Fall back to the first survivor so chatting keeps working.
-                    //
-                    // `storedIds` matters: a selection can name a profile this build cannot DECODE
-                    // (a newer provider type, a missing field). Comparing against the decoded list
-                    // alone treated that as "gone" and overwrote the stored choice with
-                    // `remaining.first()`, so the user's real selection was destroyed by deleting an
-                    // unrelated provider — the opposite of what readableSelection promises.
-                    val selection = nextSelection(kept, prefs[selectedKey], id, storedIds(raw))
-                    if (selection != null) prefs[selectedKey] = selection else prefs.remove(selectedKey)
-                }
+                if (current.profiles.none { it.id == id }) return@withContext
+                val updated =
+                    store.edit { prefs ->
+                        // Encode from the document as it is NOW, and carry forward entries this build
+                        // cannot decode — otherwise removing one provider silently erases the others'
+                        // unreadable entries and takes their keys with them.
+                        val raw = prefs[profilesKey] ?: "[]"
+                        val kept = decode(raw).filterNot { it.id == id }
+                        prefs[profilesKey] = encodePreserving(kept, raw)
+                        // Deleting the ACTIVE provider used to just drop the selection, leaving the app
+                        // with no provider and nothing on screen saying so until the next send failed.
+                        // Fall back to the first survivor so chatting keeps working.
+                        //
+                        // `storedIds` matters: a selection can name a profile this build cannot DECODE
+                        // (a newer provider type, a missing field). Comparing against the decoded list
+                        // alone treated that as "gone" and overwrote the stored choice with
+                        // `remaining.first()`, so the user's real selection was destroyed by deleting an
+                        // unrelated provider — the opposite of what readableSelection promises.
+                        val selection = nextSelection(kept, prefs[selectedKey], id, storedIds(raw))
+                        if (selection != null) prefs[selectedKey] = selection else prefs.remove(selectedKey)
+                    }
                 // Same rule as save() and recover(): cleanup deletes any ciphertext whose ref is absent, so
                 // the set must include entries this build cannot parse. Using the decoded refs here
                 // meant deleting one provider could also destroy the stored key of an entry that was
                 // merely unreadable.
-                secrets.cleanup(referencedCredentialRefs(store.data.first()[profilesKey] ?: "[]"))
+                secrets.cleanup(referencedCredentialRefs(updated[profilesKey] ?: "[]"))
             }
         }
 

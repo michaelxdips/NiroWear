@@ -465,4 +465,20 @@ class AnthropicProviderTest {
         val events = decoder.accept(start) + decoder.accept(end("refusal")) + decoder.accept(stop)
         assertEquals(listOf(StreamEvent.Failure(ProviderError.PROMPT_BLOCKED)), events)
     }
+
+    @Test fun metadataCacheCanonicalizesTrailingSlashInBaseUrl() =
+        runBlocking {
+            MockWebServer().use { server ->
+                val raw = server.url("/v1").toString().trimEnd('/')
+                val p1 = profile.copy(baseUrl = raw)
+                val p2 = profile.copy(baseUrl = "$raw/")
+                val provider = AnthropicProvider(allowLocalHttp = true)
+                server.enqueue(metadata())
+                server.enqueue(sse(start, block, delta, endBlock, end("end_turn"), stop))
+                server.enqueue(sse(start, block, delta, endBlock, end("end_turn"), stop))
+                assertEquals(StreamEvent.Completed, provider.streamChat(chat, p1, secret).last())
+                assertEquals(StreamEvent.Completed, provider.streamChat(chat, p2, secret).last())
+                assertEquals("trailing slash variant must share cached metadata", 3, server.requestCount)
+            }
+        }
 }

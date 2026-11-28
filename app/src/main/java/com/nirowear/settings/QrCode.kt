@@ -32,16 +32,17 @@ internal object QrCode {
     /** Quiet zone in modules, per the QR spec (4 on every side). */
     private const val MARGIN = 4
 
+    private val HINTS =
+        mapOf(
+            EncodeHintType.ERROR_CORRECTION to ErrorCorrectionLevel.M,
+            EncodeHintType.MARGIN to MARGIN,
+            EncodeHintType.CHARACTER_SET to "UTF-8",
+        )
+
     fun matrix(text: String): QrMatrix {
-        val hints =
-            mapOf(
-                EncodeHintType.ERROR_CORRECTION to ErrorCorrectionLevel.M,
-                EncodeHintType.MARGIN to MARGIN,
-                EncodeHintType.CHARACTER_SET to "UTF-8",
-            )
         // Width and height 0 make ZXing choose the smallest matrix for the content; combined with
         // the MARGIN hint the result already includes the quiet zone.
-        val bits = QRCodeWriter().encode(text, BarcodeFormat.QR_CODE, 0, 0, hints)
+        val bits = QRCodeWriter().encode(text, BarcodeFormat.QR_CODE, 0, 0, HINTS)
         val size = bits.width
         val dark = BooleanArray(size * size) { i -> bits.get(i % size, i / size) }
         return QrMatrix(size, dark)

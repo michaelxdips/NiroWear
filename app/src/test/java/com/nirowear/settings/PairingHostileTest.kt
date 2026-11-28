@@ -272,8 +272,8 @@ class PairingHostileTest {
         val secondMs = System.currentTimeMillis() - second
         val refused =
             runCatching {
-                raw(port, request("GET", "/$cap/handshake"), readMs = 3000)
-                false
+                val response = raw(port, request("GET", "/$cap/handshake"), readMs = 3000)
+                response.isNullOrEmpty() || status(response) == null
             }.getOrDefault(true)
         runCatching { idle.close() }
         assertTrue("first close took ${firstMs}ms", firstMs < 1000)

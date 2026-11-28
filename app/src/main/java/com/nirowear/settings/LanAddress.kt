@@ -38,7 +38,11 @@ internal fun isMobileInterface(name: String): Boolean =
     MOBILE_INTERFACE_PREFIXES.any { name.lowercase().startsWith(it) }
 
 /** True only for RFC1918 / link-local space. A public address earns an extra warning, not a block. */
-internal fun isPrivateAddress(host: String): Boolean =
-    host.startsWith("10.") || host.startsWith("192.168.") || host.startsWith("172.16.") ||
-        host.startsWith("172.17.") || host.startsWith("172.18.") || host.startsWith("172.19.") ||
-        Regex("^172\\.(2[0-9]|3[01])\\.").containsMatchIn(host) || host.startsWith("169.254.")
+internal fun isPrivateAddress(host: String): Boolean {
+    if (host.startsWith("10.") || host.startsWith("192.168.") || host.startsWith("169.254.")) return true
+    if (!host.startsWith("172.")) return false
+    val secondDot = host.indexOf('.', startIndex = 4)
+    if (secondDot != 6) return false
+    val octet = host.substring(4, 6).toIntOrNull() ?: return false
+    return octet in 16..31
+}

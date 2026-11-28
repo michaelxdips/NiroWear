@@ -11,12 +11,10 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
-import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -40,7 +38,7 @@ class OpenAiProvider(
         try {
             val body =
                 http.fetch(
-                    authenticated(profile, secret, "models").build(),
+                    authenticated(profile.baseUrl, secret, "models").build(),
                     decodeError = { _, errBody -> openAiHttpError(errBody) },
                 )
             // Official /models has no pagination or text capability fields. Do not infer from names.
@@ -141,9 +139,9 @@ class OpenAiProvider(
                 )
             }
         val wire =
-            authenticated(profile, secret, "responses")
+            authenticated(normalizedBase, secret, "responses")
                 .header("Accept", "text/event-stream")
-                .post(payload.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
+                .post(payload.toString().toRequestBody(JSON_MEDIA_TYPE))
                 .build()
         // Each collection gets its own stateful decoder, including validation/retry collectors.
         return flow {
@@ -159,13 +157,13 @@ class OpenAiProvider(
     }
 
     private fun authenticated(
-        profile: ProviderProfile,
+        baseUrl: String,
         secret: SecretValue,
         path: String,
     ): Request.Builder =
         Request
             .Builder()
-            .url(Endpoints.compatible(profile.baseUrl, path, allowLocalHttp))
+            .url(Endpoints.compatible(baseUrl, path, allowLocalHttp))
             .header("Authorization", "Bearer ${secret.forRequest()}")
 }
 
@@ -177,7 +175,8 @@ internal class OpenAiStreamDecoder {
     fun accept(payload: String): List<StreamEvent> =
         try {
             val root = Json.parseToJsonElement(payload).jsonObject
-            when (root.getValue("type").jsonPrimitive.content) {
+            val eventType = root.getValue("type").jsonPrimitive.content
+            when (eventType) {
                 // Official event list includes response.queued; it precedes created and carries no text.
                 "response.created", "response.in_progress", "response.queued" -> {
                     val id =
@@ -330,11 +329,7 @@ internal class OpenAiStreamDecoder {
                 // accumulated deltas, and a missing terminal still fails at EOF. Anything outside the
                 // response namespace stays fatal.
                 else -> {
-                    if (root
-                            .getValue("type")
-                            .jsonPrimitive.content
-                            .startsWith("response.")
-                    ) {
+                    if (eventType.startsWith("response.")) {
                         emptyList()
                     } else {
                         listOf(StreamEvent.Failure(ProviderError.PROTOCOL))
@@ -358,7 +353,7 @@ internal class OpenAiStreamDecoder {
 }
 
 internal fun openAiError(element: JsonElement?): ProviderError =
-    when ((element as? JsonObject)?.get("code")?.jsonPrimitive?.contentOrNull) {
+    when ((element as? JsonObject)?.get("code").stringOrNull()) {
         "invalid_api_key" -> ProviderError.INVALID_CREDENTIAL
         "permission_denied" -> ProviderError.PERMISSION_DENIED
         "model_not_found" -> ProviderError.MODEL_UNAVAILABLE

@@ -1,12 +1,12 @@
 package com.nirowear.chat
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Path
@@ -40,30 +40,42 @@ internal fun ReaderAction(
             .clickable(role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Canvas(Modifier.size(18.dp)) {
-            val stroke = 2.dp.toPx()
-            val path = Path()
-            if (retry) {
-                drawArc(
-                    color,
-                    45f,
-                    285f,
-                    false,
-                    topLeft = Offset(size.width * .15f, size.height * .15f),
-                    size = Size(size.width * .7f, size.height * .7f),
-                    style = Stroke(stroke),
-                )
-                path.moveTo(size.width * .85f, size.height * .08f)
-                path.lineTo(size.width * .85f, size.height * .36f)
-                path.lineTo(size.width * .57f, size.height * .36f)
-            } else {
-                path.moveTo(size.width * .5f, size.height * .12f)
-                path.lineTo(size.width * .5f, size.height * .85f)
-                path.moveTo(size.width * .2f, size.height * .55f)
-                path.lineTo(size.width * .5f, size.height * .85f)
-                path.lineTo(size.width * .8f, size.height * .55f)
-            }
-            drawPath(path, color, style = Stroke(stroke))
-        }
+        Box(
+            Modifier
+                .size(18.dp)
+                .drawWithCache {
+                    val stroke = Stroke(2.dp.toPx())
+                    val path =
+                        Path().apply {
+                            if (retry) {
+                                moveTo(size.width * .85f, size.height * .08f)
+                                lineTo(size.width * .85f, size.height * .36f)
+                                lineTo(size.width * .57f, size.height * .36f)
+                            } else {
+                                moveTo(size.width * .5f, size.height * .12f)
+                                lineTo(size.width * .5f, size.height * .85f)
+                                moveTo(size.width * .2f, size.height * .55f)
+                                lineTo(size.width * .5f, size.height * .85f)
+                                lineTo(size.width * .8f, size.height * .55f)
+                            }
+                        }
+                    val arcTopLeft = Offset(size.width * .15f, size.height * .15f)
+                    val arcSize = Size(size.width * .7f, size.height * .7f)
+                    onDrawBehind {
+                        if (retry) {
+                            drawArc(
+                                color,
+                                45f,
+                                285f,
+                                false,
+                                topLeft = arcTopLeft,
+                                size = arcSize,
+                                style = stroke,
+                            )
+                        }
+                        drawPath(path, color, style = stroke)
+                    }
+                },
+        )
     }
 }

@@ -437,11 +437,13 @@ object ResponseParser {
                 continue
             }
             val contentLeading = leadingSpaceCount(line)
-            val markerIndent = listMarkerContentIndent(raw, if (listIndent > 0) Int.MAX_VALUE else 3)
-            if (markerIndent != null) {
-                listIndent = markerIndent
-            } else if (line.isNotBlank() && contentLeading < listIndent) {
-                listIndent = 0
+            if (fence == null) {
+                val markerIndent = listMarkerContentIndent(raw, if (listIndent > 0) Int.MAX_VALUE else 3)
+                if (markerIndent != null) {
+                    listIndent = markerIndent
+                } else if (line.isNotBlank() && contentLeading < listIndent) {
+                    listIndent = 0
+                }
             }
             val view =
                 if (listIndent > 0 && contentLeading >= listIndent) line.substring(listIndent) else line
@@ -710,19 +712,21 @@ object ResponseParser {
                 // as an empty code block, a formula and a stray "```". Any fence inside a nested list
                 // hit this.
                 val contentLeading = leadingSpaceCount(container)
-                val markerIndent =
-                    listMarkerContentIndent(
-                        rest,
-                        // Inside a list a marker may sit at any depth; only a top-level marker is
-                        // limited to three columns (four is an indented code block there).
-                        maxLeading = if (listContentIndent > 0) Int.MAX_VALUE else 3,
-                    )
-                if (markerIndent != null) {
-                    listContentIndent = markerIndent
-                    mathDedent = 0
-                } else if (container.isNotBlank() && contentLeading < listContentIndent) {
-                    listContentIndent = 0
-                    mathDedent = 0
+                if (!inFence) {
+                    val markerIndent =
+                        listMarkerContentIndent(
+                            rest,
+                            // Inside a list a marker may sit at any depth; only a top-level marker is
+                            // limited to three columns (four is an indented code block there).
+                            maxLeading = if (listContentIndent > 0) Int.MAX_VALUE else 3,
+                        )
+                    if (markerIndent != null) {
+                        listContentIndent = markerIndent
+                        mathDedent = 0
+                    } else if (container.isNotBlank() && contentLeading < listContentIndent) {
+                        listContentIndent = 0
+                        mathDedent = 0
+                    }
                 }
                 val view =
                     if (listContentIndent > 0 && contentLeading >= listContentIndent) {
@@ -912,20 +916,95 @@ object ResponseParser {
         val prefixBlocks: List<ContentBlock>,
     )
 
+    /** CommonMark Type 1-5 HTML block openers that may span blank lines (`<textarea>`, `<?`, `<!`, etc.). */
+    private val INCREMENTAL_HTML_BLOCK =
+        Regex(
+            "^ {0,3}(?:<!--|<\\?|<!|<(?:textarea|div|table|pre|script|style|section|details|summary|figure|" +
+                "blockquote|ul|ol|dl|p|html|body)\\b)",
+            RegexOption.IGNORE_CASE,
+        )
+
+    private fun isUnescapedAt(
+        text: String,
+        index: Int,
+    ): Boolean {
+        var slashes = 0
+        var back = index - 1
+        while (back >= 0 && text[back] == '\\') {
+            slashes++
+            back--
+        }
+        return slashes % 2 == 0
+    }
+
+    /**
+     * Linear-time check for any CommonMark link reference definition (`[label]:`), including
+     * multi-line labels and definitions nested inside blockquotes or list items. Only invoked when
+     * [text] contains `]:`.
+     */
+    private fun containsReferenceDef(text: String): Boolean {
+        var searchFrom = 0
+        while (true) {
+            val close = text.indexOf("]:", searchFrom)
+            if (close < 0) return false
+            searchFrom = close + 2
+            if (!isUnescapedAt(text, close)) continue
+            val floor = (close - 1000).coerceAtLeast(0)
+            var i = close - 1
+            var prevWasNewline = false
+            var hasNonWs = false
+            while (i >= floor) {
+                val c = text[i]
+                if (c == '\n') {
+                    if (prevWasNewline) break
+                    prevWasNewline = true
+                } else {
+                    prevWasNewline = false
+                    if (c == ']' && isUnescapedAt(text, i)) break
+                    if (c == '[' && isUnescapedAt(text, i)) {
+                        if (hasNonWs) {
+                            var prefixValid = true
+                            var k = i - 1
+                            while (k >= 0 && text[k] != '\n') {
+                                val p = text[k]
+                                if (p != ' ' && p != '\t' && p != '>' && p != '-' && p != '*' &&
+                                    p != '+' && p != '.' && p != ')' && p !in '0'..'9'
+                                ) {
+                                    prefixValid = false
+                                    break
+                                }
+                                k--
+                            }
+                            if (prefixValid) return true
+                        }
+                        break
+                    }
+                    if (!c.isWhitespace()) hasNonWs = true
+                }
+                i--
+            }
+        }
+    }
+
+    private fun hasBlockSpanningMarker(text: String): Boolean =
+        text.contains("$$") ||
+            text.contains("\\[") ||
+            text.contains("```") ||
+            text.contains("~~~") ||
+            text.indexOf('<') >= 0
+
     /**
      * Streaming-aware entrypoint: reuses [previous]'s already-parsed [IncrementalParseState.prefixBlocks]
      * whenever [source] extends [IncrementalParseState.prefix] across a verified non-continuable
      * top-level boundary (`\n\n` or plain column-0 `- <word>` bullet) with no link reference
      * definitions. Always falls back to full [parse] when any ambiguity exists.
      */
-    private val REFERENCE_DEF_LINE = Regex("(?m)^ {0,3}\\[[^\\]\\n]+\\]:")
-
     internal fun parseIncremental(
         previous: IncrementalParseState?,
         source: String,
     ): Pair<IncrementalParseState?, List<ContentBlock>> {
         val normalized = if (source.indexOf('\r') >= 0) source.replace("\r\n", "\n") else source
-        if (normalized.length < MIN_INCREMENTAL_PREFIX_CHARS || REFERENCE_DEF_LINE.containsMatchIn(normalized)) {
+        if (normalized.length < MIN_INCREMENTAL_PREFIX_CHARS) {
             return null to parse(normalized)
         }
         val base =
@@ -940,6 +1019,11 @@ object ResponseParser {
                 null
             }
         val tail = if (base != null) normalized.substring(base.prefix.length) else normalized
+        // `base.prefix` was already verified free of reference definitions and ends with '\n', so a
+        // reference definition can only appear in `tail`. If one appears anywhere, re-parse in full.
+        if (tail.indexOf("]:") >= 0 && containsReferenceDef(tail)) {
+            return null to parse(normalized)
+        }
         val tailCut = findSafePrefixCut(tail)
         if (base != null && tailCut < MIN_INCREMENTAL_ADVANCE_CHARS) {
             return base to (base.prefixBlocks + parse(tail))
@@ -1011,15 +1095,32 @@ object ResponseParser {
                 val closeIdx = closingIndex(raw, mathClosing, 0)
                 if (closeIdx >= 0) {
                     val trailing = raw.substring(closeIdx + mathClosing.length)
+                    if (trailing.isNotBlank() && hasBlockSpanningMarker(trailing)) {
+                        return lastCut
+                    }
                     mathClosing = null
                     if (trailing.isNotBlank()) blockDirty = true
                 }
                 seenNonBlankInBlock = true
                 inTopDashBullet = false
             } else if (fence != null) {
-                val contentLeading = leadingSpaceCount(raw)
-                val check = if (listIndent > 0 && contentLeading >= listIndent) raw.substring(listIndent) else raw
-                val matcherTarget = if (fenceNested) uncontainer(check) else check
+                val container = uncontainer(raw)
+                val contentLeading = leadingSpaceCount(container)
+                val view =
+                    if (listIndent > 0 && contentLeading >= listIndent) {
+                        container.substring(listIndent)
+                    } else {
+                        container
+                    }
+                val rawLeading = leadingSpaceCount(raw)
+                val listView = if (listIndent > 0 && rawLeading >= listIndent) raw.substring(listIndent) else raw
+                val fenced =
+                    if (fenceOpening(view) == null && (raw.contains("```") || raw.contains("~~~"))) {
+                        view.replaceFirst(DEEP_QUOTE, "")
+                    } else {
+                        view
+                    }
+                val matcherTarget = if (fenceNested) fenced else listView
                 findFence(matcherTarget)?.let { match ->
                     val run = match.groupValues[1]
                     if (run.first() == fence && run.length >= fenceLen && match.groupValues[2].isBlank()) {
@@ -1031,7 +1132,6 @@ object ResponseParser {
                 inTopDashBullet = false
             } else if (raw.isEmpty()) {
                 val canCutAfterBlock = seenNonBlankInBlock && !blockDirty
-                listIndent = 0
                 blockDirty = false
                 seenNonBlankInBlock = false
                 inTopDashBullet = false
@@ -1071,24 +1171,40 @@ object ResponseParser {
                     listIndent = 0
                 }
                 val rawLeading = leadingSpaceCount(raw)
-                val view = if (listIndent > 0 && rawLeading >= listIndent) raw.substring(listIndent) else raw
-                val opener = fenceOpening(uncontainer(view))
+                val strippedView =
+                    if (listIndent > 0 && leading >= listIndent) {
+                        container.substring(listIndent)
+                    } else {
+                        container
+                    }
+                val fencedView =
+                    if (fenceOpening(strippedView) == null && (raw.contains("```") || raw.contains("~~~"))) {
+                        strippedView.replaceFirst(DEEP_QUOTE, "")
+                    } else {
+                        strippedView
+                    }
+                val opener = fenceOpening(fencedView)
                 if (opener != null) {
                     fence = opener.groupValues[1].first()
                     fenceLen = opener.groupValues[1].length
-                    fenceNested = uncontainer(raw) != raw
+                    val deep = strippedView.replaceFirst(DEEP_QUOTE, "")
+                    fenceNested = uncontainer(raw) != raw || (deep != strippedView && fenceOpening(deep) != null)
                     if (fenceNested || rawLeading >= 4 || raw.startsWith('\t') || listIndent != 0) {
                         blockDirty = true
                     }
-                } else if (raw.indexOf('<') >= 0 && HTML_BLOCK.find(container) != null) {
-                    // HTML blocks (e.g. <pre>, <!--) can span blank lines, so disable incremental split.
+                } else if (raw.indexOf('<') >= 0 && INCREMENTAL_HTML_BLOCK.find(container) != null) {
+                    // HTML blocks (e.g. <pre>, <textarea>, <!--, <?, <!) can span blank lines, so disable split.
                     return lastCut
                 } else {
                     var trim = 0
                     while (trim < container.length && container[trim].isWhitespace()) trim++
+                    val relativeIndent =
+                        if (listIndent > 0) (leading - listIndent).coerceAtLeast(0) else leading
+                    val indented =
+                        relativeIndent >= 4 || raw.startsWith('\t') || container.startsWith('\t')
                     val openTok =
                         when {
-                            rawLeading >= 4 || raw.startsWith('\t') -> null
+                            indented -> null
                             container.startsWith("\\[", trim) -> "\\[" to "\\]"
                             container.startsWith("$$", trim) -> "$$" to "$$"
                             else -> null
@@ -1101,13 +1217,22 @@ object ResponseParser {
                         val sameLineClose = closingIndex(after, openTok.second, 0)
                         if (sameLineClose < 0) {
                             mathClosing = openTok.second
-                        } else if (after.substring(sameLineClose + openTok.second.length).isNotBlank()) {
-                            blockDirty = true
+                        } else {
+                            val trailing = after.substring(sameLineClose + openTok.second.length)
+                            if (trailing.isNotBlank() && hasBlockSpanningMarker(trailing)) {
+                                return lastCut
+                            }
+                            if (trailing.isNotBlank()) blockDirty = true
                         }
-                    } else if (raw.contains("$$")) {
+                    } else if (!indented && !isTableRow(container) && raw.contains("$$")) {
                         val mid = findMidlineDisplay(container)
-                        if (mid >= 0 && closingIndex(container, "$$", mid + 2) < 0) {
-                            mathClosing = "$$"
+                        if (mid >= 0) {
+                            val close = closingIndex(container, "$$", mid + 2)
+                            if (close < 0) {
+                                mathClosing = "$$"
+                            } else if (hasBlockSpanningMarker(container.substring(close + 2))) {
+                                return lastCut
+                            }
                         }
                         blockDirty = true
                     } else if (
@@ -1127,12 +1252,8 @@ object ResponseParser {
         return lastCut
     }
 
-    /** True when the line is itself a fence run, possibly behind container markers. */
-    private fun isFenceRun(line: String): Boolean {
-        val stripped = uncontainer(line)
-        if (fenceOpening(stripped) != null) return true
-        return line.contains("```") || line.contains("~~~")
-    }
+    /** True when the line carries a fence delimiter run, possibly behind container markers. */
+    private fun isFenceRun(line: String): Boolean = line.contains("```") || line.contains("~~~")
 
     /** A content line that cannot continue a container: unindented, unmarked, non-blank. */
     private fun isLazyFenceContent(line: String): Boolean {

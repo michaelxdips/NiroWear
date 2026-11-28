@@ -10,7 +10,6 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
@@ -18,7 +17,6 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import okhttp3.HttpUrl
-import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -40,6 +38,7 @@ private const val ANTHROPIC_VERSION = "2026-10-21"
  * not by guessing a limit from the model name.
  */
 private const val METADATA_TIMEOUT_MS = 15_000L
+private const val MAX_METADATA_CACHE_ENTRIES = 64
 
 /**
  * Documented StopReason values. All of them end the message; only the presence of `message_stop`
@@ -170,7 +169,8 @@ class AnthropicProvider(
                 //
                 // Cached per endpoint+model for the process: this GET sits on the critical path of EVERY
                 // turn, so an uncached watch paid a radio wakeup per send before the first token.
-                val metadataKey = profile.baseUrl + "|" + profile.selectedModelId
+                val normalizedBase = Endpoints.normalize(profile.baseUrl, allowLocalHttp)
+                val metadataKey = "$normalizedBase|${profile.selectedModelId}"
                 val cachedTokens = maxTokensByModel[metadataKey]
                 val reportedMaxTokens =
                     if (cachedTokens != null) {
@@ -181,21 +181,21 @@ class AnthropicProvider(
                             try {
                                 val modelUrl =
                                     Endpoints
-                                        .compatible(profile.baseUrl, "models", allowLocalHttp)
+                                        .compatible(normalizedBase, "models", allowLocalHttp)
                                         .newBuilder()
                                         .addPathSegment(profile.selectedModelId)
                                         .build()
                                 val parsed =
-                                    Json
-                                        .parseToJsonElement(
-                                            http.fetch(
-                                                authenticated(modelUrl, secret).build(),
-                                                METADATA_TIMEOUT_MS,
-                                                decodeError = { _, body -> anthropicHttpError(body) },
-                                            ),
-                                        ).jsonObject["max_tokens"]
-                                        ?.jsonPrimitive
-                                        ?.intOrNull
+                                    (
+                                        Json
+                                            .parseToJsonElement(
+                                                http.fetch(
+                                                    authenticated(modelUrl, secret).build(),
+                                                    METADATA_TIMEOUT_MS,
+                                                    decodeError = { _, body -> anthropicHttpError(body) },
+                                                ),
+                                            ).jsonObject["max_tokens"] as? JsonPrimitive
+                                    )?.intOrNull
                                 deterministic = true
                                 parsed
                             } catch (cancelled: CancellationException) {
@@ -207,9 +207,11 @@ class AnthropicProvider(
                                 null
                             }
                         if (fetched != null && fetched > 0) {
+                            if (maxTokensByModel.size >= MAX_METADATA_CACHE_ENTRIES) maxTokensByModel.clear()
                             maxTokensByModel[metadataKey] = fetched
                             fetched
                         } else if (deterministic) {
+                            if (maxTokensByModel.size >= MAX_METADATA_CACHE_ENTRIES) maxTokensByModel.clear()
                             maxTokensByModel[metadataKey] = -1
                             -1
                         } else {
@@ -246,11 +248,11 @@ class AnthropicProvider(
                             },
                         )
                     }
-                val url = Endpoints.compatible(profile.baseUrl, "messages", allowLocalHttp)
+                val url = Endpoints.compatible(normalizedBase, "messages", allowLocalHttp)
                 val wire =
                     authenticated(url, secret)
                         .header("Accept", "text/event-stream")
-                        .post(payload.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
+                        .post(payload.toString().toRequestBody(JSON_MEDIA_TYPE))
                         .build()
                 emitAll(
                     http.stream(
@@ -373,8 +375,7 @@ internal class AnthropicStreamDecoder {
                     root
                         .getValue("delta")
                         .jsonObject["stop_reason"]
-                        ?.jsonPrimitive
-                        ?.contentOrNull
+                        .stringOrNull()
                         ?.let { reason = it }
                     // Every StopReason value is a documented terminal state, not a framing fault:
                     // end_turn, max_tokens, stop_sequence, tool_use, pause_turn, refusal,
@@ -412,15 +413,7 @@ internal class AnthropicStreamDecoder {
                 "error" -> {
                     listOf(
                         StreamEvent.Failure(
-                            anthropicError(
-                                runCatching {
-                                    root
-                                        .getValue("error")
-                                        .jsonObject
-                                        .getValue("type")
-                                        .jsonPrimitive.content
-                                }.getOrNull(),
-                            ),
+                            anthropicError((root["error"] as? JsonObject)?.get("type").stringOrNull()),
                         ),
                     )
                 }

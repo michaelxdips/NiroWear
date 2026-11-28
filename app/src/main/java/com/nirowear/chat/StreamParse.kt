@@ -75,16 +75,25 @@ internal fun mergeParsed(
     val next = nextRecency(recent, open)
     // StoredMessage includes rawContent and status, so streaming checkpoints and linear edits create
     // new keys for the same message ID. Drop superseded (conversationId, id) entries and any removed
-    // rows from the active conversation whenever parsed carries a fresh pass.
-    val supersededIds = parsed.keys.mapTo(HashSet()) { it.conversationId to it.id }
-    val prunedPrevious =
-        if (supersededIds.isEmpty()) {
-            previous
-        } else {
-            previous.filterKeys { entry ->
-                (entry.conversationId to entry.id) !in supersededIds &&
-                    (open == null || entry.conversationId != open)
-            }
+    // rows from the active conversation in one pass without per-tick Pair/HashSet churn.
+    var supersededOther: HashSet<Pair<String, Long>>? = null
+    for (entry in parsed.keys) {
+        if (open == null || entry.conversationId != open) {
+            if (supersededOther == null) supersededOther = HashSet()
+            supersededOther.add(entry.conversationId to entry.id)
         }
-    return evictStaleConversations(prunedPrevious + parsed, next) to next
+    }
+    val merged = LinkedHashMap<StoredMessage, List<Pair<Long, ContentBlock>>>(previous.size + parsed.size)
+    for ((entry, blocks) in previous) {
+        if (entry.conversationId !in next) continue
+        if (open != null && entry.conversationId == open) continue
+        if (supersededOther != null && (entry.conversationId to entry.id) in supersededOther) continue
+        merged[entry] = blocks
+    }
+    for ((entry, blocks) in parsed) {
+        if (entry.conversationId in next) {
+            merged[entry] = blocks
+        }
+    }
+    return merged to next
 }

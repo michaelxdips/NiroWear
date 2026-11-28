@@ -89,4 +89,22 @@ class RenderUnitTest {
         assertEquals(4..4, ranges[2])
         assertEquals("every unit is covered", units.size, ranges.sumOf { it.count() })
     }
+
+    @Test
+    fun codeLineCountBoundaryHandlesLfCrlfAndCr() {
+        for (sep in listOf("\n", "\r\n", "\r")) {
+            val exact24 = (1..CODE_LINES_PER_ITEM).joinToString(sep) { "line $it" }
+            val b24 = blocks(ContentBlock.Code("kt", exact24))
+            val u24 = renderUnitsFor(b24, historyKeysFor(b24))
+            assertEquals("24 lines with sep must stay Whole", 1, u24.size)
+            assertTrue(u24.single() is RenderUnit.Whole)
+
+            val over25 = (1..(CODE_LINES_PER_ITEM + 1)).joinToString(sep) { "line $it" }
+            val b25 = blocks(ContentBlock.Code("kt", over25))
+            val u25 = renderUnitsFor(b25, historyKeysFor(b25)).filterIsInstance<RenderUnit.CodeChunk>()
+            assertEquals("25 lines with sep must split into 2 chunks", 2, u25.size)
+            assertEquals(CODE_LINES_PER_ITEM, u25[0].lines.size)
+            assertEquals(1, u25[1].lines.size)
+        }
+    }
 }

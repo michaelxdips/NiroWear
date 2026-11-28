@@ -110,4 +110,15 @@ class NativeMathGuardTest {
         )
         assertTrue(ResponseParser.parse("text\n\$\$").none { it is ContentBlock.Math })
     }
+
+    @Test
+    fun ruleRaiseArgumentIsBoundedAndPlainAlgebraicMathPasses() {
+        assertTrue("negative bounded raise is ordinary LaTeX", NativeMathGuard.isSafe("\\rule[-2pt]{10pt}{1pt}"))
+        assertTrue("positive bounded raise is admitted", NativeMathGuard.isSafe("\\rule[5pt]{10pt}{1pt}"))
+        assertFalse("huge positive raise must be refused", NativeMathGuard.isSafe("\\rule[99999pt]{10pt}{1pt}"))
+        assertFalse("huge negative raise must be refused", NativeMathGuard.isSafe("\\rule[-99999pt]{10pt}{1pt}"))
+        assertFalse("non-numeric raise must be refused", NativeMathGuard.isSafe("\\rule[abc]{10pt}{1pt}"))
+        assertTrue("command-free math takes fast path and stays admitted", NativeMathGuard.isSafe("x^2 + y^2 = r^2"))
+        assertFalse("command-free unbalanced braces still refused", NativeMathGuard.isSafe("x^{2 + y"))
+    }
 }
