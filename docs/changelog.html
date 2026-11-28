@@ -222,15 +222,49 @@ p:last-child{margin-bottom:0}
     <p>
       Published builds in reverse chronological order, recording the artifact identity and the tests actually run for each cut.
     </p>
-    <p class="meta">Synced to tag v0.3.4 and main · Updated 2026-11-28</p>
+    <p class="meta">Synced to tag v0.3.5 and main · Updated 2026-11-28</p>
   </div>
+
+  <!-- 0.3.5 -->
+  <article class="release">
+    <div class="rside">
+      <span class="rver">0.3.5</span>
+      <span class="rdate">2026-11-28</span>
+      <span class="rtag">Latest release</span>
+    </div>
+    <div class="rbody">
+      <h2>Adaptive multi-watch layout, redesigned phone pairing web app, and wrist usability polish</h2>
+      <p>
+        UX and adaptive display release adapting across round (384-480 px) and square Wear OS dials, maximizing readable dial area with soft edge scrims, redesigning the local Wi-Fi phone pairing web app, and shipping high-MVP wrist ergonomics with zero new dependencies.
+      </p>
+      <ul>
+        <li><strong>Multi-watch adaptive layout (<code>WatchMetrics</code>):</strong> Compute exact circular chord margins for round dials and tight margins for non-round watches, render a full-bleed <code>LazyColumn</code> framed by top/bottom fade scrims over always-visible compact controls, apply gentle <code>roundEdgeTaper</code> to short edge rows, adapt 2- vs 3-icon footer clearances, and add curved Wear Material 3 <code>ScrollIndicator</code> on Reader, History, and Providers.</li>
+        <li><strong>Redesigned phone pairing web app (<code>PAIRING_PAGE</code>):</strong> Replace the plain setup form with a self-contained dark teal mobile card UI featuring an inline SVG Thread mark, live Wi-Fi ECDH status pill, 4 provider quick-select chips synced with <code>#type</code>, API key Show/Hide and clipboard Paste, collapsible Security &amp; certificate disclosure, animated <code>Fetch models</code> spinner, and color-coded status banners.</li>
+        <li><strong>Wrist usability &amp; polish:</strong> Keep screen awake while generating, add persisted Reader Text size (Compact / Standard / Large) and Menu Quick Provider Switcher, two-tap History deletion with relative timestamps and empty state, Copy answer and fenced code-block Copy headers, NiroWear OLED teal palette, turn dividers, pulsing Thinking state, rounded Composer card, thumb-first pairing order, haptics, and 158 EN/ID + 11 renderer strings.</li>
+      </ul>
+      <dl class="ident">
+        <div><dt>versionCode</dt><dd>21</dd></div>
+        <div><dt>size</dt><dd>4,148,043 B</dd></div>
+        <div><dt>sha256</dt><dd>c5ea10db79208050fa0694f25eb2ed6ea42900877c8c63aeab1f4ca007d6c254</dd></div>
+        <div><dt>certificate</dt><dd>CN=NiroWear Release (0dc50fc0…86543e)</dd></div>
+      </dl>
+      <table class="gate">
+        <thead><tr><th scope="col">Check</th><th scope="col">Result</th></tr></thead>
+        <tbody>
+          <tr><td>JVM &amp; WebCrypto JS</td><td>351 passed, 1 skipped (352 tests across 53 suites, 0 failures; opt-in <code>LiveProviderSmokeTest</code> skipped); Node v26 WebCrypto E2E pairing simulation passed</td></tr>
+          <tr><td>ktlint &amp; lintDebug</td><td><code>ktlintCheck</code> 0 violations; <code>lintDebug</code> 0 errors, 0 source-code warnings (7 pinned dependency advisories)</td></tr>
+          <tr><td>CI instrumented (Wear OS 5)</td><td>10/10 classes green on Wear OS 5 API 34 (466 x 466) on PR #106 before merge</td></tr>
+          <tr><td>Xiaomi Watch 2 HW (v0.3.5 signed)</td><td>In-place upgrade over signed <code>v0.3.4</code> (<code>0 FATAL</code>, <code>versionCode 21</code>, <code>nfc_has_nirowear=False</code>, Menu verified incl. <code>Text size</code>): cold start median <strong>593 ms</strong> (<code>598, 522, 535, 593, 606 ms</code>, <code>WaitTime</code> 599 ms), warm <code>HOT</code> <strong>65 ms</strong> (<code>77, 79, 61, 63, 65 ms</code>, <code>WaitTime</code> 71 ms), <strong>PSS 40,175 KB</strong> (<code>RSS 125,224 KB</code>), Providers 18-swipe <code>gfxinfo</code> <strong>665 frames, 1 janky (0.15%)</strong> (P50 13 ms, P95 14 ms, P99 14 ms), <code>Thermal Status: 0</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </article>
 
   <!-- 0.3.4 -->
   <article class="release">
     <div class="rside">
       <span class="rver">0.3.4</span>
       <span class="rdate">2026-11-28</span>
-      <span class="rtag">Latest release</span>
     </div>
     <div class="rbody">
       <h2>Incremental parser parity, pairing/streaming lifecycle fixes, and Compose/GPU optimizations</h2>
