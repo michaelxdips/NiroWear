@@ -44,7 +44,9 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -58,6 +60,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.wear.compose.material3.Button
 import androidx.wear.compose.material3.OutlinedButton
+import androidx.wear.compose.material3.ScrollIndicator
 import androidx.wear.compose.material3.Text
 import com.nirowear.BindSimpleRotaryScroll
 import com.nirowear.BuildConfig
@@ -73,6 +76,7 @@ import com.nirowear.provider.ProviderProfile
 import com.nirowear.provider.ProviderType
 import com.nirowear.provider.SafeProviderException
 import com.nirowear.provider.SecretValue
+import com.nirowear.ui.rememberWatchMetrics
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -486,494 +490,514 @@ fun ProviderScreen(onBack: () -> Unit) {
             }
     }
 
-    LazyColumn(
-        // imePadding: targetSdk 37 means edge-to-edge on Android 15+, where adjustResize no longer
-        // shrinks the window. Without this the keyboard sat over the API-key field and Save on the
-        // 466 px dial — the one screen where typing is the whole task.
-        Modifier.fillMaxSize().imePadding().background(Color.Black),
-        state = listState,
-        contentPadding = PaddingValues(horizontal = 26.dp, vertical = 30.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        item {
-            val title =
-                if (pairing != null) {
-                    stringResource(R.string.provider_setup_from_phone)
-                } else if (adding || edit != null) {
-                    stringResource(
-                        if (edit != null) R.string.provider_title_edit else R.string.provider_title_add,
-                        stringResource(type.nameRes()),
-                    )
-                } else {
-                    stringResource(R.string.provider_title)
-                }
-            Text(
-                title,
-                modifier = Modifier.fillMaxWidth().wrapContentWidth(Alignment.CenterHorizontally),
-                fontSize = 18.sp,
-            )
-        }
-        item {
-            Button(
-                onClick = { if (inFormMode) stepBack() else onBack() },
-                modifier = Modifier.fillMaxWidth().wrapContentWidth(Alignment.CenterHorizontally),
-            ) {
-                Text(stringResource(R.string.provider_back))
-            }
-        }
-        val stateError = state.error
-        if (stateError != null) {
-            item { Text(errorText(stateError) ?: stateError, fontSize = 14.sp) }
-        } else if (!adding && editId == null) {
-            // Save lands here (adding=false). The confirmation must survive the mode flip:
-            // keep the same visible result row in list mode so "Saved securely." stays on screen.
-            if (message.isNotBlank()) {
-                item { Text(message, fontSize = 14.sp, color = Color(0xFFFFD28A)) }
-            }
-            // One preset block, four rows. They were four near-identical copies of six state
-            // assignments each; the only fields that differ are the four literals below.
-            items(PRESETS) { preset ->
-                val presetLabel = stringResource(preset.label)
-                val presetName = stringResource(preset.name)
-                val presetMessage = stringResource(preset.message)
-                Button(
-                    modifier = Modifier.fillMaxWidth(),
-                    onClick = {
-                        adding = true
-                        editId = null
-                        type = preset.type
-                        name = presetName
-                        base = preset.base
-                        model = ""
-                        key = ""
-                        validated = false
-                        reveal = false
-                        models = emptyList()
-                        pairingNote = ""
-                        message = presetMessage
-                    },
-                ) { Text(presetLabel) }
-            }
-            items(state.profiles, key = { it.id }) { p ->
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = {
-                        scope.launch {
-                            try {
-                                app.settings.select(p.id)
-                            } catch (
-                                cancelled: CancellationException,
-                            ) {
-                                throw cancelled
-                            } catch (_: Exception) {
-                                message = resources.getString(R.string.provider_select_failed)
-                            }
-                        }
-                    }, modifier = Modifier.fillMaxWidth()) {
-                        Text(
-                            stringResource(
-                                if (state.selectedId == p.id) {
-                                    R.string.provider_row_selected
-                                } else {
-                                    R.string.provider_row
-                                },
-                                p.displayName,
-                                p.selectedModelId,
-                            ),
-                            fontSize = 14.sp,
-                        )
-                    }
-                    OutlinedButton(onClick = {
-                        editId = p.id
-                        adding = false
-                        type = p.type
-                        name = p.displayName
-                        base = p.baseUrl
-                        model = p.selectedModelId
-                        key = ""
-                        validated = false
-                        reveal = false
-                        models = emptyList()
-                        confirmDelete = false
-                        pairingNote = ""
-                        message = resources.getString(R.string.provider_key_configured)
-                    }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.provider_edit_replace_key)) }
-                }
-            }
-        } else if (pairing != null) {
+    val metrics = rememberWatchMetrics()
+    val haptics = LocalHapticFeedback.current
+
+    Box(Modifier.fillMaxSize().background(Color.Black)) {
+        LazyColumn(
+            // imePadding: targetSdk 37 means edge-to-edge on Android 15+, where adjustResize no longer
+            // shrinks the window. Without this the keyboard sat over the API-key field and Save on the
+            // dial — the one screen where typing is the whole task.
+            Modifier.fillMaxSize().imePadding(),
+            state = listState,
+            contentPadding =
+                PaddingValues(
+                    horizontal = metrics.listHorizontalDp,
+                    vertical = metrics.listVerticalDp,
+                ),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             item {
-                val server = pairing!!
-                val formattedCountdown =
-                    String.format(Locale.US, "%d:%02d", remainingSecs / 60, remainingSecs % 60)
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        stringResource(R.string.provider_pairing_expires, formattedCountdown),
-                        fontSize = 13.sp,
-                        color = Color(0xFFFFD28A),
-                        modifier = Modifier.fillMaxWidth().wrapContentWidth(Alignment.CenterHorizontally),
-                    )
-                    Text(
-                        stringResource(R.string.provider_pairing_hint),
-                        fontSize = 13.sp,
-                        color = Color(0xFFB8BDC6),
-                    )
-                    if (pairingNote.isNotBlank()) {
-                        Text(pairingNote, fontSize = 13.sp, color = Color(0xFFFFD28A))
+                val title =
+                    if (pairing != null) {
+                        stringResource(R.string.provider_setup_from_phone)
+                    } else if (adding || edit != null) {
+                        stringResource(
+                            if (edit != null) R.string.provider_title_edit else R.string.provider_title_add,
+                            stringResource(type.nameRes()),
+                        )
+                    } else {
+                        stringResource(R.string.provider_title)
                     }
+                Text(
+                    title,
+                    modifier = Modifier.fillMaxWidth().wrapContentWidth(Alignment.CenterHorizontally),
+                    fontSize = 18.sp,
+                )
+            }
+            item {
+                Button(
+                    onClick = { if (inFormMode) stepBack() else onBack() },
+                    modifier = Modifier.fillMaxWidth().wrapContentWidth(Alignment.CenterHorizontally),
+                ) {
+                    Text(stringResource(R.string.provider_back))
+                }
+            }
+            val stateError = state.error
+            if (stateError != null) {
+                item { Text(errorText(stateError) ?: stateError, fontSize = 14.sp) }
+            } else if (!adding && editId == null) {
+                // Save lands here (adding=false). The confirmation must survive the mode flip:
+                // keep the same visible result row in list mode so "Saved securely." stays on screen.
+                if (message.isNotBlank()) {
+                    item { Text(message, fontSize = 14.sp, color = Color(0xFFFFD28A)) }
+                }
+                // One preset block, four rows. They were four near-identical copies of six state
+                // assignments each; the only fields that differ are the four literals below.
+                items(PRESETS) { preset ->
+                    val presetLabel = stringResource(preset.label)
+                    val presetName = stringResource(preset.name)
+                    val presetMessage = stringResource(preset.message)
                     Button(
                         modifier = Modifier.fillMaxWidth(),
                         onClick = {
-                            pairingNote = resources.getString(R.string.provider_opening_on_phone)
+                            adding = true
+                            editId = null
+                            type = preset.type
+                            name = presetName
+                            base = preset.base
+                            model = ""
+                            key = ""
+                            validated = false
+                            reveal = false
+                            models = emptyList()
+                            pairingNote = ""
+                            message = presetMessage
+                        },
+                    ) { Text(presetLabel) }
+                }
+                items(state.profiles, key = { it.id }) { p ->
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = {
                             scope.launch {
-                                val opened = openUrlOnPairedPhone(context, server.url)
-                                if (pairing === server) {
-                                    pairingNote =
-                                        resources.getString(
-                                            if (opened.isSuccess) {
-                                                R.string.provider_opened_on_phone
-                                            } else {
-                                                R.string.provider_open_on_phone_failed
-                                            },
-                                        )
+                                try {
+                                    app.settings.select(p.id)
+                                } catch (
+                                    cancelled: CancellationException,
+                                ) {
+                                    throw cancelled
+                                } catch (_: Exception) {
+                                    message = resources.getString(R.string.provider_select_failed)
                                 }
                             }
-                        },
-                    ) {
-                        Text(stringResource(R.string.provider_open_on_phone), fontSize = 14.sp)
+                        }, modifier = Modifier.fillMaxWidth()) {
+                            Text(
+                                stringResource(
+                                    if (state.selectedId == p.id) {
+                                        R.string.provider_row_selected
+                                    } else {
+                                        R.string.provider_row
+                                    },
+                                    p.displayName,
+                                    p.selectedModelId,
+                                ),
+                                fontSize = 14.sp,
+                            )
+                        }
+                        OutlinedButton(onClick = {
+                            editId = p.id
+                            adding = false
+                            type = p.type
+                            name = p.displayName
+                            base = p.baseUrl
+                            model = p.selectedModelId
+                            key = ""
+                            validated = false
+                            reveal = false
+                            models = emptyList()
+                            confirmDelete = false
+                            pairingNote = ""
+                            message = resources.getString(R.string.provider_key_configured)
+                        }, modifier = Modifier.fillMaxWidth()) {
+                            Text(
+                                stringResource(R.string.provider_edit_replace_key),
+                            )
+                        }
                     }
-                    // Drawn from the SAME capability URL the phone page is served from, centered
-                    // inside the 466 px circular safe area so corners are never bezel-clipped.
-                    val qr = remember(server.url) { QrCode.matrix(server.url) }
-                    val qrLabel = stringResource(R.string.provider_pairing_qr)
-                    Box(
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 24.dp, vertical = 4.dp)
-                            .aspectRatio(1f)
-                            .semantics { contentDescription = qrLabel }
-                            .drawWithCache {
-                                val side = QrCode.sidePx(qr, minOf(size.width, size.height).toInt())
-                                if (side <= 0) {
-                                    onDrawBehind {}
-                                } else {
-                                    val module = side.toFloat() / qr.size
-                                    val left = ((size.width.toInt() - side) / 2).toFloat()
-                                    val top = ((size.height.toInt() - side) / 2).toFloat()
-                                    val bgTopLeft = Offset(left, top)
-                                    val bgSize = Size(side.toFloat(), side.toFloat())
-                                    val darkPath =
-                                        Path().apply {
-                                            for (y in 0 until qr.size) {
-                                                val rowTop = top + y * module
-                                                val rowBottom = rowTop + module
-                                                var x = 0
-                                                while (x < qr.size) {
-                                                    if (!qr.isDark(x, y)) {
-                                                        x++
-                                                        continue
-                                                    }
-                                                    val runStart = x
-                                                    while (x < qr.size && qr.isDark(x, y)) x++
-                                                    addRect(
-                                                        Rect(
-                                                            left + runStart * module,
-                                                            rowTop,
-                                                            left + x * module,
-                                                            rowBottom,
-                                                        ),
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    onDrawBehind {
-                                        drawRect(Color.White, bgTopLeft, bgSize)
-                                        drawPath(darkPath, Color.Black)
+                }
+            } else if (pairing != null) {
+                item {
+                    val server = pairing!!
+                    val formattedCountdown =
+                        String.format(Locale.US, "%d:%02d", remainingSecs / 60, remainingSecs % 60)
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            stringResource(R.string.provider_pairing_expires, formattedCountdown),
+                            fontSize = 13.sp,
+                            color = Color(0xFFFFD28A),
+                            modifier = Modifier.fillMaxWidth().wrapContentWidth(Alignment.CenterHorizontally),
+                        )
+                        if (pairingNote.isNotBlank()) {
+                            Text(pairingNote, fontSize = 13.sp, color = Color(0xFFFFD28A))
+                        }
+                        Button(
+                            modifier = Modifier.fillMaxWidth(),
+                            onClick = {
+                                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                pairingNote = resources.getString(R.string.provider_opening_on_phone)
+                                scope.launch {
+                                    val opened = openUrlOnPairedPhone(context, server.url)
+                                    if (pairing === server) {
+                                        pairingNote =
+                                            resources.getString(
+                                                if (opened.isSuccess) {
+                                                    R.string.provider_opened_on_phone
+                                                } else {
+                                                    R.string.provider_open_on_phone_failed
+                                                },
+                                            )
                                     }
                                 }
                             },
-                    )
-                    OutlinedButton(
-                        onClick = { stopPairing() },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text(stringResource(R.string.provider_cancel_pairing), fontSize = 14.sp)
-                    }
-                    // Kept as the last resort and for URL verification on untrusted Wi-Fi.
-                    Text(server.url, fontSize = 14.sp, color = Color(0xFFA8C7FA))
-                }
-            }
-        } else {
-            item {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        enabled = !busy && !pairingStarting,
-                        onClick = { startPairing() },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text(
-                            stringResource(R.string.provider_setup_from_phone),
-                            fontSize = 14.sp,
-                        )
-                    }
-                    if (pairingNote.isNotBlank()) Text(pairingNote, fontSize = 13.sp, color = Color(0xFFB8BDC6))
-                }
-            }
-            item {
-                Entry(stringResource(R.string.provider_label_name), name) {
-                    name = it
-                    validated = false
-                }
-            }
-            item {
-                Entry(stringResource(R.string.provider_label_base_url), base, keyboardType = KeyboardType.Uri) {
-                    base = it
-                    validated = false
-                }
-            }
-            item {
-                Entry(stringResource(R.string.provider_label_manual_model), model) {
-                    model = it
-                    validated = false
-                }
-            }
-            item {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    // ponytail: recreate password semantics; remove when Compose fixes dynamic isPassword updates.
-                    key(reveal) {
-                        Entry(
-                            stringResource(R.string.provider_label_api_key),
-                            key,
-                            keyboardType = KeyboardType.Password,
-                            visualTransformation =
-                                if (reveal) VisualTransformation.None else PasswordVisualTransformation(),
                         ) {
-                            // Trim at the boundary: a trailing newline from a clipboard bridge otherwise
-                            // surfaces as an invisible character that only fails at save time.
-                            key = sanitizeKey(it)
-                            validated = false
+                            Text(stringResource(R.string.provider_open_on_phone), fontSize = 14.sp)
                         }
-                    }
-                    if (edit != null) {
-                        Text(
-                            stringResource(R.string.provider_configured_replace),
-                            fontSize = 14.sp,
-                            color = Color(0xFFB8BDC6),
-                        )
-                    }
-                    impliedProviderMismatch(key, type)?.let {
-                        Text(
-                            stringResource(R.string.provider_key_mismatch, stringResource(it.nameRes())),
-                            fontSize = 14.sp,
-                            color = Color(0xFFFFD28A),
-                        )
-                    }
-                    if (key.isBlank() && remoteTyping) {
-                        Text(
-                            stringResource(R.string.provider_remote_typing),
-                            fontSize = 14.sp,
-                            color = Color(0xFFB8BDC6),
-                        )
-                    }
-                    OutlinedButton(onClick = {
-                        reveal = !reveal
-                    }, modifier = Modifier.fillMaxWidth()) {
-                        Text(
-                            stringResource(
-                                if (reveal) R.string.provider_hide_key else R.string.provider_reveal_key,
-                            ),
-                        )
-                    }
-                }
-            }
-            item {
-                OutlinedButton(modifier = Modifier.fillMaxWidth(), enabled = !busy, onClick = {
-                    scope.launch {
-                        busy = true
-                        message = ""
-                        val input = Triple(type, base, key)
-                        val inputProfileId = edit?.id
-                        try {
-                            val p = profile()
-                            val adapter = app.provider(p.type)
-                            if (adapter == null) {
-                                message = resources.getString(R.string.provider_type_unavailable)
-                                return@launch
-                            }
-                            val result =
-                                withTimeoutOrNull(DISCOVERY_BUDGET_MS) {
-                                    adapter.listModels(p, secret(p))
-                                } ?: ModelDiscoveryResult.Unavailable(ProviderError.TIMEOUT)
-                            if (input != Triple(type, base, key) || inputProfileId != edit?.id ||
-                                (!adding && editId == null)
-                            ) {
-                                return@launch
-                            }
-                            when (result) {
-                                is ModelDiscoveryResult.Models -> {
-                                    models = result.ids
-                                    message = resources.getString(R.string.provider_models_listed)
-                                }
-
-                                is ModelDiscoveryResult.Unavailable -> {
-                                    models = emptyList()
-                                    val specific = errorText(resources, result.error.code(hasText = false))
-                                    message =
-                                        if (specific != null) {
-                                            resources.getString(R.string.provider_models_unavailable_reason, specific)
-                                        } else {
-                                            resources.getString(R.string.provider_models_unavailable)
+                        // Drawn from the SAME capability URL the phone page is served from, centered
+                        // inside the circular safe area so corners are never bezel-clipped.
+                        val qr = remember(server.url) { QrCode.matrix(server.url) }
+                        val qrLabel = stringResource(R.string.provider_pairing_qr)
+                        Box(
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = metrics.qrHorizontalPaddingDp, vertical = 4.dp)
+                                .aspectRatio(1f)
+                                .semantics { contentDescription = qrLabel }
+                                .drawWithCache {
+                                    val side = QrCode.sidePx(qr, minOf(size.width, size.height).toInt())
+                                    if (side <= 0) {
+                                        onDrawBehind {}
+                                    } else {
+                                        val module = side.toFloat() / qr.size
+                                        val left = ((size.width.toInt() - side) / 2).toFloat()
+                                        val top = ((size.height.toInt() - side) / 2).toFloat()
+                                        val bgTopLeft = Offset(left, top)
+                                        val bgSize = Size(side.toFloat(), side.toFloat())
+                                        val darkPath =
+                                            Path().apply {
+                                                for (y in 0 until qr.size) {
+                                                    val rowTop = top + y * module
+                                                    val rowBottom = rowTop + module
+                                                    var x = 0
+                                                    while (x < qr.size) {
+                                                        if (!qr.isDark(x, y)) {
+                                                            x++
+                                                            continue
+                                                        }
+                                                        val runStart = x
+                                                        while (x < qr.size && qr.isDark(x, y)) x++
+                                                        addRect(
+                                                            Rect(
+                                                                left + runStart * module,
+                                                                rowTop,
+                                                                left + x * module,
+                                                                rowBottom,
+                                                            ),
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        onDrawBehind {
+                                            drawRect(Color.White, bgTopLeft, bgSize)
+                                            drawPath(darkPath, Color.Black)
                                         }
-                                }
-                            }
-                        } catch (cancelled: CancellationException) {
-                            throw cancelled
-                        } catch (failure: Exception) {
-                            if (input == Triple(type, base, key) && inputProfileId == edit?.id &&
-                                (adding || editId != null)
-                            ) {
-                                message =
-                                    validationErrorText(resources, failure)
-                                        ?: resources.getString(R.string.provider_check_url_key)
-                            }
-                        } finally {
-                            busy = false
+                                    }
+                                },
+                        )
+                        OutlinedButton(
+                            onClick = { stopPairing() },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(stringResource(R.string.provider_cancel_pairing), fontSize = 14.sp)
                         }
+                        Text(
+                            stringResource(R.string.provider_pairing_hint),
+                            fontSize = 13.sp,
+                            color = Color(0xFFB8BDC6),
+                        )
+                        // Kept as the last resort and for URL verification on untrusted Wi-Fi.
+                        Text(server.url, fontSize = 14.sp, color = Color(0xFFA8C7FA))
                     }
-                }) { Text(stringResource(R.string.provider_discover_models)) }
-            }
-            item {
-                if (message.isNotBlank()) Text(message, fontSize = 14.sp, color = Color(0xFFFFD28A))
-            }
-            if (models.isNotEmpty()) {
-                item {
-                    OutlinedButton(
-                        onClick = { models = emptyList() },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) { Text(stringResource(R.string.provider_hide_models), fontSize = 13.sp) }
                 }
-            }
-            items(models, key = { it }) { id ->
-                Button(onClick = {
-                    model = id
-                    validated = false
-                    models = emptyList()
-                }, modifier = Modifier.fillMaxWidth()) { Text(id, fontSize = 14.sp) }
-            }
-            item {
-                OutlinedButton(modifier = Modifier.fillMaxWidth(), enabled = !busy, onClick = {
-                    scope.launch {
-                        busy = true
+            } else {
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            enabled = !busy && !pairingStarting,
+                            onClick = { startPairing() },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(
+                                stringResource(R.string.provider_setup_from_phone),
+                                fontSize = 14.sp,
+                            )
+                        }
+                        if (pairingNote.isNotBlank()) Text(pairingNote, fontSize = 13.sp, color = Color(0xFFB8BDC6))
+                    }
+                }
+                item {
+                    Entry(stringResource(R.string.provider_label_name), name) {
+                        name = it
                         validated = false
-                        message = ""
-                        try {
-                            val p = profile()
-                            val inputKey = key
-                            val inputProfileId = edit?.id
-                            val adapter = app.provider(p.type)
-                            if (adapter == null) {
-                                message = resources.getString(R.string.provider_type_unavailable)
-                                return@launch
-                            }
-                            val error = adapter.validate(p, secret(p))
-                            if (!adding && editId == null) return@launch
-                            if (p.type != type || p.displayName != name.trim() ||
-                                p.baseUrl != runCatching { Endpoints.normalize(base, BuildConfig.DEBUG) }.getOrNull() ||
-                                p.selectedModelId != model.trim() ||
-                                key != inputKey ||
-                                inputProfileId != edit?.id
+                    }
+                }
+                item {
+                    Entry(stringResource(R.string.provider_label_base_url), base, keyboardType = KeyboardType.Uri) {
+                        base = it
+                        validated = false
+                    }
+                }
+                item {
+                    Entry(stringResource(R.string.provider_label_manual_model), model) {
+                        model = it
+                        validated = false
+                    }
+                }
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        // ponytail: recreate password semantics; remove when Compose fixes dynamic isPassword updates.
+                        key(reveal) {
+                            Entry(
+                                stringResource(R.string.provider_label_api_key),
+                                key,
+                                keyboardType = KeyboardType.Password,
+                                visualTransformation =
+                                    if (reveal) VisualTransformation.None else PasswordVisualTransformation(),
                             ) {
-                                message = resources.getString(R.string.provider_inputs_changed)
-                                return@launch
+                                // Trim at the boundary: a trailing newline from a clipboard bridge otherwise
+                                // surfaces as an invisible character that only fails at save time.
+                                key = sanitizeKey(it)
+                                validated = false
                             }
-                            validated = error == null
-                            message =
-                                error
-                                    ?.let { errorText(resources, it.code(hasText = false)) }
-                                    ?: resources.getString(R.string.provider_connected)
-                        } catch (cancelled: CancellationException) {
-                            throw cancelled
-                        } catch (failure: Exception) {
-                            if (adding || editId != null) {
-                                message =
-                                    validationCause(failure)
-                                        ?.let { errorText(resources, it.code(hasText = false)) }
-                                        ?: validationErrorText(resources, failure)
-                                        ?: resources.getString(R.string.provider_error_check_fields)
-                            }
-                        } finally {
-                            busy = false
+                        }
+                        if (edit != null) {
+                            Text(
+                                stringResource(R.string.provider_configured_replace),
+                                fontSize = 14.sp,
+                                color = Color(0xFFB8BDC6),
+                            )
+                        }
+                        impliedProviderMismatch(key, type)?.let {
+                            Text(
+                                stringResource(R.string.provider_key_mismatch, stringResource(it.nameRes())),
+                                fontSize = 14.sp,
+                                color = Color(0xFFFFD28A),
+                            )
+                        }
+                        if (key.isBlank() && remoteTyping) {
+                            Text(
+                                stringResource(R.string.provider_remote_typing),
+                                fontSize = 14.sp,
+                                color = Color(0xFFB8BDC6),
+                            )
+                        }
+                        OutlinedButton(onClick = {
+                            reveal = !reveal
+                        }, modifier = Modifier.fillMaxWidth()) {
+                            Text(
+                                stringResource(
+                                    if (reveal) R.string.provider_hide_key else R.string.provider_reveal_key,
+                                ),
+                            )
                         }
                     }
-                }) { Text(stringResource(R.string.provider_validate)) }
-            }
-            item {
-                val original = edit
-                val connectivityChanged =
-                    original == null ||
-                        type != original.type ||
-                        base.trim() != original.baseUrl ||
-                        model.trim() != original.selectedModelId
-                val needsValidation = key.isNotBlank() || connectivityChanged
-                val ready =
-                    name.isNotBlank() && base.isNotBlank() && model.isNotBlank() &&
-                        (key.isNotBlank() || original != null)
-                Button(
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !busy && ready,
-                    onClick = {
-                        scope.launch {
-                            stopPairing()
-                            saveProfile()
-                        }
-                    },
-                ) { Text(stringResource(R.string.provider_save)) }
-                if (needsValidation && !validated && ready) {
-                    Text(
-                        stringResource(R.string.provider_not_validated),
-                        fontSize = 13.sp,
-                        color = Color(0xFFB8BDC6),
-                    )
                 }
-            }
-            val deleting = edit
-            if (deleting != null) {
                 item {
-                    OutlinedButton(
-                        modifier = Modifier.fillMaxWidth(),
-                        enabled = !busy,
-                        onClick = {
-                            if (!confirmDelete) {
-                                confirmDelete = true
-                                return@OutlinedButton
+                    OutlinedButton(modifier = Modifier.fillMaxWidth(), enabled = !busy, onClick = {
+                        scope.launch {
+                            busy = true
+                            message = ""
+                            val input = Triple(type, base, key)
+                            val inputProfileId = edit?.id
+                            try {
+                                val p = profile()
+                                val adapter = app.provider(p.type)
+                                if (adapter == null) {
+                                    message = resources.getString(R.string.provider_type_unavailable)
+                                    return@launch
+                                }
+                                val result =
+                                    withTimeoutOrNull(DISCOVERY_BUDGET_MS) {
+                                        adapter.listModels(p, secret(p))
+                                    } ?: ModelDiscoveryResult.Unavailable(ProviderError.TIMEOUT)
+                                if (input != Triple(type, base, key) || inputProfileId != edit?.id ||
+                                    (!adding && editId == null)
+                                ) {
+                                    return@launch
+                                }
+                                when (result) {
+                                    is ModelDiscoveryResult.Models -> {
+                                        models = result.ids
+                                        message = resources.getString(R.string.provider_models_listed)
+                                    }
+
+                                    is ModelDiscoveryResult.Unavailable -> {
+                                        models = emptyList()
+                                        val specific = errorText(resources, result.error.code(hasText = false))
+                                        message =
+                                            if (specific != null) {
+                                                resources.getString(
+                                                    R.string.provider_models_unavailable_reason,
+                                                    specific,
+                                                )
+                                            } else {
+                                                resources.getString(R.string.provider_models_unavailable)
+                                            }
+                                    }
+                                }
+                            } catch (cancelled: CancellationException) {
+                                throw cancelled
+                            } catch (failure: Exception) {
+                                if (input == Triple(type, base, key) && inputProfileId == edit?.id &&
+                                    (adding || editId != null)
+                                ) {
+                                    message =
+                                        validationErrorText(resources, failure)
+                                            ?: resources.getString(R.string.provider_check_url_key)
+                                }
+                            } finally {
+                                busy = false
                             }
+                        }
+                    }) { Text(stringResource(R.string.provider_discover_models)) }
+                }
+                item {
+                    if (message.isNotBlank()) Text(message, fontSize = 14.sp, color = Color(0xFFFFD28A))
+                }
+                if (models.isNotEmpty()) {
+                    item {
+                        OutlinedButton(
+                            onClick = { models = emptyList() },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Text(stringResource(R.string.provider_hide_models), fontSize = 13.sp) }
+                    }
+                }
+                items(models, key = { it }) { id ->
+                    Button(onClick = {
+                        model = id
+                        validated = false
+                        models = emptyList()
+                    }, modifier = Modifier.fillMaxWidth()) { Text(id, fontSize = 14.sp) }
+                }
+                item {
+                    OutlinedButton(modifier = Modifier.fillMaxWidth(), enabled = !busy, onClick = {
+                        scope.launch {
+                            busy = true
+                            validated = false
+                            message = ""
+                            try {
+                                val p = profile()
+                                val inputKey = key
+                                val inputProfileId = edit?.id
+                                val adapter = app.provider(p.type)
+                                if (adapter == null) {
+                                    message = resources.getString(R.string.provider_type_unavailable)
+                                    return@launch
+                                }
+                                val error = adapter.validate(p, secret(p))
+                                if (!adding && editId == null) return@launch
+                                if (p.type != type || p.displayName != name.trim() ||
+                                    p.baseUrl !=
+                                    runCatching { Endpoints.normalize(base, BuildConfig.DEBUG) }.getOrNull() ||
+                                    p.selectedModelId != model.trim() ||
+                                    key != inputKey ||
+                                    inputProfileId != edit?.id
+                                ) {
+                                    message = resources.getString(R.string.provider_inputs_changed)
+                                    return@launch
+                                }
+                                validated = error == null
+                                message =
+                                    error
+                                        ?.let { errorText(resources, it.code(hasText = false)) }
+                                        ?: resources.getString(R.string.provider_connected)
+                            } catch (cancelled: CancellationException) {
+                                throw cancelled
+                            } catch (failure: Exception) {
+                                if (adding || editId != null) {
+                                    message =
+                                        validationCause(failure)
+                                            ?.let { errorText(resources, it.code(hasText = false)) }
+                                            ?: validationErrorText(resources, failure)
+                                            ?: resources.getString(R.string.provider_error_check_fields)
+                                }
+                            } finally {
+                                busy = false
+                            }
+                        }
+                    }) { Text(stringResource(R.string.provider_validate)) }
+                }
+                item {
+                    val original = edit
+                    val connectivityChanged =
+                        original == null ||
+                            type != original.type ||
+                            base.trim() != original.baseUrl ||
+                            model.trim() != original.selectedModelId
+                    val needsValidation = key.isNotBlank() || connectivityChanged
+                    val ready =
+                        name.isNotBlank() && base.isNotBlank() && model.isNotBlank() &&
+                            (key.isNotBlank() || original != null)
+                    Button(
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !busy && ready,
+                        onClick = {
                             scope.launch {
                                 stopPairing()
-                                busy = true
-                                try {
-                                    app.settings.delete(deleting.id)
-                                    editId = null
-                                    key = ""
-                                    confirmDelete = false
-                                    message = resources.getString(R.string.provider_deleted)
-                                } catch (cancelled: CancellationException) {
-                                    throw cancelled
-                                } catch (_: Exception) {
-                                    message = resources.getString(R.string.provider_delete_failed)
-                                } finally {
-                                    busy = false
-                                }
+                                saveProfile()
                             }
                         },
-                    ) {
+                    ) { Text(stringResource(R.string.provider_save)) }
+                    if (needsValidation && !validated && ready) {
                         Text(
-                            stringResource(
-                                if (confirmDelete) R.string.provider_delete_confirm else R.string.provider_delete,
-                            ),
+                            stringResource(R.string.provider_not_validated),
+                            fontSize = 13.sp,
+                            color = Color(0xFFB8BDC6),
                         )
                     }
                 }
+                val deleting = edit
+                if (deleting != null) {
+                    item {
+                        OutlinedButton(
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = !busy,
+                            onClick = {
+                                if (!confirmDelete) {
+                                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    confirmDelete = true
+                                    return@OutlinedButton
+                                }
+                                scope.launch {
+                                    stopPairing()
+                                    busy = true
+                                    try {
+                                        app.settings.delete(deleting.id)
+                                        editId = null
+                                        key = ""
+                                        confirmDelete = false
+                                        message = resources.getString(R.string.provider_deleted)
+                                    } catch (cancelled: CancellationException) {
+                                        throw cancelled
+                                    } catch (_: Exception) {
+                                        message = resources.getString(R.string.provider_delete_failed)
+                                    } finally {
+                                        busy = false
+                                    }
+                                }
+                            },
+                        ) {
+                            Text(
+                                stringResource(
+                                    if (confirmDelete) R.string.provider_delete_confirm else R.string.provider_delete,
+                                ),
+                            )
+                        }
+                    }
+                }
             }
+            if (busy) item { Text(stringResource(R.string.provider_working), fontSize = 14.sp) }
         }
-        if (busy) item { Text(stringResource(R.string.provider_working), fontSize = 14.sp) }
+        ScrollIndicator(state = listState, modifier = Modifier.align(Alignment.CenterEnd))
     }
 }
 

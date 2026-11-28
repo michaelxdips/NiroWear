@@ -8,13 +8,20 @@ import android.speech.RecognizerIntent
 import android.view.InputDevice
 import android.view.MotionEvent
 import android.view.ViewConfiguration
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.scrollBy
@@ -40,10 +47,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -58,20 +67,26 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.onLongClick
@@ -80,11 +95,13 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
@@ -94,6 +111,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.wear.compose.material3.Button
 import androidx.wear.compose.material3.MaterialTheme
+import androidx.wear.compose.material3.OutlinedButton
+import androidx.wear.compose.material3.ScrollIndicator
 import androidx.wear.compose.material3.Text
 import com.nirowear.chat.ChatViewModel
 import com.nirowear.chat.ReaderAction
@@ -106,6 +125,7 @@ import com.nirowear.chat.needsParse
 import com.nirowear.chat.voiceLanguageTag
 import com.nirowear.data.Conversation
 import com.nirowear.data.ProviderSettingsState
+import com.nirowear.data.ReaderTextSize
 import com.nirowear.data.SearchHit
 import com.nirowear.data.likeTerms
 import com.nirowear.data.searchMessages
@@ -117,6 +137,9 @@ import com.nirowear.renderer.ResponseParser
 import com.nirowear.renderer.renderUnitsFor
 import com.nirowear.renderer.unitRangeByBlock
 import com.nirowear.settings.ProviderScreen
+import com.nirowear.ui.NiroWearColorScheme
+import com.nirowear.ui.rememberWatchMetrics
+import com.nirowear.ui.roundEdgeTaper
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.currentCoroutineContext
@@ -174,7 +197,7 @@ class MainActivity : ComponentActivity() {
                 ""
             }
         setContent {
-            MaterialTheme {
+            MaterialTheme(colorScheme = NiroWearColorScheme) {
                 ChatReader(fixture, if (BuildConfig.DEBUG) intent.getStringExtra("render_section") else null)
             }
         }
@@ -341,6 +364,8 @@ private fun ChatReader(
     // picked up without a restart. See voiceLanguageTag.
     val voiceLanguage = voiceLanguageTag(LocalConfiguration.current.locales[0])
     val copiedNotice = stringResource(R.string.chat_unsaved_copied)
+    val thinkingLabel = stringResource(R.string.chat_thinking)
+    val copyAnswerLabel = stringResource(R.string.chat_copy_answer)
     // Stored failures are ProviderError tokens, so the row text is resolved here — off-composition the
     // effect cannot read resources. The language tag is also a key: a row rendered before a locale
     // change would otherwise keep the old language until the chat was reopened.
@@ -352,10 +377,22 @@ private fun ChatReader(
     // a LocalContext read, so a language switch would keep rendering the old language.
     val errorResources = LocalResources.current
     val localeTag = LocalConfiguration.current.locales[0].toLanguageTag()
-    // A 384 px dial is 192 dp: the 48 dp menu strip, 48 dp input targets and their padding left only
-    // 62 dp for the reader, so the empty-state sentence was cut mid-line (measured [48,170][336,220]
-    // on a 384x384 wm override). Chrome shrinks on short screens; touch targets stay 48 dp.
-    val compactChrome = LocalConfiguration.current.screenHeightDp < 220
+    val metrics = rememberWatchMetrics()
+    val compactChrome = metrics.compactChrome
+    val haptics = LocalHapticFeedback.current
+    val screenContext = LocalContext.current
+    // Keep the watch display awake strictly while streaming so short 15 s timeouts never dim mid-reply.
+    DisposableEffect(chatState.generating) {
+        val window = (screenContext as? Activity)?.window
+        if (chatState.generating) {
+            window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+        onDispose {
+            if (chatState.generating) {
+                window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            }
+        }
+    }
     var lastLocaleTag by remember { mutableStateOf<String?>(null) }
     // Presentation includes status/error/provenance, not just Markdown. All fields invalidate it.
     LaunchedEffect(storedMessages, chatState.conversationId, localeTag) {
@@ -727,6 +764,15 @@ private fun ChatReader(
                     historyScreen = false
                     renderLab = false
                 },
+                onDelete = { id ->
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    anchors.remove(id)
+                    if (id == chatState.conversationId) {
+                        following = true
+                        followNewConversation = false
+                    }
+                    chat.deleteConversation(id)
+                },
             )
         } else if (editing) {
             val composing = editedId != null
@@ -746,6 +792,7 @@ private fun ChatReader(
             // IME Send and the app's button take the same guarded path.
             fun submitEditor() {
                 if (editorText.isBlank() || chat.composerBusy || chatState.generating || chatState.unsaved) return
+                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                 val editTarget = editedId
                 if (editTarget != null) {
                     if (chat.edit(editTarget, editorText)) {
@@ -776,8 +823,8 @@ private fun ChatReader(
                 // longer shrinks for. Without consuming it, the keyboard covered the field and the
                 // Send button on the 466 px dial.
                 Modifier.fillMaxSize().imePadding().padding(
-                    horizontal = if (compactChrome) 20.dp else 32.dp,
-                    vertical = if (compactChrome) 12.dp else 28.dp,
+                    horizontal = metrics.composerHorizontalDp,
+                    vertical = metrics.composerVerticalDp,
                 ),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
@@ -804,7 +851,9 @@ private fun ChatReader(
                         Modifier
                             .weight(1f)
                             .fillMaxWidth()
-                            .background(Color(0xFF202124))
+                            .clip(RoundedCornerShape(10.dp))
+                            .border(1.dp, Color(0xFF283440), RoundedCornerShape(10.dp))
+                            .background(Color(0xFF161B22))
                             // The field carries its own label. It used to rely on the visible
                             // "Prompt" heading above it, so TalkBack reached an unlabelled edit box
                             // and announced only "edit box" — the heading is a separate node and does
@@ -1021,7 +1070,10 @@ private fun ChatReader(
                             val range = unitRanges.getOrNull(blockIndex) ?: IntRange.EMPTY
                             range.map { unit -> blockHeights[renderUnits.getOrNull(unit)?.key] }
                         }
-                    val viewport = listState.layoutInfo.let { it.viewportEndOffset - it.viewportStartOffset }
+                    val viewport =
+                        listState.layoutInfo.let {
+                            (it.viewportEndOffset - it.viewportStartOffset - it.afterContentPadding).coerceAtLeast(1)
+                        }
                     val answerFits =
                         heights.isNotEmpty() && heights.all { it != null } &&
                             heights.sumOf { it ?: 0 } + spacingPx * (heights.size - 1) <= viewport - spacingPx * 2
@@ -1097,22 +1149,41 @@ private fun ChatReader(
                 rotary = handler
                 onDispose { if (rotary === handler) rotary = null }
             }
-            // The LazyColumn's `semantics` lambda is not a composable scope.
+            val activeListState =
+                if (sectionMenu) {
+                    menuState
+                } else if (renderLab) {
+                    labState
+                } else {
+                    listState
+                }
+            val baseDensity = LocalDensity.current
+            val readerDensity =
+                remember(baseDensity, providerState.textSize) {
+                    Density(baseDensity.density, baseDensity.fontScale * providerState.textSize.scale)
+                }
+            val copyToClipboard: (String) -> Unit = { value ->
+                val clipboard =
+                    screenContext.getSystemService(
+                        android.content.Context.CLIPBOARD_SERVICE,
+                    ) as android.content.ClipboardManager
+                val clip = android.content.ClipData.newPlainText("NiroWear", value)
+                markClipSensitive(clip)
+                clipboard.setPrimaryClip(clip)
+                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                notice = copiedNotice
+            }
             val navMenuLabel = stringResource(R.string.chat_nav_menu)
             val readerLabel = stringResource(R.string.chat_reader_description)
-            // The Menu button's own label; resolved here for the same reason.
             val menuLabel = stringResource(R.string.chat_menu)
-            // Declared BEFORE LazyColumn (with equal zIndex) so accessibility child order matches
-            // top-to-bottom reading order (Menu -> Reader/Menu list -> Footer). LazyColumn sits
-            // below top = 48.dp padding so the two regions do not contend for taps.
+            val menuScope = rememberCoroutineScope()
             Box(
                 Modifier
                     .align(Alignment.TopCenter)
-                    // Bounds keep the 48 dp touch target while capping width + top/side inset so
-                    // two-line wrapped headers (e.g. Indonesian "Tambah provider · Menu") remain
-                    // strictly inside the 466 px circular dial chord without bezel clipping.
-                    .widthIn(min = 130.dp, max = 148.dp)
-                    .heightIn(min = 48.dp)
+                    // Bounds keep the 48 dp touch target while adapting width to the display chord
+                    // so two-line headers stay inside the circular dial without bezel clipping.
+                    .widthIn(min = 120.dp, max = metrics.headerMaxWidthDp)
+                    .heightIn(min = metrics.headerHeightDp)
                     .semantics {
                         traversalIndex = 0f
                         contentDescription = menuLabel
@@ -1131,11 +1202,12 @@ private fun ChatReader(
                     },
                     modifier =
                         Modifier
-                            .heightIn(min = 48.dp)
-                            .padding(start = 18.dp, top = 16.dp, end = 18.dp, bottom = 4.dp)
+                            .heightIn(min = metrics.headerHeightDp)
+                            .padding(start = 12.dp, top = metrics.headerInnerTopDp, end = 12.dp, bottom = 4.dp)
                             .wrapContentHeight(Alignment.CenterVertically),
                     fontSize = 12.sp,
                     lineHeight = 14.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
                     // Two lines at 2.0x instead of one clipped line. The parent's contentDescription
                     // still carries the full text for TalkBack, so nothing is lost if it wraps.
@@ -1147,17 +1219,8 @@ private fun ChatReader(
                 modifier =
                     Modifier
                         .fillMaxSize()
-                        .padding(
-                            top = 48.dp,
-                            bottom =
-                                if (sectionMenu) {
-                                    28.dp
-                                } else {
-                                    with(LocalDensity.current) {
-                                        footerHeight.toDp()
-                                    } + 6.dp
-                                },
-                        ).semantics {
+                        .padding(top = metrics.headerHeightDp)
+                        .semantics {
                             traversalIndex = 1f
                             contentDescription =
                                 if (sectionMenu) {
@@ -1171,7 +1234,8 @@ private fun ChatReader(
                             if (BuildConfig.DEBUG) {
                                 stateDescription =
                                     "viewport=${listState.layoutInfo.let {
-                                        it.viewportEndOffset - it.viewportStartOffset
+                                        (it.viewportEndOffset - it.viewportStartOffset - it.afterContentPadding)
+                                            .coerceAtLeast(1)
                                     }};answer=" +
                                     answerIndices.joinToString(",") { blockIndex ->
                                         val range = unitRanges.getOrNull(blockIndex) ?: IntRange.EMPTY
@@ -1187,13 +1251,16 @@ private fun ChatReader(
                                     ";index=${listState.firstVisibleItemIndex}" +
                                     ";offset=${listState.firstVisibleItemScrollOffset}" +
                                     ";forward=${listState.canScrollForward}" +
-                                    // Forward extent in PIXELS, not pixels-to-the-last-item's-edge:
-                                    // `canScrollForward` is true for a 2 px residue produced by the
-                                    // footer's own height padding, and no drag can move that far.
+                                    // Forward extent in PIXELS above content bottom padding.
                                     ";remaining=" +
                                     listState.layoutInfo.let { info ->
                                         val last = info.visibleItemsInfo.lastOrNull()
-                                        if (last == null) 0 else (last.offset + last.size) - info.viewportEndOffset
+                                        if (last == null) {
+                                            0
+                                        } else {
+                                            (last.offset + last.size) -
+                                                (info.viewportEndOffset - info.afterContentPadding)
+                                        }
                                     } +
                                     ";scrolling=${listState.isScrollInProgress}" +
                                     ";following=$following" +
@@ -1203,23 +1270,26 @@ private fun ChatReader(
                                     }}"
                             }
                         },
-                state =
-                    if (sectionMenu) {
-                        menuState
-                    } else if (renderLab) {
-                        labState
-                    } else {
-                        listState
-                    },
-                contentPadding = PaddingValues(horizontal = if (sectionMenu) 44.dp else 24.dp, vertical = 8.dp),
+                state = activeListState,
+                contentPadding =
+                    PaddingValues(
+                        start = if (sectionMenu) metrics.menuHorizontalDp else metrics.readerHorizontalDp,
+                        end = if (sectionMenu) metrics.menuHorizontalDp else metrics.readerHorizontalDp,
+                        top = 4.dp,
+                        bottom =
+                            if (sectionMenu) {
+                                metrics.listVerticalDp
+                            } else {
+                                with(baseDensity) { footerHeight.toDp() } + 8.dp
+                            },
+                    ),
                 verticalArrangement = Arrangement.spacedBy(if (sectionMenu) 4.dp else 12.dp),
             ) {
                 if (sectionMenu) {
                     item {
                         Button(enabled = !chatState.generating, onClick = {
                             providerScreen = true
-                            sectionMenu =
-                                false
+                            sectionMenu = false
                         }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.chat_menu_providers)) }
                     }
                     item {
@@ -1235,11 +1305,75 @@ private fun ChatReader(
                         Button(enabled = !chatState.generating && !chatState.unsaved, onClick = {
                             chat.newChat()
                             renderLab = false
-                            sectionMenu =
-                                false
+                            sectionMenu = false
                             following = true
                             followNewConversation = false
                         }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.chat_new_chat)) }
+                    }
+                    item {
+                        val sizeName =
+                            stringResource(
+                                when (providerState.textSize) {
+                                    ReaderTextSize.COMPACT -> R.string.chat_text_size_compact
+                                    ReaderTextSize.STANDARD -> R.string.chat_text_size_standard
+                                    ReaderTextSize.LARGE -> R.string.chat_text_size_large
+                                },
+                            )
+                        OutlinedButton(
+                            onClick = {
+                                val next = providerState.textSize.next()
+                                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                menuScope.launch {
+                                    (screenContext.applicationContext as NiroApplication)
+                                        .settings
+                                        .setTextSize(
+                                            next,
+                                        )
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Text(stringResource(R.string.chat_text_size, sizeName), fontSize = 13.sp) }
+                    }
+                    if (providerState.profiles.size >= 2) {
+                        item {
+                            Text(
+                                stringResource(R.string.chat_quick_switch_header),
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 6.dp, bottom = 2.dp),
+                            )
+                        }
+                        items(providerState.profiles, key = { "switch-${it.id}" }) { p ->
+                            val isSelected = p.id == providerState.selectedId
+                            val label = "${p.displayName} · ${p.selectedModelId}"
+                            if (isSelected) {
+                                Button(
+                                    enabled = !chatState.generating,
+                                    onClick = { sectionMenu = false },
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Text(label, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
+                            } else {
+                                OutlinedButton(
+                                    enabled = !chatState.generating,
+                                    onClick = {
+                                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        menuScope.launch {
+                                            (screenContext.applicationContext as NiroApplication)
+                                                .settings
+                                                .select(
+                                                    p.id,
+                                                )
+                                        }
+                                        sectionMenu = false
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Text(label, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
+                            }
+                        }
                     }
                     if (BuildConfig.DEBUG) {
                         items(listOf("Full fixture", "Unicode", "Math", "Code", "Table", "Partial syntax")) { name ->
@@ -1268,6 +1402,7 @@ private fun ChatReader(
                             Text(
                                 notice,
                                 fontSize = 14.sp,
+                                color = MaterialTheme.colorScheme.primary,
                                 modifier =
                                     Modifier.semantics {
                                         liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite
@@ -1291,11 +1426,17 @@ private fun ChatReader(
                         ) { _, unit ->
                             val messageId = historyBlocks.getOrNull(unit.blockIndex)?.first
                             val message = messageId?.let { messageById[it] }
+                            val isTurnHeader =
+                                unit is com.nirowear.renderer.RenderUnit.Whole &&
+                                    unit.block is ContentBlock.Heading &&
+                                    unit.block.level == 4 &&
+                                    historyBlocks.getOrNull(unit.blockIndex - 1)?.first != messageId
                             val editable = message?.role == "USER" && !chatState.generating && !chatState.unsaved
                             val editLabel =
                                 if (editable) stringResource(R.string.chat_edit_message) else null
                             val openEditor: () -> Unit = {
                                 message?.let { target ->
+                                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                                     saveReaderPosition()
                                     // Use a dedicated edit slot so abandoning an edit never alters the unsent draft.
                                     editField = fieldOf(target.rawContent)
@@ -1310,7 +1451,8 @@ private fun ChatReader(
                                         .pointerInput(messageId) {
                                             detectTapGestures(onLongPress = { currentOpenEditor() })
                                         }
-                                        // Do not set mergeDescendants = true; reader bounds track individual child nodes.
+                                        // Do not set mergeDescendants = true; reader bounds track
+                                        // individual child nodes.
                                         .semantics {
                                             onLongClick(label = editLabel, action = {
                                                 currentOpenEditor()
@@ -1320,18 +1462,63 @@ private fun ChatReader(
                                 } else {
                                     Modifier
                                 }
+                            val codeSource =
+                                (historyBlocks.getOrNull(unit.blockIndex)?.second as? ContentBlock.Code)?.source
                             Box(
                                 Modifier
+                                    .roundEdgeTaper(activeListState, unit.key, metrics.isRound)
                                     .onSizeChanged {
                                         if (blockHeights[unit.key] != it.height) {
                                             blockHeights[unit.key] = it.height
                                         }
                                     }.then(editModifier),
-                            ) { RenderUnitView(unit, readerTextMeasurer) }
+                            ) {
+                                CompositionLocalProvider(LocalDensity provides readerDensity) {
+                                    if (isTurnHeader) {
+                                        val headingBlock = unit.block as ContentBlock.Heading
+                                        val headerText = headingBlock.content.joinToString("") { it.text }
+                                        val isUserTurn = message?.role == "USER"
+                                        Column(Modifier.fillMaxWidth()) {
+                                            if (unit.blockIndex > 0) {
+                                                Box(
+                                                    Modifier
+                                                        .fillMaxWidth()
+                                                        .padding(bottom = 8.dp)
+                                                        .height(1.dp)
+                                                        .background(MaterialTheme.colorScheme.outlineVariant),
+                                                )
+                                            }
+                                            Text(
+                                                headerText,
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color =
+                                                    if (isUserTurn) {
+                                                        MaterialTheme.colorScheme.primary
+                                                    } else {
+                                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                                    },
+                                                modifier = Modifier.semantics { heading() },
+                                            )
+                                        }
+                                    } else {
+                                        RenderUnitView(
+                                            unit,
+                                            readerTextMeasurer,
+                                            onCopyCode = copyToClipboard,
+                                            fullCodeSource = codeSource,
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                     if (liveBlocksShown) {
-                        items(blocks, contentType = { it::class }) { DocumentBlock(it, readerTextMeasurer) }
+                        items(blocks, contentType = { it::class }) { block ->
+                            CompositionLocalProvider(LocalDensity provides readerDensity) {
+                                DocumentBlock(block, readerTextMeasurer, onCopyCode = copyToClipboard)
+                            }
+                        }
                     }
                     // One copy of the transient failure only. The same string also renders on
                     // the persisted assistant row (:255-266), so a bare `error?.let` prints it
@@ -1342,21 +1529,9 @@ private fun ChatReader(
                     }
                     if (unsavedRowShown) {
                         item {
-                            val context = androidx.compose.ui.platform.LocalContext.current
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Button(onClick = {
-                                    val clipboard =
-                                        context.getSystemService(
-                                            android.content.Context.CLIPBOARD_SERVICE,
-                                        ) as android.content.ClipboardManager
-                                    val clip =
-                                        android.content.ClipData.newPlainText(
-                                            "NiroWear unsaved answer",
-                                            chatState.rawMarkdown.orEmpty(),
-                                        )
-                                    markClipSensitive(clip)
-                                    clipboard.setPrimaryClip(clip)
-                                    notice = copiedNotice
+                                    copyToClipboard(chatState.rawMarkdown.orEmpty())
                                 }) { Text(stringResource(R.string.chat_copy_unsaved)) }
                                 Button(
                                     enabled = !chatState.generating,
@@ -1378,48 +1553,112 @@ private fun ChatReader(
                                     fontSize = if (compactChrome) 16.sp else 18.sp,
                                 )
                                 Text(
-                                    if (providerState.selected ==
-                                        null
-                                    ) {
+                                    if (providerState.selected == null) {
                                         stringResource(R.string.chat_empty_add_provider)
                                     } else {
                                         stringResource(R.string.chat_empty_start)
                                     },
                                     fontSize = if (compactChrome) 13.sp else 14.sp,
                                     lineHeight = if (compactChrome) 17.sp else 20.sp,
-                                    color = Color(0xFFB8BDC6),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
                         }
                     }
                     if (retryRowShown) {
                         item {
-                            ReaderAction(retry = true, onClick = {
-                                anchors.remove(chatState.conversationId)
-                                following =
-                                    true
-                                chat.retry()
-                            })
+                            Row(
+                                modifier = Modifier.fillMaxWidth().wrapContentWidth(Alignment.CenterHorizontally),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                ReaderAction(retry = true, onClick = {
+                                    anchors.remove(chatState.conversationId)
+                                    following = true
+                                    chat.retry()
+                                })
+                                val answerToCopy = answerRow?.rawContent.orEmpty()
+                                if (answerToCopy.isNotBlank()) {
+                                    OutlinedButton(
+                                        onClick = { copyToClipboard(answerToCopy) },
+                                        modifier = Modifier.heightIn(min = 48.dp),
+                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                                    ) {
+                                        Text(copyAnswerLabel, fontSize = 12.sp, maxLines = 1)
+                                    }
+                                }
+                            }
                         }
                     }
                     if (streamingRowShown) {
                         item {
+                            val waitingFirstDelta =
+                                chatState.generating &&
+                                    answerRow?.rawContent.isNullOrBlank() &&
+                                    chatState.rawMarkdown.isNullOrEmpty()
+                            val pulseAlpha =
+                                if (waitingFirstDelta) {
+                                    val transition = rememberInfiniteTransition(label = "thinking")
+                                    val animated by
+                                        transition.animateFloat(
+                                            initialValue = 0.45f,
+                                            targetValue = 1.0f,
+                                            animationSpec =
+                                                infiniteRepeatable(
+                                                    animation = tween(750),
+                                                    repeatMode = RepeatMode.Reverse,
+                                                ),
+                                            label = "thinkingAlpha",
+                                        )
+                                    animated
+                                } else {
+                                    1f
+                                }
                             Text(
-                                if (chatState.generating) streamingLabel else stoppedPartial,
+                                when {
+                                    waitingFirstDelta -> thinkingLabel
+                                    chatState.generating -> streamingLabel
+                                    else -> stoppedPartial
+                                },
                                 fontSize = 12.sp,
-                                // Polite, not assertive: this node carries STATE, not answer text. A
-                                // screen reader was told nothing when streaming started or stopped, and
-                                // no live region existed anywhere in the app.
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                // Polite, not assertive: this node carries STATE, not answer text.
                                 modifier =
-                                    Modifier.semantics {
-                                        liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite
-                                    },
+                                    Modifier
+                                        .alpha(pulseAlpha)
+                                        .semantics {
+                                            liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite
+                                        },
                             )
                         }
                     }
                 }
             }
             if (!sectionMenu) {
+                Box(
+                    Modifier
+                        .align(Alignment.TopCenter)
+                        .fillMaxWidth()
+                        .padding(top = metrics.headerHeightDp)
+                        .height(14.dp)
+                        .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.72f), Color.Transparent))),
+                )
+                Box(
+                    Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .height(
+                            with(baseDensity) { footerHeight.toDp() }.coerceAtLeast(56.dp) + 16.dp,
+                        ).background(
+                            Brush.verticalGradient(
+                                listOf(
+                                    Color.Transparent,
+                                    Color.Black.copy(alpha = 0.88f),
+                                    Color.Black,
+                                ),
+                            ),
+                        ),
+                )
                 Column(
                     Modifier
                         .align(Alignment.BottomCenter)
@@ -1431,11 +1670,9 @@ private fun ChatReader(
                                 if (idleLatest ||
                                     (chatState.generating && !renderLab && !following && !chatState.unsaved)
                                 ) {
-                                    48.dp
-                                } else if (compactChrome) {
-                                    12.dp
+                                    metrics.footerBottomThreeIconsDp
                                 } else {
-                                    28.dp
+                                    metrics.footerBottomTwoIconsDp
                                 },
                         ),
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -1459,20 +1696,12 @@ private fun ChatReader(
                                 // platform minimum) while the label may grow.
                                 Button(
                                     onClick = {
+                                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                         chat.stop()
                                     },
                                     modifier = Modifier.widthIn(min = 72.dp).heightIn(min = 48.dp),
-                                    // Measured on the reference watch: with the default (icon-aware)
-                                    // content padding the label sat at Rect(189,344,243,380) inside a
-                                    // button at Rect(161,314,305,410) — 17 px left of centre, which
-                                    // is the "Stop is slightly not centred" report. A text-only
-                                    // button needs no leading icon reserve.
                                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
                                 ) {
-                                    // The button's minimum width is wider than the word, and the
-                                    // content ROW starts at the left edge, so the label has to claim
-                                    // the full width and centre its own text: measured 17 px off with
-                                    // the default padding and 45 px off with padding alone.
                                     Text(
                                         stringResource(R.string.chat_stop),
                                         fontSize = 12.sp,
@@ -1546,6 +1775,7 @@ private fun ChatReader(
                     }
                 }
             }
+            ScrollIndicator(state = activeListState, modifier = Modifier.align(Alignment.CenterEnd))
         }
     }
 }
@@ -1569,13 +1799,17 @@ private fun HistoryScreen(
     currentId: String?,
     listState: androidx.compose.foundation.lazy.LazyListState,
     onBack: () -> Unit,
+    onDelete: (String) -> Unit,
     onSelect: (String?, Long?) -> Unit,
 ) {
     val context = LocalContext.current
     val app = context.applicationContext as NiroApplication
+    val metrics = rememberWatchMetrics()
+    val resources = LocalResources.current
     var query by rememberSaveable { mutableStateOf("") }
     var hits by remember { mutableStateOf<List<SearchHit>>(emptyList()) }
     var searched by remember { mutableStateOf("") }
+    var confirmDeleteId by remember { mutableStateOf<String?>(null) }
     // Debounced so a fast typist does not issue one SQL query per keystroke on a watch.
     LaunchedEffect(query) {
         if (likeTerms(query).isEmpty()) {
@@ -1596,100 +1830,204 @@ private fun HistoryScreen(
         }
     }
     BindSimpleRotaryScroll(listState)
-    LazyColumn(
-        Modifier.fillMaxSize().imePadding(),
-        state = listState,
-        contentPadding = PaddingValues(horizontal = 30.dp, vertical = 30.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        item {
-            Text(
-                stringResource(R.string.chat_history),
-                modifier = Modifier.fillMaxWidth(),
-                textAlign = TextAlign.Center,
-                fontSize = 18.sp,
-            )
-        }
-        item {
-            Button(
-                onClick = onBack,
-                modifier = Modifier.fillMaxWidth().wrapContentWidth(Alignment.CenterHorizontally),
-            ) {
-                Text(stringResource(R.string.chat_back))
-            }
-        }
-        item {
-            // The `semantics` lambda is not a composable scope.
-            val searchLabel = stringResource(R.string.chat_search_messages)
-            BasicTextField(
-                value = query,
-                onValueChange = { query = it },
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 48.dp)
-                        .background(Color(0xFF202124))
-                        .padding(12.dp)
-                        .semantics { contentDescription = searchLabel },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                textStyle = TextStyle(color = Color.White, fontSize = 16.sp),
-                cursorBrush =
-                    androidx.compose.ui.graphics
-                        .SolidColor(Color.White),
-                decorationBox = { field ->
-                    if (query.isEmpty()) {
-                        Text(
-                            stringResource(R.string.chat_search_placeholder),
-                            fontSize = 16.sp,
-                            color = Color(0xFF8E939B),
-                        )
-                    }
-                    field()
-                },
-            )
-        }
-        item {
-            Button(
-                enabled = !generating && !unsaved,
-                onClick = { onSelect(null, null) },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(stringResource(R.string.chat_new_chat))
-            }
-        }
-        if (query.isNotBlank()) {
-            if (hits.isEmpty() && searched.isNotBlank()) {
-                item { Text(stringResource(R.string.chat_no_matches), fontSize = 14.sp) }
-            }
-            items(hits, key = { "hit-${it.messageId}" }) { hit ->
-                val label = hit.rawContent
-                val roleLabel =
-                    stringResource(if (hit.role == "USER") R.string.chat_you else R.string.chat_answer)
-                // Same guard as the conversation rows: opening during generation is refused by the
-                // ViewModel, and closing History anyway looked like a dead tap that lost the search.
-                Button(
-                    enabled = !generating && !unsaved,
-                    onClick = { onSelect(hit.conversationId, hit.messageId) },
+    Box(Modifier.fillMaxSize().background(Color.Black)) {
+        LazyColumn(
+            Modifier.fillMaxSize().imePadding(),
+            state = listState,
+            contentPadding =
+                PaddingValues(
+                    horizontal = metrics.listHorizontalDp,
+                    vertical = metrics.listVerticalDp,
+                ),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            item {
+                Text(
+                    stringResource(R.string.chat_history),
                     modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center,
+                    fontSize = 18.sp,
+                )
+            }
+            item {
+                Button(
+                    onClick = onBack,
+                    modifier = Modifier.fillMaxWidth().wrapContentWidth(Alignment.CenterHorizontally),
                 ) {
-                    Text(
-                        stringResource(R.string.chat_hit_label, roleLabel, label),
-                        fontSize = 13.sp,
-                        maxLines = 4,
-                    )
+                    Text(stringResource(R.string.chat_back))
                 }
             }
-        } else {
-            items(conversations, key = { it.id }) { conversation ->
-                androidx.wear.compose.material3.OutlinedButton(
-                    enabled = (!generating || conversation.id == currentId) && !unsaved,
-                    onClick = { onSelect(conversation.id, null) },
+            item {
+                // The `semantics` lambda is not a composable scope.
+                val searchLabel = stringResource(R.string.chat_search_messages)
+                BasicTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .background(Color(0xFF161B22), RoundedCornerShape(10.dp))
+                            .border(1.dp, Color(0xFF3A4450), RoundedCornerShape(10.dp))
+                            .padding(12.dp)
+                            .semantics { contentDescription = searchLabel },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    textStyle = TextStyle(color = Color.White, fontSize = 16.sp),
+                    cursorBrush =
+                        androidx.compose.ui.graphics
+                            .SolidColor(Color.White),
+                    decorationBox = { field ->
+                        if (query.isEmpty()) {
+                            Text(
+                                stringResource(R.string.chat_search_placeholder),
+                                fontSize = 16.sp,
+                                color = Color(0xFF8E939B),
+                            )
+                        }
+                        field()
+                    },
+                )
+            }
+            item {
+                Button(
+                    enabled = !generating && !unsaved,
+                    onClick = { onSelect(null, null) },
                     modifier = Modifier.fillMaxWidth(),
-                ) { Text(conversation.title) }
+                ) {
+                    Text(stringResource(R.string.chat_new_chat))
+                }
+            }
+            if (query.isNotBlank()) {
+                if (hits.isEmpty() && searched.isNotBlank()) {
+                    item { Text(stringResource(R.string.chat_no_matches), fontSize = 14.sp) }
+                }
+                items(hits, key = { "hit-${it.messageId}" }) { hit ->
+                    val label = hit.rawContent
+                    val roleLabel =
+                        stringResource(if (hit.role == "USER") R.string.chat_you else R.string.chat_answer)
+                    // Same guard as the conversation rows: opening during generation is refused by the
+                    // ViewModel, and closing History anyway looked like a dead tap that lost the search.
+                    Button(
+                        enabled = !generating && !unsaved,
+                        onClick = { onSelect(hit.conversationId, hit.messageId) },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(
+                            stringResource(R.string.chat_hit_label, roleLabel, label),
+                            fontSize = 13.sp,
+                            maxLines = 4,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            } else if (conversations.isEmpty()) {
+                item {
+                    Text(
+                        stringResource(R.string.chat_history_empty),
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                        textAlign = TextAlign.Center,
+                    )
+                }
+            } else {
+                items(conversations, key = { it.id }) { conversation ->
+                    val isCurrent = conversation.id == currentId
+                    val isConfirmingDelete = confirmDeleteId == conversation.id
+                    val ageText = formatRelativeTime(resources, conversation.updatedAt)
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        val rowContent: @Composable () -> Unit = {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                Text(
+                                    conversation.title,
+                                    modifier = Modifier.weight(1f),
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                    fontSize = 14.sp,
+                                )
+                                Text(
+                                    ageText,
+                                    fontSize = 11.sp,
+                                    color =
+                                        if (isCurrent) {
+                                            MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f)
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        },
+                                )
+                            }
+                        }
+                        if (isCurrent) {
+                            Button(
+                                enabled = !unsaved,
+                                onClick = { onSelect(conversation.id, null) },
+                                modifier = Modifier.fillMaxWidth(),
+                            ) { rowContent() }
+                        } else {
+                            OutlinedButton(
+                                enabled = !generating && !unsaved,
+                                onClick = { onSelect(conversation.id, null) },
+                                modifier = Modifier.fillMaxWidth(),
+                            ) { rowContent() }
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End,
+                        ) {
+                            Text(
+                                stringResource(
+                                    if (isConfirmingDelete) {
+                                        R.string.chat_history_delete_confirm
+                                    } else {
+                                        R.string.chat_history_delete
+                                    },
+                                ),
+                                fontSize = 12.sp,
+                                color =
+                                    if (isConfirmingDelete) {
+                                        MaterialTheme.colorScheme.error
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
+                                modifier =
+                                    Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .clickable(enabled = !generating && !unsaved, role = Role.Button) {
+                                            if (isConfirmingDelete) {
+                                                confirmDeleteId = null
+                                                onDelete(conversation.id)
+                                            } else {
+                                                confirmDeleteId = conversation.id
+                                            }
+                                        }.padding(horizontal = 10.dp, vertical = 4.dp),
+                            )
+                        }
+                    }
+                }
             }
         }
+        ScrollIndicator(state = listState, modifier = Modifier.align(Alignment.CenterEnd))
     }
+}
+
+private fun formatRelativeTime(
+    resources: android.content.res.Resources,
+    updatedAtMs: Long,
+    nowMs: Long = System.currentTimeMillis(),
+): String {
+    val diffMs = (nowMs - updatedAtMs).coerceAtLeast(0L)
+    val mins = (diffMs / 60_000L).toInt()
+    if (mins < 1) return resources.getString(R.string.chat_time_now)
+    if (mins < 60) return resources.getString(R.string.chat_time_minutes, mins)
+    val hours = mins / 60
+    if (hours < 24) return resources.getString(R.string.chat_time_hours, hours)
+    val days = hours / 24
+    return resources.getString(R.string.chat_time_days, days)
 }
 
 private const val SEARCH_DEBOUNCE_MS = 250L

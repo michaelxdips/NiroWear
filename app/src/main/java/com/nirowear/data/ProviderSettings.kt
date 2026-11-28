@@ -41,10 +41,26 @@ private const val MAX_READ_RETRIES = 3L
 
 private val credentialRefPattern = Regex("[a-f0-9-]{36}")
 
+enum class ReaderTextSize(
+    val scale: Float,
+) {
+    COMPACT(0.88f),
+    STANDARD(1.0f),
+    LARGE(1.15f),
+    ;
+
+    fun next(): ReaderTextSize = entries[(ordinal + 1) % entries.size]
+
+    companion object {
+        fun fromStored(raw: String?): ReaderTextSize = entries.firstOrNull { it.name == raw } ?: STANDARD
+    }
+}
+
 data class ProviderSettingsState(
     val profiles: List<ProviderProfile> = emptyList(),
     val selectedId: String? = null,
     val error: String? = null,
+    val textSize: ReaderTextSize = ReaderTextSize.STANDARD,
 ) {
     val selected: ProviderProfile? get() = profiles.find { it.id == selectedId }
 }
@@ -56,6 +72,7 @@ class ProviderSettings(
     private val store = context.providerData
     private val profilesKey = stringPreferencesKey("profiles_v1")
     private val selectedKey = stringPreferencesKey("selected_profile")
+    private val textSizeKey = stringPreferencesKey("reader_text_size")
     private val mutex = Mutex()
     val state =
         store.data
@@ -72,7 +89,11 @@ class ProviderSettings(
             }.map { prefs ->
                 try {
                     val profiles = decode(prefs[profilesKey] ?: "[]")
-                    ProviderSettingsState(profiles, readableSelection(profiles, prefs[selectedKey]))
+                    ProviderSettingsState(
+                        profiles = profiles,
+                        selectedId = readableSelection(profiles, prefs[selectedKey]),
+                        textSize = ReaderTextSize.fromStored(prefs[textSizeKey]),
+                    )
                 } catch (
                     _: Exception,
                 ) {
@@ -204,6 +225,13 @@ class ProviderSettings(
             store.edit { prefs ->
                 require(decode(prefs[profilesKey] ?: "[]").any { it.id == id })
                 prefs[selectedKey] = id
+            }
+        }
+
+    suspend fun setTextSize(size: ReaderTextSize) =
+        mutex.withLock {
+            store.edit { prefs ->
+                prefs[textSizeKey] = size.name
             }
         }
 

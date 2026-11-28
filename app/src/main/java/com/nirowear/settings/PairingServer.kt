@@ -629,45 +629,105 @@ internal class PairingServer(
  * LAN sniffer sees only ciphertext.
  */
 internal const val PAIRING_PAGE = """
-<!doctype html><html><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="dark">
 <title>NiroWear setup</title>
 <style>
-body{font-family:system-ui,sans-serif;margin:0;padding:20px;background:#111;color:#eee}
-h1{font-size:19px;margin:0 0 4px}p{font-size:13px;color:#9aa0a6;margin:0 0 18px}
-label{display:block;font-size:12px;color:#9aa0a6;margin:12px 0 4px}
-input,select{width:100%;box-sizing:border-box;padding:11px;font-size:15px;border-radius:8px;
-border:1px solid #41454d;background:#202124;color:#fff}
-button{width:100%;margin-top:22px;padding:14px;font-size:16px;border-radius:8px;border:0;
-background:#a8c7fa;color:#062e6f;font-weight:600;cursor:pointer}
-button.secondary{margin-top:12px;background:#282a2f;color:#d2e3fc;border:1px solid #41454d;font-size:14px;padding:11px}
-button:disabled{opacity:.55;cursor:default}
-.hidden{display:none}
-#modelFilter{margin-top:8px}
-#models{margin-top:8px}
-#out{margin-top:16px;font-size:13px;color:#ffd28a;min-height:18px}
+:root{--bg:#0A0D11;--card:#141A21;--inset:#0F141A;--border:#23303E;--border-hi:#355064;--text:#F1F5F9;--muted:#8B9BB0;--teal:#7EE6CC;--teal-ink:#05241F;--teal-soft:#12332F;--warn:#FFD28A;--err:#FF8B8B;--ok:#8EF0C8}
+*{box-sizing:border-box}
+body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;margin:0;padding:18px 14px 36px;background:radial-gradient(120% 60% at 50% 0%,#10222A 0%,var(--bg) 55%);color:var(--text);min-height:100vh;-webkit-font-smoothing:antialiased}
+.wrap{max-width:440px;margin:0 auto}
+.brand{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+.logo{width:38px;height:38px;border-radius:11px;background:linear-gradient(145deg,#133238,#0C1F26);border:1px solid #265159;display:grid;place-items:center;flex:none;box-shadow:0 6px 18px rgba(0,0,0,.35)}
+.brand h1{font-size:20px;font-weight:700;letter-spacing:-.01em;margin:0}
+.brand .sub{font-size:12.5px;color:var(--muted);margin:2px 0 0;line-height:1.35}
+.pill{display:inline-flex;align-items:center;gap:7px;padding:5px 11px;border-radius:999px;background:var(--inset);border:1px solid var(--border);font-size:12px;color:#CFE7E1;margin-bottom:14px}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--warn);flex:none}
+.pill.ready .dot{background:var(--ok);box-shadow:0 0 8px rgba(142,240,200,.65)}
+.pill.err .dot{background:var(--err)}
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;box-shadow:0 16px 40px rgba(0,0,0,.45)}
+.chips{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:6px}
+.chip{appearance:none;background:var(--inset);color:var(--muted);border:1px solid var(--border);border-radius:9px;padding:8px 4px;font-size:12px;font-weight:600;cursor:pointer;text-align:center;margin:0;width:100%;transition:border-color .15s,background .15s,color .15s}
+.chip.active{background:var(--teal-soft);color:var(--teal);border-color:#2D7F6F}
+label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin:13px 0 5px;letter-spacing:.01em}
+input,select{width:100%;padding:11px 12px;font-size:15px;border-radius:10px;border:1px solid var(--border);background:var(--inset);color:var(--text);outline:none;transition:border-color .15s}
+input:focus,select:focus{border-color:var(--teal)}
+.keyRow{display:flex;gap:6px;align-items:stretch}
+.keyRow input{flex:1;min-width:0}
+.miniBtn{width:auto;margin:0;padding:0 11px;border-radius:10px;border:1px solid var(--border);background:#18212B;color:#CFE7E1;font-size:12.5px;font-weight:600;cursor:pointer;white-space:nowrap}
+.miniBtn:hover{border-color:var(--border-hi)}
+button.primary{width:100%;margin-top:18px;padding:13px 16px;font-size:15.5px;border-radius:11px;border:0;background:var(--teal);color:var(--teal-ink);font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px}
+button.secondary{width:100%;margin-top:12px;padding:11px 14px;font-size:14px;border-radius:10px;border:1px solid #2A464D;background:#15232A;color:#D4F7ED;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px}
+button:disabled{opacity:.5;cursor:default}
+.hidden{display:none !important}
+#modelPickBox{margin-top:10px;padding:10px;border-radius:11px;background:#0D1318;border:1px solid var(--border)}
+#modelFilter{margin-bottom:8px}
+.spin{width:14px;height:14px;border-radius:50%;border:2px solid rgba(212,247,237,.28);border-top-color:var(--teal);animation:rot .7s linear infinite}
+@keyframes rot{to{transform:rotate(360deg)}}
+#out{margin-top:14px;padding:10px 12px;border-radius:10px;font-size:13px;line-height:1.4;min-height:18px;background:transparent;border:1px solid transparent;color:var(--warn)}
+#out:empty{display:none}
+#out.info{background:#12212B;border-color:#26465C;color:#CFE7E1}
+#out.ok{background:#102B24;border-color:#266957;color:var(--ok)}
+#out.warn{background:#292012;border-color:#5E451F;color:var(--warn)}
+#out.err{background:#2C1418;border-color:#692B34;color:var(--err)}
+details.sec{margin-top:14px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:10px 13px}
+details.sec summary{font-size:12.5px;font-weight:600;color:#B8C7D9;cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between}
+details.sec summary::after{content:"+";color:var(--teal);font-size:15px;font-weight:700}
+details.sec[open] summary::after{content:"-"}
+details.sec p{font-size:12.5px;line-height:1.5;color:var(--muted);margin:9px 0 2px}
 </style></head><body>
-<h1>NiroWear</h1>
-<p>Send this provider to your watch. It is encrypted before it leaves this page.</p>
-<p>Same Wi-Fi only. The watch serves its own certificate, so your browser warns that it is not trusted — accept it to load this page. Nothing is sent until you press Fetch models or Send. Encrypted with ECDH P-256 + AES-GCM, but the handshake is unauthenticated — confirm the URL on the watch matches. Prefer manual entry on untrusted networks.</p>
-<label>Provider</label>
-<select id="type">
-<option value="OPENAI">OpenAI</option>
-<option value="ANTHROPIC">Anthropic</option>
-<option value="GEMINI">Gemini</option>
-<option value="OPENAI_COMPATIBLE">OpenAI-compatible</option>
-</select>
-<label>Name</label><input id="name" value="OpenAI">
-<label>Base URL</label><input id="base" value="https://api.openai.com/v1">
-<label>API key</label><input id="key" type="password" autocomplete="off" spellcheck="false">
-<button id="fetchModels" type="button" class="secondary">Fetch models</button>
-<div id="modelPickBox" class="hidden">
-<input id="modelFilter" class="hidden" placeholder="Filter fetched models...">
-<select id="models"></select>
+<div class="wrap">
+<div class="brand">
+ <div class="logo" aria-hidden="true">
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+   <circle cx="12" cy="12" r="9" stroke="#7EE6CC" stroke-opacity=".35" stroke-width="1.6"/>
+   <path d="M7.5 14.5C9 9.5 15 9.5 16.5 14.5" stroke="#7EE6CC" stroke-width="2" stroke-linecap="round"/>
+   <circle cx="12" cy="8.5" r="1.6" fill="#7EE6CC"/>
+  </svg>
+ </div>
+ <div>
+  <h1>NiroWear</h1>
+  <div class="sub">Send this provider to your watch. It is encrypted before it leaves this page.</div>
+ </div>
 </div>
-<label>Model ID</label><input id="model" placeholder="required — e.g. gpt-4o-mini">
-<button id="go" type="button">Send to watch</button>
-<div id="out"></div>
+<div class="pill" id="connPill"><span class="dot"></span><span id="connText">Connecting over local Wi-Fi · ECDH P-256</span></div>
+<div class="card">
+ <label for="type">Provider</label>
+ <div class="chips" id="providerChips" role="group" aria-label="Quick provider">
+  <button type="button" class="chip active" data-type="OPENAI">OpenAI</button>
+  <button type="button" class="chip" data-type="ANTHROPIC">Anthropic</button>
+  <button type="button" class="chip" data-type="GEMINI">Gemini</button>
+  <button type="button" class="chip" data-type="OPENAI_COMPATIBLE">Custom</button>
+ </div>
+ <select id="type" style="margin-top:8px">
+  <option value="OPENAI">OpenAI</option>
+  <option value="ANTHROPIC">Anthropic</option>
+  <option value="GEMINI">Gemini</option>
+  <option value="OPENAI_COMPATIBLE">OpenAI-compatible</option>
+ </select>
+ <label for="name">Name</label><input id="name" value="OpenAI">
+ <label for="base">Base URL</label><input id="base" value="https://api.openai.com/v1" inputmode="url" autocapitalize="off" spellcheck="false">
+ <label for="key">API key</label>
+ <div class="keyRow">
+  <input id="key" type="password" autocomplete="off" spellcheck="false" placeholder="Paste API key">
+  <button id="toggleKey" type="button" class="miniBtn" aria-label="Show API key">Show</button>
+  <button id="pasteKey" type="button" class="miniBtn" aria-label="Paste from clipboard">Paste</button>
+ </div>
+ <button id="fetchModels" type="button" class="secondary"><span id="fetchSpin" class="spin hidden"></span><span id="fetchLabel">Fetch models</span></button>
+ <div id="modelPickBox" class="hidden">
+  <input id="modelFilter" class="hidden" placeholder="Filter fetched models...">
+  <select id="models"></select>
+ </div>
+ <label for="model">Model ID</label><input id="model" placeholder="required — e.g. gpt-4o-mini" autocapitalize="off" spellcheck="false">
+ <button id="go" type="button" class="primary">Send to watch</button>
+ <div id="out" role="status" aria-live="polite"></div>
+</div>
+<details class="sec">
+ <summary>Security &amp; self-signed certificate</summary>
+ <p>Same Wi-Fi only. The watch serves its own certificate, so your browser warns that it is not trusted — accept it to load this page. Nothing is sent until you press Fetch models or Send. Encrypted with ECDH P-256 + AES-GCM, but the handshake is unauthenticated — confirm the URL on the watch matches. Prefer manual entry on untrusted networks.</p>
+</details>
+</div>
 <script>
 function b64u(buf){var b='',u=new Uint8Array(buf),i;
 for(i=0;i<u.length;i++){b+=String.fromCharCode(u[i]);}
@@ -685,6 +745,17 @@ var ready=null,allModels=[],lastType='OPENAI',sent=false;
 // keeps it out of the handshake response, so an unauthenticated caller can never learn it.
 var CAP=decodeURIComponent(location.pathname.split('/')[1]||'');
 function el(id){return document.getElementById(id);}
+function setStatus(msg,kind){
+ var o=el('out');
+ o.textContent=msg||'';
+ o.className=msg?(kind||'warn'):'';
+}
+function syncChips(t){
+ var chips=document.querySelectorAll('#providerChips .chip');
+ for(var i=0;i<chips.length;i++){
+  chips[i].classList.toggle('active',chips[i].getAttribute('data-type')===t);
+ }
+}
 function clearModels(){
  allModels=[];
  el('modelPickBox').className='hidden';
@@ -716,7 +787,7 @@ async function encryptBody(obj){
   ready.aes,new TextEncoder().encode(JSON.stringify(obj)));
  return JSON.stringify({v:1,t:b64u(ready.aad),pub:ready.pub,iv:b64u(iv),ct:b64u(ct)});
 }
-el('type').onchange=function(){
+function onTypeChange(){
  var next=el('type').value;
  var prevP=PRESETS[lastType]||{name:'',base:''};
  var nextP=PRESETS[next]||{name:'',base:''};
@@ -724,7 +795,39 @@ el('type').onchange=function(){
  if(!n||n===prevP.name){el('name').value=nextP.name;}
  if(!b||b===prevP.base){el('base').value=nextP.base;}
  lastType=next;
+ syncChips(next);
  clearModels();
+}
+el('type').onchange=onTypeChange;
+el('providerChips').onclick=function(ev){
+ var btn=ev.target&&ev.target.closest?ev.target.closest('.chip'):null;
+ if(!btn)return;
+ var t=btn.getAttribute('data-type');
+ if(!t||t===el('type').value)return;
+ el('type').value=t;
+ onTypeChange();
+};
+el('toggleKey').onclick=function(){
+ var k=el('key'),btn=el('toggleKey');
+ var show=k.type==='password';
+ k.type=show?'text':'password';
+ btn.textContent=show?'Hide':'Show';
+ btn.setAttribute('aria-label',show?'Hide API key':'Show API key');
+};
+el('pasteKey').onclick=async function(){
+ if(!navigator.clipboard||!navigator.clipboard.readText){
+  setStatus('Clipboard paste unavailable in this browser — paste into API key directly.','warn');
+  el('key').focus();
+  return;
+ }
+ try{
+  var txt=(await navigator.clipboard.readText()).trim();
+  if(txt){el('key').value=txt;setStatus('API key pasted from clipboard.','info');}
+  else{setStatus('Clipboard is empty.','warn');}
+ }catch(e){
+  setStatus('Clipboard permission denied — tap API key and paste manually.','warn');
+  el('key').focus();
+ }
 };
 el('modelFilter').oninput=renderModels;
 el('models').onchange=function(){
@@ -736,6 +839,7 @@ async function init(){
  if(hs.preset&&PRESETS[hs.preset.type]){
   el('type').value=hs.preset.type;
   lastType=hs.preset.type;
+  syncChips(hs.preset.type);
   if(hs.preset.name){el('name').value=hs.preset.name;}
   if(typeof hs.preset.base==='string'){el('base').value=hs.preset.base;}
   if(hs.preset.model){el('model').value=hs.preset.model;}
@@ -746,6 +850,8 @@ async function init(){
  var aes=await crypto.subtle.importKey('raw',shared,{name:'AES-GCM'},false,['encrypt']);
  ready={aes:aes,pub:b64u(await crypto.subtle.exportKey('raw',mine.publicKey)),
   aad:unb64u(CAP)};
+ el('connPill').className='pill ready';
+ el('connText').textContent='Local Wi-Fi · ECDH P-256 ready';
 }
 function fetchErrorText(code){
  if(code==='INVALID_CREDENTIAL')return 'API key rejected. Enter model ID manually or fix key.';
@@ -756,18 +862,20 @@ function fetchErrorText(code){
 }
 el('fetchModels').onclick=async function(){
  if(sent)return;
- var out=el('out'),btn=el('fetchModels');
- if(!ready){out.textContent='Still connecting. Wait a moment and try again.';return;}
+ var btn=el('fetchModels'),spin=el('fetchSpin'),lbl=el('fetchLabel');
+ if(!ready){setStatus('Still connecting. Wait a moment and try again.','warn');return;}
  var base=el('base').value.trim(),key=el('key').value.trim();
- if(!base||!key){out.textContent='Enter Base URL and API key first.';return;}
+ if(!base||!key){setStatus('Enter Base URL and API key first.','warn');return;}
  btn.disabled=true;
- out.textContent='Fetching models...';
+ spin.className='spin';
+ lbl.textContent='Fetching models...';
+ setStatus('Fetching models...','info');
  try{
   var body=await encryptBody({type:el('type').value,base:base,key:key});
   var r=await fetch('/'+CAP+'/models',{method:'POST',headers:{'Content-Type':'application/json'},body:body});
   if(sent)return;
-  if(r.status===401||r.status===410){out.textContent='Pairing expired. Restart pairing on the watch.';return;}
-  if(!r.ok){out.textContent='Check Base URL and API key format.';return;}
+  if(r.status===401||r.status===410){setStatus('Pairing expired. Restart pairing on the watch.','err');return;}
+  if(!r.ok){setStatus('Check Base URL and API key format.','err');return;}
   var res=await r.json();
   if(sent)return;
   if(res.ok&&Array.isArray(res.models)&&res.models.length>0){
@@ -775,32 +883,35 @@ el('fetchModels').onclick=async function(){
    el('modelPickBox').className='';
    el('modelFilter').className=allModels.length>12?'':'hidden';
    renderModels();
-   out.textContent=allModels.length+' models loaded. Select one or enter below.';
+   setStatus(allModels.length+' models loaded. Select one or enter below.','ok');
   }else{
    clearModels();
-   out.textContent=fetchErrorText(res.code);
+   setStatus(fetchErrorText(res.code),'warn');
   }
  }catch(e){
   if(sent)return;
   clearModels();
-  out.textContent='Could not fetch models. Enter model ID manually.';
+  setStatus('Could not fetch models. Enter model ID manually.','err');
  }finally{
+  spin.className='spin hidden';
+  lbl.textContent='Fetch models';
   if(!sent)btn.disabled=false;
  }
 };
 el('go').onclick=async function(){
- var out=el('out'),btn=el('go'),fetchBtn=el('fetchModels');
- if(!ready){out.textContent='Still connecting. Wait a moment and try again.';return;}
+ var btn=el('go'),fetchBtn=el('fetchModels');
+ if(!ready){setStatus('Still connecting. Wait a moment and try again.','warn');return;}
  var base=el('base').value.trim(),model=el('model').value.trim(),key=el('key').value.trim();
- if(!base||!model||!key){out.textContent='Base URL, Model ID, and API key are required.';return;}
+ if(!base||!model||!key){setStatus('Base URL, Model ID, and API key are required.','warn');return;}
  btn.disabled=true;
+ setStatus('Encrypting & sending to watch...','info');
  try{
   var body=await encryptBody({type:el('type').value,
    name:el('name').value,base:base,model:model,key:key});
   var r=await fetch('/'+CAP+'/pair',{method:'POST',headers:{'Content-Type':'application/json'},body:body});
-  out.textContent=r.ok?'Sent. Finish on the watch.':'Rejected. Check Base URL/key or restart pairing.';
+  setStatus(r.ok?'Sent. Finish on the watch.':'Rejected. Check Base URL/key or restart pairing.',r.ok?'ok':'err');
   if(r.ok){sent=true;el('key').value='';fetchBtn.disabled=true;}else{btn.disabled=false;}
- }catch(e){btn.disabled=false;out.textContent='Could not send. Restart pairing on the watch.';}
+ }catch(e){btn.disabled=false;setStatus('Could not send. Restart pairing on the watch.','err');}
 };
 init().catch(function(e){
   // WebCrypto (crypto.subtle) only exists in a secure context. This page is served over https with a
@@ -808,12 +919,13 @@ init().catch(function(e){
   // accepted the warning; a browser that refused the certificate never runs this script at all.
   // Reaching this branch therefore means the handshake itself failed, and saying "plain HTTP" here
   // would send the user after a cause that no longer exists.
-  var o=el('out');
+  el('connPill').className='pill err';
+  el('connText').textContent='Pairing connection unavailable';
   if(!window.isSecureContext || typeof crypto==='undefined' || !crypto.subtle){
-    o.textContent='This browser will not run crypto on this page, so the key cannot be '+
-      'encrypted here. Enter the key on the watch instead (Cancel pairing below).';
+    setStatus('This browser will not run crypto on this page, so the key cannot be '+
+      'encrypted here. Enter the key on the watch instead (Cancel pairing below).','err');
   } else {
-    o.textContent='Handshake failed. Restart pairing on the watch.';
+    setStatus('Handshake failed. Restart pairing on the watch.','err');
   }
 });
 </script></body></html>
