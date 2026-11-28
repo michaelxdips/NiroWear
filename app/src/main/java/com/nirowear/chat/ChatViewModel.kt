@@ -349,6 +349,30 @@ class ChatViewModel(
         mutableState.value = ChatState()
     }
 
+    fun deleteConversation(id: String) {
+        val decision =
+            decideConversationDelete(
+                initFailed = initFailed,
+                generating = mutableState.value.generating,
+                unsaved = mutableState.value.unsaved,
+                readyCompleted = ready.isCompleted,
+                activeConversationId = mutableState.value.conversationId,
+                targetId = id,
+            )
+        if (decision == DeleteDecision.BLOCKED) return
+        if (decision == DeleteDecision.DELETE_AND_CLEAR_ACTIVE) {
+            streamingBaseRows.value = null
+            liveAnswer.value = null
+            history?.cancel()
+            messages.value = emptyList()
+            mutableState.value = ChatState()
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { requireDao().deleteConversation(id) }
+                .onFailure { if (it is CancellationException) throw it }
+        }
+    }
+
     // Task state can be captured while Send is still writing. Keep its text, but use it only
     // if Room still has the revision this editor opened on. A save or committed Send supersedes it.
     private var restoredComposer = savedState?.get<Bundle>("composer")?.takeIf { it.containsKey("text") }
@@ -863,3 +887,25 @@ class ChatViewModel(
         mutableState.update { it.copy(interrupted = true) }
     }
 }
+
+internal enum class DeleteDecision {
+    BLOCKED,
+    DELETE_KEEP_ACTIVE,
+    DELETE_AND_CLEAR_ACTIVE,
+}
+
+internal fun decideConversationDelete(
+    initFailed: Boolean,
+    generating: Boolean,
+    unsaved: Boolean,
+    readyCompleted: Boolean,
+    activeConversationId: String?,
+    targetId: String,
+): DeleteDecision =
+    if (initFailed || generating || unsaved || !readyCompleted) {
+        DeleteDecision.BLOCKED
+    } else if (activeConversationId == targetId) {
+        DeleteDecision.DELETE_AND_CLEAR_ACTIVE
+    } else {
+        DeleteDecision.DELETE_KEEP_ACTIVE
+    }

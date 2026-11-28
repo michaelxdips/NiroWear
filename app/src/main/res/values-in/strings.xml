@@ -120,6 +120,21 @@
     <!-- Reader action button in the chat overlay. -->
     <string name="reader_action_retry">Ulangi jawaban</string>
     <string name="reader_action_latest">Ke yang terbaru</string>
+    <string name="chat_text_size">Ukuran teks: %1$s</string>
+    <string name="chat_text_size_compact">Ringkas</string>
+    <string name="chat_text_size_standard">Standar</string>
+    <string name="chat_text_size_large">Besar</string>
+    <string name="chat_quick_switch_header">Ganti provider</string>
+    <string name="chat_copy_answer">Salin jawaban</string>
+    <string name="chat_copy_code">Salin</string>
+    <string name="chat_thinking">Berpikir…</string>
+    <string name="chat_history_empty">Belum ada percakapan</string>
+    <string name="chat_history_delete">Hapus</string>
+    <string name="chat_history_delete_confirm">Ketuk lagi untuk hapus</string>
+    <string name="chat_time_now">baru</string>
+    <string name="chat_time_minutes">%1$dm</string>
+    <string name="chat_time_hours">%1$dj</string>
+    <string name="chat_time_days">%1$dh</string>
 
     <!-- Failure text, resolved at display time. Keep API key, provider, model and stream in English. -->
     <string name="provider_error_provider_required">Tambahkan atau pilih provider dari menu.</string>

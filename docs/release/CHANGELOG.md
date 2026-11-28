@@ -5,7 +5,10 @@ Notable changes to NiroWear. Versions follow the published APK releases at
 
 ## Unreleased
 
-(No unreleased changes yet.)
+- **`v0.3.5` (`versionCode 21`) Adaptive multi-watch UI, redesigned pairing web app & wrist usability:**
+  - Add circular-chord `WatchMetrics` layout engine (`384–480 px` round dials & non-round watches), full-bleed `LazyColumn` with soft top/bottom black fade scrims under always-visible compact controls, subtle `roundEdgeTaper`, exact 2- vs 3-icon footer clearances, and Wear Material 3 `ScrollIndicator` on Reader, History, and Providers.
+  - Redesign `PAIRING_PAGE` into a self-contained dark teal card UI with inline SVG Thread emblem, live Wi-Fi ECDH status pill, 4 provider quick-select chips, API key Show/Hide + clipboard Paste, collapsible Security & Certificate disclosure, animated `Fetch models` spinner, and color-coded status banners.
+  - Add `FLAG_KEEP_SCREEN_ON` during response generation, persisted `ReaderTextSize` (`Compact` / `Standard` / `Large`) and Quick Provider Switcher in Menu, `HistoryScreen` two-tap delete + empty state + relative timestamps, `Copy answer` + code-block `Copy` headers, NiroWear OLED teal Material 3 palette, turn-header dividers, pulsing `"Thinking…"`, rounded Composer card, thumb-first pairing order, haptic feedback, and EN/`in-ID` parity (`166` strings per locale).
 
 ## 0.3.4 — 2026-11-28
 

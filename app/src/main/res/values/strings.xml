@@ -122,6 +122,21 @@
     <!-- Reader action button in the chat overlay. -->
     <string name="reader_action_retry">Retry response</string>
     <string name="reader_action_latest">Jump to latest</string>
+    <string name="chat_text_size">Text size: %1$s</string>
+    <string name="chat_text_size_compact">Compact</string>
+    <string name="chat_text_size_standard">Standard</string>
+    <string name="chat_text_size_large">Large</string>
+    <string name="chat_quick_switch_header">Switch provider</string>
+    <string name="chat_copy_answer">Copy answer</string>
+    <string name="chat_copy_code">Copy</string>
+    <string name="chat_thinking">Thinking…</string>
+    <string name="chat_history_empty">No conversations yet</string>
+    <string name="chat_history_delete">Delete</string>
+    <string name="chat_history_delete_confirm">Tap again to delete</string>
+    <string name="chat_time_now">now</string>
+    <string name="chat_time_minutes">%1$dm</string>
+    <string name="chat_time_hours">%1$dh</string>
+    <string name="chat_time_days">%1$dd</string>
 
     <!--
       Failure text. Stored values are ProviderError token names (optionally suffixed "|partial"), so

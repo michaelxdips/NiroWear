@@ -7,12 +7,14 @@ import android.graphics.drawable.Drawable
 import android.widget.Toast
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -21,11 +23,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
@@ -35,6 +39,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
@@ -142,6 +147,7 @@ fun DocumentBlock(
     // 8-entry layout cache, so a 40-paragraph answer used to hold 40 caches of the same text. The
     // default keeps the old single-argument call site working; the reader passes its own.
     measurer: TextMeasurer = rememberTextMeasurer(),
+    onCopyCode: ((String) -> Unit)? = null,
 ) {
     when (block) {
         is ContentBlock.Paragraph -> {
@@ -200,7 +206,11 @@ fun DocumentBlock(
 
         is ContentBlock.Code -> {
             Column {
-                if (block.language.isNotEmpty()) Text(block.language, fontSize = 12.sp, color = Color(0xFFAACCCC))
+                CodeHeaderBar(
+                    language = block.language.ifEmpty { null },
+                    showCopy = onCopyCode != null,
+                    onCopy = { onCopyCode?.invoke(block.source) },
+                )
                 CodeBlockScrollable(block.source)
             }
         }
@@ -321,6 +331,38 @@ internal fun Modifier.horizontalPanCues(scroll: ScrollState): Modifier =
         }
     }
 
+@Composable
+private fun CodeHeaderBar(
+    language: String?,
+    showCopy: Boolean,
+    onCopy: () -> Unit,
+) {
+    if (language == null && !showCopy) return
+    val resources = LocalResources.current
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+    ) {
+        if (language != null) {
+            Text(language, fontSize = 12.sp, color = Color(0xFFAACCCC))
+        }
+        Spacer(Modifier.weight(1f))
+        if (showCopy) {
+            val copyLabel = resources.getString(com.nirowear.R.string.chat_copy_code)
+            Text(
+                copyLabel,
+                fontSize = 12.sp,
+                color = Color(0xFF7EE6CC),
+                modifier =
+                    Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .clickable(role = Role.Button, onClick = onCopy)
+                        .padding(horizontal = 8.dp, vertical = 2.dp),
+            )
+        }
+    }
+}
+
 /** Renders horizontally scrollable code with edge fades and slate cue bars only along directions that can pan. */
 @Composable
 private fun CodeBlockScrollable(code: String) {
@@ -348,15 +390,23 @@ private fun CodeBlockScrollable(code: String) {
 internal fun RenderUnitView(
     unit: RenderUnit,
     measurer: TextMeasurer = rememberTextMeasurer(),
+    onCopyCode: ((String) -> Unit)? = null,
+    fullCodeSource: String? = null,
 ) {
     when (unit) {
         is RenderUnit.Whole -> {
-            DocumentBlock(unit.block, measurer)
+            DocumentBlock(unit.block, measurer, onCopyCode = onCopyCode)
         }
 
         is RenderUnit.CodeChunk -> {
             Column {
-                unit.language?.let { Text(it, fontSize = 12.sp, color = Color(0xFFAACCCC)) }
+                if (unit.key.endsWith("/c0") && (unit.language != null || onCopyCode != null)) {
+                    CodeHeaderBar(
+                        language = unit.language,
+                        showCopy = onCopyCode != null,
+                        onCopy = { onCopyCode?.invoke(fullCodeSource ?: unit.text) },
+                    )
+                }
                 CodeBlockScrollable(unit.text)
             }
         }
