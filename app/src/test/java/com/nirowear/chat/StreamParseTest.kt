@@ -99,4 +99,49 @@ class StreamParseTest {
             assertEquals(200, results.size)
             assertTrue(results.all { it.isNotEmpty() })
         }
+
+    @Test
+    fun advanceLiveContentNeverRegressesToShorterSnapshot() {
+        val initial = msg(1, "Hello")
+        val longer = advanceLiveContent(initial, "Hello world!")
+        assertEquals("Hello world!", longer?.rawContent)
+        // Out-of-order shorter snapshot from a preempted flusher must not revert visible text.
+        val stale = advanceLiveContent(longer, "Hello wo")
+        assertEquals("Hello world!", stale?.rawContent)
+        assertEquals(longer, advanceLiveContent(longer, "Hello world!"))
+        assertEquals(null, advanceLiveContent(null, "anything"))
+    }
+
+    @Test
+    fun mergeLiveMessageReplacesAppendsAndIgnoresOtherConversation() {
+        val u1 = msg(1, "q1").copy(role = "USER", status = "SUCCESS")
+        val a1 = msg(2, "partial")
+        val liveUpdated = a1.copy(rawContent = "partial + more")
+        assertEquals(listOf(u1, liveUpdated), mergeLiveMessage(listOf(u1, a1), liveUpdated, "c"))
+
+        val a2 = msg(3, "new")
+        assertEquals(listOf(u1, a1, a2), mergeLiveMessage(listOf(u1, a1), a2, "c"))
+
+        val other = a2.copy(conversationId = "other")
+        val base = listOf(u1, a1)
+        assertTrue(mergeLiveMessage(base, other, "c") === base)
+        assertTrue(mergeLiveMessage(base, null, "c") === base)
+    }
+
+    @Test
+    fun isLivePersistedReleasesOnlyAfterRoomCommitsFinalRow() {
+        val streaming = msg(2, "hello")
+        val finalized = streaming.copy(rawContent = "hello world", status = "SUCCESS")
+        val stopped = streaming.copy(rawContent = "hello", status = "STOPPED")
+        val unsaved = streaming.copy(rawContent = "hello world", status = "ERROR", error = "ANSWER_NOT_SAVED")
+
+        assertFalse("STREAMING row must never release overlay", isLivePersisted(listOf(streaming), streaming, "c"))
+        assertFalse("null overlay is never persisted", isLivePersisted(listOf(finalized), null, "c"))
+        assertFalse("stale Room content must keep finalized overlay", isLivePersisted(listOf(streaming), finalized, "c"))
+        assertFalse("unsaved failure must keep overlay while Room is STREAMING", isLivePersisted(listOf(streaming), unsaved, "c"))
+        assertFalse("other conversation must never release overlay", isLivePersisted(emptyList(), finalized, "other"))
+        assertTrue("matching SUCCESS row releases overlay", isLivePersisted(listOf(finalized), finalized, "c"))
+        assertTrue("matching STOPPED row releases overlay", isLivePersisted(listOf(stopped), stopped, "c"))
+        assertTrue("deleted/truncated row releases finalized overlay instead of resurrecting ghost", isLivePersisted(emptyList(), finalized, "c"))
+    }
 }

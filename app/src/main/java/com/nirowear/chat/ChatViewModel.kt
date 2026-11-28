@@ -140,6 +140,61 @@ internal fun Flow<List<Conversation>>.retryHistoryReads(
     }
 }
 
+/** Monotonically advances [current]'s raw content so an out-of-order flush never regresses streamed text. */
+internal fun advanceLiveContent(
+    current: StoredMessage?,
+    snapshot: String,
+): StoredMessage? =
+    if (current != null && snapshot.length > current.rawContent.length) {
+        current.copy(rawContent = snapshot)
+    } else {
+        current
+    }
+
+/** True when [rows] from Room have superseded [live]'s finalized non-streaming overlay. */
+internal fun isLivePersisted(
+    rows: List<StoredMessage>,
+    live: StoredMessage?,
+    id: String = live?.conversationId.orEmpty(),
+): Boolean {
+    if (live == null || live.conversationId != id || live.status == "STREAMING") return false
+    var sawId = false
+    for (row in rows) {
+        if (row.id != live.id) continue
+        sawId = true
+        if (row.status == live.status &&
+            row.rawContent == live.rawContent &&
+            row.error == live.error
+        ) {
+            return true
+        }
+    }
+    // A finalized overlay whose row no longer exists in Room (deleted/truncated) must not be
+    // resurrected into the transcript; only an unsaved row still marked STREAMING stays overlaid.
+    return !sawId
+}
+
+/** Single-pass merge of the in-memory streaming row onto [rows] for conversation [id]. */
+internal fun mergeLiveMessage(
+    rows: List<StoredMessage>,
+    live: StoredMessage?,
+    id: String,
+): List<StoredMessage> {
+    if (live?.conversationId != id) return rows
+    val merged = ArrayList<StoredMessage>(rows.size + 1)
+    var replaced = false
+    for (row in rows) {
+        if (row.id == live.id) {
+            merged.add(live)
+            replaced = true
+        } else {
+            merged.add(row)
+        }
+    }
+    if (!replaced) merged.add(live)
+    return merged
+}
+
 class ChatViewModel(
     application: Application,
     savedState: SavedStateHandle? = null,
@@ -162,7 +217,7 @@ class ChatViewModel(
      * rotation, so until process death), and the message was then overwritten by the next
      * conversation open. `retryWhen` keeps the upstream alive and backs off instead.
      */
-    private fun retryingConversations(catchTerminal: Boolean): Flow<List<Conversation>> =
+    private fun retryingConversations(): Flow<List<Conversation>> =
         requireDao().conversations().retryHistoryReads(
             onRetrying = {
                 mutableState.update { it.copy(error = FailureToken.HISTORY_RETRYING) }
@@ -173,11 +228,11 @@ class ChatViewModel(
                 // and reopening the app starts a fresh subscription.
                 mutableState.update { it.copy(error = FailureToken.HISTORY_UNREADABLE) }
             },
-            catchTerminal = catchTerminal,
+            catchTerminal = true,
         )
 
     // Lazy cold Flow: never opens Room on the Main thread during ChatViewModel construction.
-    val conversations: Flow<List<Conversation>> = flow { emitAll(retryingConversations(catchTerminal = true)) }
+    val conversations: Flow<List<Conversation>> = flow { emitAll(retryingConversations()) }
     val messages = MutableStateFlow<List<StoredMessage>>(emptyList())
     private val liveAnswer = MutableStateFlow<StoredMessage?>(null)
     private val streamingBaseRows = MutableStateFlow<List<StoredMessage>?>(null)
@@ -238,18 +293,6 @@ class ChatViewModel(
         observe(id)
     }
 
-    private fun mergeLive(
-        rows: List<StoredMessage>,
-        live: StoredMessage?,
-        id: String,
-    ): List<StoredMessage> =
-        if (live?.conversationId != id) {
-            rows
-        } else {
-            rows.map { if (it.id == live.id) live else it } +
-                if (rows.none { it.id == live.id }) listOf(live) else emptyList()
-        }
-
     @OptIn(ExperimentalCoroutinesApi::class)
     private fun observe(id: String) {
         history?.cancel()
@@ -262,10 +305,17 @@ class ChatViewModel(
                             if (frozen != null && frozen.firstOrNull()?.conversationId == id) {
                                 // While streaming, merge in-memory deltas onto the admitted snapshot
                                 // without re-querying the full Room messages table on every checkpoint.
-                                liveAnswer.map { live -> mergeLive(frozen, live, id) }
+                                liveAnswer.map { live -> mergeLiveMessage(frozen, live, id) }
                             } else {
                                 combine(requireDao().messages(id), liveAnswer) { rows, live ->
-                                    mergeLive(rows, live, id)
+                                    if (isLivePersisted(rows, live, id)) {
+                                        // Room now holds the finalized row (or the row was deleted); release
+                                        // the in-memory copy without a stale-status or blank-flash window.
+                                        liveAnswer.compareAndSet(live, null)
+                                        rows
+                                    } else {
+                                        mergeLiveMessage(rows, live, id)
+                                    }
                                 }
                             }
                         }.retryWhen { error, attempt ->
@@ -390,7 +440,7 @@ class ChatViewModel(
         // saw a provider-setup error over a "History unavailable. No messages changed." state — and
         // a conversation row had in fact been written.
         if (initFailed || !ready.isCompleted) {
-            mutableState.value = mutableState.value.copy(error = FailureToken.HISTORY_UNAVAILABLE)
+            mutableState.update { it.copy(error = FailureToken.HISTORY_UNAVAILABLE) }
             return false
         }
         liveAnswer.value = null
@@ -458,24 +508,21 @@ class ChatViewModel(
                     val conversationId =
                         mutableState.value.conversationId ?: newConversationId ?: error("No conversation")
                     if (editId != null) {
-                        val rows = chats.snapshot(conversationId)
-                        val owned = rows.any { it.id == editId && it.role == "USER" }
-                        if (!owned) {
+                        val firstUserId = chats.firstUserMessageId(conversationId)
+                        if (!chats.tryEdit(conversationId, editId, requireNotNull(editedText))) {
                             nothingSent = true
                             throw TurnRefused(FailureToken.MESSAGE_GONE)
                         }
-                        val renamesChat = rows.firstOrNull { it.role == "USER" }?.id == editId
-                        chats.edit(conversationId, editId, requireNotNull(editedText))
                         wrote = true
-                        if (renamesChat) {
+                        if (firstUserId == editId) {
                             runCatching { chats.retitle(conversationId, requireNotNull(editedText).trim().take(60)) }
                         }
                     }
                     if (retry) {
-                        val user =
-                            chats.snapshot(conversationId).lastOrNull { it.role == "USER" }
+                        val userId =
+                            chats.lastUserMessageId(conversationId)
                                 ?: throw TurnRefused(FailureToken.NOTHING_TO_RETRY)
-                        chats.truncate(conversationId, user.id)
+                        chats.truncate(conversationId, userId)
                         wrote = true
                     }
                     currentCoroutineContext().ensureActive()
@@ -488,7 +535,7 @@ class ChatViewModel(
                         }
                     currentCoroutineContext().ensureActive()
                     val admitted = chats.snapshot(conversationId)
-                    liveAnswer.value = admitted.first { it.id == newAssistantId }
+                    liveAnswer.value = admitted.last { it.id == newAssistantId }
                     streamingBaseRows.value = admitted
                     val rows = admitted.filter { it.id != newAssistantId && it.rawContent.isNotEmpty() }
                     var lastUiPublishNs = 0L
@@ -508,7 +555,7 @@ class ChatViewModel(
                                         }
                                     }
                                 if (snapshot != null) {
-                                    liveAnswer.value = liveAnswer.value?.copy(rawContent = snapshot)
+                                    liveAnswer.update { advanceLiveContent(it, snapshot) }
                                 }
                             }
                         }
@@ -596,7 +643,7 @@ class ChatViewModel(
                                                 }
                                             }
                                         if (immediate != null) {
-                                            liveAnswer.value = liveAnswer.value?.copy(rawContent = immediate)
+                                            liveAnswer.update { advanceLiveContent(it, immediate) }
                                         }
                                     }
 
@@ -688,6 +735,17 @@ class ChatViewModel(
                                 savedId?.let {
                                     ChatStorageProbe.finishing()
                                     chats.finish(it, finalText, savedStatus, savedFailure, savedPhases)
+                                    liveAnswer.update { current ->
+                                        if (current?.id == it) {
+                                            current.copy(
+                                                rawContent = finalText,
+                                                status = savedStatus,
+                                                error = savedFailure,
+                                            )
+                                        } else {
+                                            current
+                                        }
+                                    }
                                 }
                             }
                             failure = FailureToken.ANSWER_NOT_SAVED
@@ -716,6 +774,9 @@ class ChatViewModel(
                                 if (onDraftSaved != null) composerCommitted()
                             }
                         }
+                        // Publish the finalized row BEFORE unfreezing streamingBaseRows so the UI
+                        // never flashes blank or stale STREAMING status while Room delivers the commit;
+                        // observe() clears liveAnswer once Room emits the matching persisted row.
                         liveAnswer.value =
                             liveAnswer.value?.copy(rawContent = finalText, status = terminal, error = failure)
                         streamingBaseRows.value = null
@@ -750,24 +811,23 @@ class ChatViewModel(
     fun retrySaving() {
         val save = pendingSave ?: return
         if (generation?.isActive == true || mutableState.value.generating) return
-        mutableState.value = mutableState.value.copy(generating = true)
+        mutableState.update { it.copy(generating = true) }
         generation =
             viewModelScope.launch {
                 try {
                     save()
                     pendingSave = null
-                    liveAnswer.value = null
-                    mutableState.value = mutableState.value.copy(rawMarkdown = null, unsaved = false, error = null)
+                    // Observe releases liveAnswer once Room emits the committed row without flashing STREAMING.
+                    mutableState.update { it.copy(rawMarkdown = null, unsaved = false, error = null) }
                 } catch (cancelled: CancellationException) {
                     // Stop during a save retry must not be reported as a storage failure: the write is
                     // a @Transaction that still commits, and swallowing cancellation left pendingSave
                     // set with a "Still cannot save" message over text that was in fact saved.
                     throw cancelled
                 } catch (_: Exception) {
-                    mutableState.value =
-                        mutableState.value.copy(error = FailureToken.SAVE_STILL_FAILING)
+                    mutableState.update { it.copy(error = FailureToken.SAVE_STILL_FAILING) }
                 } finally {
-                    mutableState.value = mutableState.value.copy(generating = false)
+                    mutableState.update { it.copy(generating = false) }
                 }
             }
     }
@@ -790,17 +850,16 @@ class ChatViewModel(
             viewModelScope.launch {
                 try {
                     fakeStream(source).collect { chunk ->
-                        mutableState.value =
-                            mutableState.value.copy(rawMarkdown = mutableState.value.rawMarkdown.orEmpty() + chunk)
+                        mutableState.update { it.copy(rawMarkdown = it.rawMarkdown.orEmpty() + chunk) }
                     }
                 } finally {
-                    mutableState.value = mutableState.value.copy(generating = false)
+                    mutableState.update { it.copy(generating = false) }
                 }
             }
     }
 
     fun stop() {
         generation?.cancel()
-        mutableState.value = mutableState.value.copy(interrupted = true)
+        mutableState.update { it.copy(interrupted = true) }
     }
 }

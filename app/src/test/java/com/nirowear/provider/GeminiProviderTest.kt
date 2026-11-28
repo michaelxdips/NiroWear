@@ -308,4 +308,34 @@ class GeminiProviderTest {
             ),
         )
     }
+
+    @Test fun inStreamErrorMapsStatusWithoutNumericCode() {
+        assertEquals(
+            listOf(StreamEvent.Failure(ProviderError.RATE_LIMITED)),
+            GeminiStreamDecoder().accept("""{"error":{"status":"RESOURCE_EXHAUSTED"}}"""),
+        )
+        assertEquals(
+            listOf(StreamEvent.Failure(ProviderError.MODEL_UNAVAILABLE)),
+            GeminiStreamDecoder().accept("""{"error":{"status":"NOT_FOUND"}}"""),
+        )
+        assertEquals(
+            listOf(StreamEvent.Failure(ProviderError.INVALID_CREDENTIAL)),
+            GeminiStreamDecoder().accept(
+                """{"error":{"status":"INVALID_ARGUMENT","details":[{"reason":"API_KEY_HTTP_REFERRER_BLOCKED"}]}}""",
+            ),
+        )
+    }
+
+    @Test fun nonPrimitiveErrorCodeAndThoughtFieldDoNotThrowProtocolError() {
+        assertEquals(
+            listOf(StreamEvent.Failure(ProviderError.HTTP)),
+            GeminiStreamDecoder().accept("""{"error":{"code":{"nested":1},"status":"UNKNOWN"}}"""),
+        )
+        assertEquals(
+            listOf(StreamEvent.TextDelta("ok"), StreamEvent.Completed),
+            GeminiStreamDecoder().accept(
+                """{"candidates":[{"index":0,"content":{"role":"model","parts":[{"thought":{"detail":1},"text":"ok"}]},"finishReason":"STOP"}]}""",
+            ),
+        )
+    }
 }

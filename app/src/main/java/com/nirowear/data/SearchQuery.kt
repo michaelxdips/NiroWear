@@ -25,7 +25,18 @@ internal fun likeTerms(input: String): List<String> =
             }
         }
 
-private val SEARCH_WHITESPACE_RUN = Regex("\\s+")
+internal fun unescapeLikeTerms(terms: List<String>): List<String> =
+    terms
+        .map { escaped ->
+            buildString(escaped.length) {
+                var i = 0
+                while (i < escaped.length) {
+                    if (escaped[i] == '\\' && i + 1 < escaped.length) i++
+                    append(escaped[i])
+                    i++
+                }
+            }
+        }.filter { it.isNotEmpty() }
 
 /**
  * Collapses whitespace and returns up to [maxChars] centered on the first matching term so
@@ -35,29 +46,114 @@ internal fun extractSearchSnippet(
     rawContent: String,
     terms: List<String>,
     maxChars: Int = 80,
-): String {
-    val collapsed = rawContent.trim().replace(SEARCH_WHITESPACE_RUN, " ")
-    if (collapsed.length <= maxChars) return collapsed
-    val firstHit =
-        terms
-            .map { escaped ->
-                buildString {
-                    var i = 0
-                    while (i < escaped.length) {
-                        if (escaped[i] == '\\' && i + 1 < escaped.length) i++
-                        append(escaped[i])
-                        i++
-                    }
-                }
-            }.filter { it.isNotEmpty() }
-            .mapNotNull { plain ->
-                collapsed.indexOf(plain, ignoreCase = true).takeIf { it >= 0 }
-            }.minOrNull()
-    if (firstHit == null || firstHit + maxChars / 2 < maxChars) {
-        return collapsed.take(maxChars)
+): String = extractSearchSnippetPlain(rawContent, unescapeLikeTerms(terms), maxChars)
+
+private fun firstTermIndex(
+    text: String,
+    plainTerms: List<String>,
+    startIndex: Int = 0,
+): Int? {
+    var best = Int.MAX_VALUE
+    for (plain in plainTerms) {
+        if (plain.isEmpty()) continue
+        val hit = text.indexOf(plain, startIndex = startIndex, ignoreCase = true)
+        if (hit in 0 until best) best = hit
     }
-    val start = (firstHit - maxChars / 3).coerceIn(0, (collapsed.length - maxChars).coerceAtLeast(0))
+    return if (best == Int.MAX_VALUE) null else best
+}
+
+private fun findWindowStart(
+    raw: String,
+    firstNonWs: Int,
+    hitIndex: Int,
+    backBudget: Int,
+): Int {
+    var i = hitIndex
+    var count = 0
+    var inWs = false
+    while (i > firstNonWs && count < backBudget) {
+        i--
+        if (raw[i].isWhitespace()) {
+            if (!inWs) {
+                inWs = true
+                count++
+            }
+        } else {
+            inWs = false
+            count++
+        }
+    }
+    return i
+}
+
+private fun collapseForward(
+    raw: String,
+    start: Int,
+    maxCollapsed: Int,
+    trackIndex: Int = -1,
+): Pair<String, Int> {
+    val out = StringBuilder(maxCollapsed.coerceAtMost((raw.length - start).coerceAtLeast(0)))
+    var i = start
+    while (i < raw.length && raw[i].isWhitespace()) i++
+    var pendingSpace = false
+    var tracked = -1
+    while (i < raw.length && out.length < maxCollapsed) {
+        if (i == trackIndex && tracked < 0) {
+            if (pendingSpace && out.isNotEmpty()) {
+                if (out.length + 1 >= maxCollapsed) {
+                    tracked = out.length
+                    break
+                }
+                out.append(' ')
+                pendingSpace = false
+            }
+            tracked = out.length
+        }
+        val c = raw[i]
+        if (c.isWhitespace()) {
+            pendingSpace = true
+        } else {
+            if (pendingSpace && out.isNotEmpty()) {
+                if (out.length + 1 >= maxCollapsed) break
+                out.append(' ')
+            }
+            pendingSpace = false
+            out.append(c)
+        }
+        i++
+    }
+    return out.toString() to tracked
+}
+
+internal fun extractSearchSnippetPlain(
+    rawContent: String,
+    plainTerms: List<String>,
+    maxChars: Int = 80,
+): String {
+    if (maxChars <= 0) return ""
+    var firstNonWs = 0
+    while (firstNonWs < rawContent.length && rawContent[firstNonWs].isWhitespace()) firstNonWs++
+    if (firstNonWs >= rawContent.length) return ""
+    val rawHit = firstTermIndex(rawContent, plainTerms, startIndex = firstNonWs)
+    if (rawHit == null) {
+        return collapseForward(rawContent, firstNonWs, maxChars).first
+    }
+    val windowStart = findWindowStart(rawContent, firstNonWs, rawHit, backBudget = maxChars)
+    val hasLeadingContent = windowStart > firstNonWs
+    val doubleBudget = if (maxChars > Int.MAX_VALUE / 2) Int.MAX_VALUE else maxChars * 2
+    val (collapsed, hitInCollapsed) =
+        collapseForward(rawContent, windowStart, maxCollapsed = doubleBudget, trackIndex = rawHit)
+    if (!hasLeadingContent && collapsed.length <= maxChars) return collapsed
+    if (!hasLeadingContent && (hitInCollapsed < 0 || hitInCollapsed + maxChars / 2 < maxChars)) {
+        return collapsed.take(maxChars).trimEnd()
+    }
+    val start =
+        if (hitInCollapsed < 0) {
+            0
+        } else {
+            (hitInCollapsed - maxChars / 3).coerceIn(0, (collapsed.length - maxChars).coerceAtLeast(0))
+        }
     val end = (start + maxChars).coerceAtMost(collapsed.length)
     val core = collapsed.substring(start, end).trim()
-    return if (start > 0) "…$core" else core
+    return if (hasLeadingContent || start > 0) "…$core" else core
 }

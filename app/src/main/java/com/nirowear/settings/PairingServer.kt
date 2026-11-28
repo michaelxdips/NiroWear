@@ -4,6 +4,7 @@ import com.nirowear.provider.Endpoints
 import com.nirowear.provider.ModelDiscoveryResult
 import com.nirowear.provider.ProviderType
 import com.nirowear.provider.SecretValue
+import com.nirowear.provider.stringOrNull
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -81,6 +82,7 @@ internal class PairingServer(
     private val onPayload: (PairingPayload) -> Unit,
 ) : Closeable {
     private val token = ByteArray(16).also { SecureRandom().nextBytes(it) }
+    private val tokenB64 = b64(token)
     private val pair =
         KeyPairGenerator
             .getInstance("EC")
@@ -141,7 +143,7 @@ internal class PairingServer(
      * https, not http: WebCrypto does not exist on a plain-HTTP LAN origin, so the page that encrypts
      * the key could never run there.
      */
-    val url: String get() = "https://$host:$port/${b64(token)}/"
+    val url: String get() = "https://$host:$port/$tokenB64/"
 
     fun start() {
         if (worker != null) return
@@ -252,14 +254,21 @@ internal class PairingServer(
         if (parts.size < 2) return respond(client, 400, TEXT, "bad request")
         val method = parts[0]
         val path = parts[1].substringBefore('?')
-        val declared =
+        val contentLengthHeader =
             lines
                 .drop(1)
                 .firstOrNull { it.startsWith("Content-Length:", ignoreCase = true) }
                 ?.substringAfter(':')
                 ?.trim()
-                ?.toIntOrNull() ?: 0
-        if (declared > MAX_BODY) return respond(client, 400, TEXT, "too large")
+        val declaredLong =
+            if (contentLengthHeader == null) {
+                0L
+            } else {
+                contentLengthHeader.toLongOrNull()?.takeIf { it >= 0L }
+                    ?: return respond(client, 400, TEXT, "bad request")
+            }
+        if (declaredLong > MAX_BODY) return respond(client, 400, TEXT, "too large")
+        val declared = declaredLong.toInt()
         val body =
             if (declared > 0) {
                 readExactly(input, declared, requestDeadline) ?: return respond(client, 400, TEXT, "short body")
@@ -279,7 +288,7 @@ internal class PairingServer(
             presentedPrefix != null &&
                 MessageDigest.isEqual(token, presentedPrefix) &&
                 path.length > segment.length + 1
-        val prefix = "/${b64(token)}"
+        val prefix = "/$tokenB64"
         when {
             !authorised -> respond(client, 404, TEXT, "not found")
             method == "GET" && path == "$prefix/" -> respond(client, 200, HTML, PAIRING_PAGE)
@@ -434,14 +443,13 @@ internal class PairingServer(
     private fun toModelRequest(json: String): PairingModelRequest? =
         runCatching {
             val root = Json.parseToJsonElement(json).jsonObject
-            val rawType = root.getValue("type").jsonPrimitive.content
+            val rawType = requireNotNull(root["type"].stringOrNull())
             require(rawType.length <= 32)
             val type = ProviderType.valueOf(rawType)
-            val rawBase = root.getValue("base").jsonPrimitive.content
-            val baseRaw = rawBase.trim()
+            val baseRaw = requireNotNull(root["base"].stringOrNull()).trim()
             require(baseRaw.isNotEmpty() && baseRaw.length <= 2048)
             val normalizedBase = Endpoints.normalize(baseRaw, allowLocalHttp)
-            val apiKey = root.getValue("key").jsonPrimitive.content
+            val apiKey = requireNotNull(root["key"].stringOrNull())
             require(apiKey.length <= 8192)
             SecretValue(apiKey)
             PairingModelRequest(type = type, baseUrl = normalizedBase, apiKey = apiKey)
@@ -455,7 +463,7 @@ internal class PairingServer(
                 name: String,
                 max: Int,
             ): String {
-                val value = root.getValue(name).jsonPrimitive.content
+                val value = requireNotNull(root[name].stringOrNull()) { "string field required" }
                 require(value.length <= max) { "field too long" }
                 return value
             }
@@ -672,7 +680,7 @@ var PRESETS={
  GEMINI:{name:'Gemini',base:'https://generativelanguage.googleapis.com/v1beta'},
  OPENAI_COMPATIBLE:{name:'Custom provider',base:''}
 };
-var ready=null,allModels=[],lastType='OPENAI';
+var ready=null,allModels=[],lastType='OPENAI',sent=false;
 // The capability token is the first path segment the user was given. Reading it from our own URL
 // keeps it out of the handshake response, so an unauthenticated caller can never learn it.
 var CAP=decodeURIComponent(location.pathname.split('/')[1]||'');
@@ -747,6 +755,7 @@ function fetchErrorText(code){
  return 'Models unavailable. Enter model ID manually.';
 }
 el('fetchModels').onclick=async function(){
+ if(sent)return;
  var out=el('out'),btn=el('fetchModels');
  if(!ready){out.textContent='Still connecting. Wait a moment and try again.';return;}
  var base=el('base').value.trim(),key=el('key').value.trim();
@@ -756,9 +765,11 @@ el('fetchModels').onclick=async function(){
  try{
   var body=await encryptBody({type:el('type').value,base:base,key:key});
   var r=await fetch('/'+CAP+'/models',{method:'POST',headers:{'Content-Type':'application/json'},body:body});
+  if(sent)return;
   if(r.status===401||r.status===410){out.textContent='Pairing expired. Restart pairing on the watch.';return;}
   if(!r.ok){out.textContent='Check Base URL and API key format.';return;}
   var res=await r.json();
+  if(sent)return;
   if(res.ok&&Array.isArray(res.models)&&res.models.length>0){
    allModels=res.models;
    el('modelPickBox').className='';
@@ -770,10 +781,11 @@ el('fetchModels').onclick=async function(){
    out.textContent=fetchErrorText(res.code);
   }
  }catch(e){
+  if(sent)return;
   clearModels();
   out.textContent='Could not fetch models. Enter model ID manually.';
  }finally{
-  btn.disabled=false;
+  if(!sent)btn.disabled=false;
  }
 };
 el('go').onclick=async function(){
@@ -787,7 +799,7 @@ el('go').onclick=async function(){
    name:el('name').value,base:base,model:model,key:key});
   var r=await fetch('/'+CAP+'/pair',{method:'POST',headers:{'Content-Type':'application/json'},body:body});
   out.textContent=r.ok?'Sent. Finish on the watch.':'Rejected. Check Base URL/key or restart pairing.';
-  if(r.ok){el('key').value='';fetchBtn.disabled=true;}else{btn.disabled=false;}
+  if(r.ok){sent=true;el('key').value='';fetchBtn.disabled=true;}else{btn.disabled=false;}
  }catch(e){btn.disabled=false;out.textContent='Could not send. Restart pairing on the watch.';}
 };
 init().catch(function(e){

@@ -147,4 +147,15 @@ class Task5ParseMemoTest {
         assertEquals(listOf("edited"), keysA.map { it.rawContent })
         assertTrue(editedA.first.keys.any { it.conversationId == "B" && it.id == 10L })
     }
+
+    @Test
+    fun emptyActivePassClearsStaleRowsForOpenConversationOnly() {
+        val emptyBlocks = emptyList<Pair<Long, ContentBlock>>()
+        val withB = mergeParsed(emptyMap(), mapOf(msg(10L, "B", "keep") to emptyBlocks), emptyList(), "B")
+        val withA = mergeParsed(withB.first, mapOf(msg(1L, "A", "stale") to emptyBlocks), withB.second, "A")
+        val clearedA = mergeParsed(withA.first, emptyMap(), withA.second, "A")
+
+        assertTrue("cleared active conversation must drop stale cached rows", clearedA.first.keys.none { it.conversationId == "A" })
+        assertTrue("other retained conversations must survive", clearedA.first.keys.any { it.conversationId == "B" && it.id == 10L })
+    }
 }

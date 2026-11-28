@@ -13,6 +13,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import okhttp3.Call
 import okhttp3.Callback
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -20,6 +21,9 @@ import java.io.EOFException
 import java.io.IOException
 import java.net.SocketTimeoutException
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
+
+internal val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
 
 internal fun providerHttpClient(): OkHttpClient =
     OkHttpClient
@@ -131,7 +135,7 @@ internal class ProviderHttp(
     ): Flow<StreamEvent> =
         callbackFlow {
             val call = client.newCall(request)
-            var reader: Job? = null
+            val reader = AtomicReference<Job?>(null)
             call.enqueue(
                 object : Callback {
                     override fun onFailure(
@@ -151,7 +155,7 @@ internal class ProviderHttp(
                             return
                         }
                         // ATOMIC enters finally even if cancellation precedes dispatch.
-                        reader =
+                        reader.set(
                             launch(Dispatchers.IO, start = CoroutineStart.ATOMIC) {
                                 try {
                                     response.use {
@@ -288,13 +292,14 @@ internal class ProviderHttp(
                                     response.close()
                                     close()
                                 }
-                            }
+                            },
+                        )
                     }
                 },
             )
             awaitClose {
                 call.cancel()
-                reader?.cancel()
+                reader.getAndSet(null)?.cancel()
             }
         }
 }

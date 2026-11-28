@@ -106,7 +106,8 @@ private fun paragraphDirectionMarker(content: List<InlineContent>): String {
 internal fun isOpenableLink(target: String): Boolean =
     try {
         val uri = java.net.URI(target)
-        uri.scheme?.lowercase() in setOf("https", "http") &&
+        val scheme = uri.scheme
+        (scheme.equals("https", ignoreCase = true) || scheme.equals("http", ignoreCase = true)) &&
             !uri.host.isNullOrBlank() &&
             uri.userInfo == null
     } catch (_: java.net.URISyntaxException) {
@@ -273,6 +274,9 @@ internal fun Modifier.horizontalPanCues(scroll: ScrollState): Modifier =
         val fadeWidth = 18.dp.toPx().coerceAtMost(size.width / 3f)
         val insetY = 6.dp.toPx().coerceAtMost(size.height / 4f)
         val barHeight = (size.height - insetY * 2f).coerceAtLeast(0f)
+        if (fadeWidth <= 0f || barHeight <= 0f) {
+            return@drawWithCache onDrawWithContent { drawContent() }
+        }
         val rightBrush =
             Brush.horizontalGradient(
                 colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f)),
@@ -287,7 +291,6 @@ internal fun Modifier.horizontalPanCues(scroll: ScrollState): Modifier =
             )
         onDrawWithContent {
             drawContent()
-            if (barHeight <= 0f) return@onDrawWithContent
             val isRtl = layoutDirection == LayoutDirection.Rtl
             val hasRightCue = if (isRtl) scroll.canScrollBackward else scroll.canScrollForward
             val hasLeftCue = if (isRtl) scroll.canScrollForward else scroll.canScrollBackward
@@ -405,6 +408,21 @@ internal fun RenderUnitView(
     }
 }
 
+private fun headingFontSize(heading: Int?) =
+    when (heading) {
+        1 -> 20.sp
+
+        2 -> 18.sp
+
+        // 3 and 4 used to share the `else` branch, so an H3 was visually identical to body text
+        // and an H4 differed from it only by weight.
+        3 -> 17.sp
+
+        4 -> 15.sp
+
+        else -> 16.sp
+    }
+
 @Composable
 private fun RichText(
     content: List<InlineContent>,
@@ -416,8 +434,8 @@ private fun RichText(
     val linkActions = links.isNotEmpty()
     if (content.none { it.math }) {
         if (linkActions) {
-            Column {
-                InlineRichText(content, emptyList(), heading, modifier)
+            Column(modifier) {
+                InlineRichText(content, emptyList(), heading)
                 LinkActions(links)
             }
             return
@@ -427,20 +445,7 @@ private fun RichText(
     }
     val density = LocalDensity.current
     val math = content.map { if (it.math) rememberMath(it.text) else null }
-    val fallbackSize =
-        when (heading) {
-            1 -> 20.sp
-
-            2 -> 18.sp
-
-            // 3 and 4 used to share the `else` branch, so an H3 was visually identical to body text
-            // and an H4 differed from it only by weight.
-            3 -> 17.sp
-
-            4 -> 15.sp
-
-            else -> 16.sp
-        }
+    val fallbackSize = headingFontSize(heading)
     BoxWithConstraints(modifier.fillMaxWidth()) {
         val width = with(density) { maxWidth.toPx() }
         // ponytail: memoize per (content, maxWidth, drawables); recompute only when spans, width,
@@ -596,19 +601,23 @@ private fun InlineRichText(
     // text, so an unchanged paragraph hits the cache.
     val inline =
         remember(content, math, density) {
-            math
-                .mapIndexedNotNull { index, drawable ->
-                    drawable?.let {
-                        "math$index" to
-                            InlineTextContent(
-                                Placeholder(
-                                    with(density) { it.intrinsicWidth.toSp() },
-                                    with(density) { it.intrinsicHeight.toSp() },
-                                    PlaceholderVerticalAlign.TextCenter,
-                                ),
-                            ) { MathCanvas(drawable, content[index].text) }
-                    }
-                }.toMap()
+            if (math.isEmpty()) {
+                emptyMap()
+            } else {
+                math
+                    .mapIndexedNotNull { index, drawable ->
+                        drawable?.let {
+                            "math$index" to
+                                InlineTextContent(
+                                    Placeholder(
+                                        with(density) { it.intrinsicWidth.toSp() },
+                                        with(density) { it.intrinsicHeight.toSp() },
+                                        PlaceholderVerticalAlign.TextCenter,
+                                    ),
+                                ) { MathCanvas(drawable, content[index].text) }
+                        }
+                    }.toMap()
+            }
         }
     val text =
         remember(content, math, heading, context) {
@@ -657,21 +666,8 @@ private fun InlineRichText(
                 }
             }
         }
-    val size =
-        when (heading) {
-            1 -> 20.sp
-
-            2 -> 18.sp
-
-            // 3 and 4 used to share the `else` branch, so an H3 was visually identical to body text
-            // and an H4 differed from it only by weight.
-            3 -> 17.sp
-
-            4 -> 15.sp
-
-            else -> 16.sp
-        }
-    if (math.any { it != null }) {
+    val size = headingFontSize(heading)
+    if (inline.isNotEmpty()) {
         // Compose foundation text supplies inline native math placeholders.
         androidx.compose.foundation.text.BasicText(
             text,

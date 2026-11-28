@@ -138,13 +138,16 @@ class ProviderValidationRaceTest {
     }
 
     private fun awaitMessage(value: String) {
-        // Both result messages occupy same trailing list item; scroll before polling.
-        seek("Save securely")
-        repeat(3) { swipe(up = true) }
+        // Result text sits right above "Validate · uses API" (which awaitValidationIdle just scrolled to).
         val end = SystemClock.uptimeMillis() + 8000
         while (SystemClock.uptimeMillis() < end) {
             if (fresh(value) != null) return
             SystemClock.sleep(100)
+        }
+        top()
+        repeat(12) {
+            if (fresh(value) != null) return
+            swipe(up = true)
         }
         error("Validation result missing: $value")
     }

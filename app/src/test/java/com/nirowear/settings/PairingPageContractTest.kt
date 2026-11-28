@@ -78,4 +78,10 @@ class PairingPageContractTest {
         assertTrue("Type switcher must update presets", page.contains("el('type').onchange"))
         assertTrue("Encrypted /models route must be wired", page.contains("/models"))
     }
+
+    @Test
+    fun pageIgnoresLateModelFetchCompletionAfterPairSucceeds() {
+        assertTrue("sent flag must be set on successful pair", page.contains("sent=true"))
+        assertTrue("fetchModels must guard completion and re-enable against sent", page.contains("if(!sent)btn.disabled=false"))
+    }
 }

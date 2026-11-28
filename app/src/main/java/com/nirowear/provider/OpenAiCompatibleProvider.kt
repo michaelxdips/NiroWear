@@ -15,12 +15,9 @@ import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
-import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
-
-private val jsonMedia = "application/json; charset=utf-8".toMediaType()
 
 /**
  * Generic [OI]-compatible Chat Completions adapter.
@@ -43,14 +40,14 @@ class OpenAiCompatibleProvider(
     override suspend fun listModels(
         profile: ProviderProfile,
         secret: SecretValue,
-    ): ModelDiscoveryResult {
-        val request =
-            Request
-                .Builder()
-                .url(Endpoints.compatible(profile.baseUrl, "models", allowLocalHttp))
-                .header("Authorization", "Bearer ${secret.forRequest()}")
-                .build()
-        return try {
+    ): ModelDiscoveryResult =
+        try {
+            val request =
+                Request
+                    .Builder()
+                    .url(Endpoints.compatible(profile.baseUrl, "models", allowLocalHttp))
+                    .header("Authorization", "Bearer ${secret.forRequest()}")
+                    .build()
             val body = http.fetch(request, decodeError = { _, errBody -> openAiHttpError(errBody) })
             val ids =
                 Json
@@ -76,7 +73,6 @@ class OpenAiCompatibleProvider(
         } catch (_: Exception) {
             ModelDiscoveryResult.Unavailable(ProviderError.PROTOCOL)
         }
-    }
 
     override fun streamChat(
         request: ChatRequest,
@@ -116,7 +112,7 @@ class OpenAiCompatibleProvider(
                 .url(Endpoints.compatible(profile.baseUrl, "chat/completions", allowLocalHttp))
                 .header("Authorization", "Bearer ${secret.forRequest()}")
                 .header("Accept", "text/event-stream")
-                .post(payload.toString().toRequestBody(jsonMedia))
+                .post(payload.toString().toRequestBody(JSON_MEDIA_TYPE))
                 .build()
         // A fresh decoder per collection: it is stateful (hasText across frames).
         return flow {

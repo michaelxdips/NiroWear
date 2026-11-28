@@ -83,32 +83,43 @@ internal object NativeMathGuard {
 
     private val RULE =
         Regex(
-            "\\\\rule(?![a-zA-Z])\\s*(?:\\[[^\\]]*\\])?\\s*\\{([^{}]*)\\}\\s*\\{([^{}]*)\\}",
+            "\\\\rule(?![a-zA-Z])\\s*(?:\\[([^\\]]*)\\])?\\s*\\{([^{}]*)\\}\\s*\\{([^{}]*)\\}",
         )
 
     private val DIMENSION =
         Regex("\\s*(-?(?:\\d+(?:\\.\\d*)?|\\.\\d+))\\s*(?:pt|pc|bp|mm|cm|in|em|ex|px|sp|dp)?\\s*")
 
+    private fun parseDimension(raw: String): Double? =
+        DIMENSION
+            .matchEntire(raw)
+            ?.groupValues
+            ?.get(1)
+            ?.toDoubleOrNull()
+
     /**
-     * Bounds `\rule`'s explicit dimensions.
+     * Bounds `\rule`'s explicit dimensions (including optional `[raise]`).
      *
-     * A `\rule` whose two size groups are not plain bounded numbers is refused: the guard cannot
+     * A `\rule` whose dimensions are not plain bounded numbers is refused: the guard cannot
      * prove the result fits, and a refusal costs only the typeset form (the source text is shown).
      */
     private fun ruleSizesAreBounded(source: String): Boolean {
-        if (!RULE_NAME.containsMatchIn(source)) return true
+        if (!source.contains("\\rule") || !RULE_NAME.containsMatchIn(source)) return true
         val matches = RULE.findAll(source).toList()
         if (matches.size != RULE_NAME.findAll(source).count()) return false
         return matches.all { match ->
-            match.groupValues.drop(1).all { raw ->
-                val value =
-                    DIMENSION
-                        .matchEntire(raw)
-                        ?.groupValues
-                        ?.get(1)
-                        ?.toDoubleOrNull()
-                value != null && value in 0.0..MAX_RULE_DIMENSION
-            }
+            val raiseGroup = match.groups[1]?.value
+            val raiseOk =
+                if (raiseGroup == null) {
+                    true
+                } else {
+                    val raise = parseDimension(raiseGroup)
+                    raise != null && kotlin.math.abs(raise) <= MAX_RULE_DIMENSION
+                }
+            if (!raiseOk) return@all false
+            val width = parseDimension(match.groupValues[2])
+            val height = parseDimension(match.groupValues[3])
+            width != null && width in 0.0..MAX_RULE_DIMENSION &&
+                height != null && height in 0.0..MAX_RULE_DIMENSION
         }
     }
 
@@ -116,8 +127,10 @@ internal object NativeMathGuard {
     fun isSafe(source: String): Boolean {
         if (source.length > MAX_SOURCE) return false
         if (source.count { it == '{' } > MAX_GROUPS) return false
-        if (FORBIDDEN.containsMatchIn(source)) return false
-        if (!ruleSizesAreBounded(source)) return false
+        if (source.indexOf('\\') >= 0) {
+            if (FORBIDDEN.containsMatchIn(source)) return false
+            if (!ruleSizesAreBounded(source)) return false
+        }
         return balanced(source)
     }
 

@@ -106,6 +106,7 @@ fun ChatDatabase.searchMessages(
 ): List<SearchHit> {
     val terms = likeTerms(input)
     if (terms.isEmpty()) return emptyList()
+    val plainTerms = unescapeLikeTerms(terms)
     val where = terms.joinToString(" AND ") { "rawContent LIKE ? ESCAPE '\\'" }
     val args = terms.map { "%$it%" }
     return runCatching<List<SearchHit>> {
@@ -122,7 +123,7 @@ fun ChatDatabase.searchMessages(
                             cursor.getLong(0),
                             cursor.getString(1),
                             cursor.getString(2),
-                            extractSearchSnippet(cursor.getString(3), terms),
+                            extractSearchSnippetPlain(cursor.getString(3), plainTerms),
                         )
                 }
                 hits
@@ -350,19 +351,33 @@ interface ChatDao {
     @Query("DELETE FROM conversations WHERE id = :id")
     suspend fun deleteConversation(id: String)
 
+    @Query("SELECT id FROM messages WHERE conversationId = :conversationId AND role = 'USER' ORDER BY id LIMIT 1")
+    suspend fun firstUserMessageId(conversationId: String): Long?
+
+    @Query("SELECT id FROM messages WHERE conversationId = :conversationId AND role = 'USER' ORDER BY id DESC LIMIT 1")
+    suspend fun lastUserMessageId(conversationId: String): Long?
+
+    @Transaction
+    suspend fun tryEdit(
+        conversationId: String,
+        id: Long,
+        text: String,
+    ): Boolean {
+        require(text.isNotBlank())
+        // The UPDATE is the ownership check: it is scoped to this conversation and to a USER row, so
+        // a target that belongs elsewhere matches nothing and nothing is mutated.
+        if (replaceUser(conversationId, id, text) != 1) return false
+        truncate(conversationId, id)
+        return true
+    }
+
     @Transaction
     suspend fun edit(
         conversationId: String,
         id: Long,
         text: String,
     ) {
-        require(text.isNotBlank())
-        // The UPDATE is the ownership check: it is scoped to this conversation and to a USER row, so
-        // a target that belongs elsewhere matches nothing and nothing is mutated. This used to load
-        // EVERY message of the conversation into memory (`snapshot(conversationId).any { ... }`) just
-        // to test one id — the whole chat, markdown included, per edit.
-        require(replaceUser(conversationId, id, text) == 1) { "Not a user message in this conversation" }
-        truncate(conversationId, id)
+        require(tryEdit(conversationId, id, text)) { "Not a user message in this conversation" }
     }
 
     @Transaction

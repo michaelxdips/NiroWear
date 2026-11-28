@@ -308,7 +308,6 @@ private fun ChatReader(
     var footerHeight by remember { androidx.compose.runtime.mutableIntStateOf(0) }
     // Precomputed on parseDispatcher alongside historyBlocks so streaming checkpoints do not
     // rebuild RenderUnit/range structures on the Main thread.
-    var historyKeys by remember { mutableStateOf<List<String>>(emptyList()) }
     var renderUnits by remember { mutableStateOf<List<com.nirowear.renderer.RenderUnit>>(emptyList()) }
     var unitRanges by remember { mutableStateOf<List<IntRange>>(emptyList()) }
     val readerTextMeasurer = rememberTextMeasurer()
@@ -317,6 +316,7 @@ private fun ChatReader(
     // every recomposition — with a 200-message conversation and several blocks per message that is
     // thousands of comparisons per frame while streaming.
     val messageById = remember(storedMessages) { storedMessages.associateBy { it.id } }
+    val latestMessageById by rememberUpdatedState(messageById)
     val currentSource by rememberUpdatedState(chatState.conversationId to storedMessages)
     // Resolved here: the presentation effect below is not a composable scope.
     val stoppedBeforeStart =
@@ -367,7 +367,9 @@ private fun ChatReader(
             parsedRows = emptyMap()
         }
         val messages = storedMessages
-        val previous = evictStaleConversations(parsedRows, recentConversations + listOfNotNull(id))
+        val retainedForPrevious =
+            if (id == null || id in recentConversations) recentConversations else recentConversations + id
+        val previous = evictStaleConversations(parsedRows, retainedForPrevious)
 
         // B3-03: coalesce re-parses, but guarantee progress.
         //
@@ -396,12 +398,16 @@ private fun ChatReader(
                     streamPrefixCache.clear()
                     unitCache.clear()
                 }
-                val activeIds = messages.mapNotNull { if (it.conversationId == id) it.id else null }.toSet()
-                streamPrefixCache.keys.retainAll(activeIds)
-                unitCache.keys.retainAll(activeIds)
+                if (streamPrefixCache.isNotEmpty() || unitCache.isNotEmpty()) {
+                    val activeIds = HashSet<Long>(messages.size)
+                    for (message in messages) {
+                        if (message.conversationId == id) activeIds.add(message.id)
+                    }
+                    streamPrefixCache.keys.retainAll(activeIds)
+                    unitCache.keys.retainAll(activeIds)
+                }
                 val builtRows = LinkedHashMap<com.nirowear.data.StoredMessage, List<Pair<Long, ContentBlock>>>()
                 val flatBlocks = ArrayList<Pair<Long, ContentBlock>>()
-                val flatKeys = ArrayList<String>()
                 val flatUnits = ArrayList<com.nirowear.renderer.RenderUnit>()
                 for (message in messages) {
                     if (message.conversationId != id) continue
@@ -432,10 +438,12 @@ private fun ChatReader(
                                     streamPrefixCache.remove(message.id)
                                     ResponseParser.parse(message.rawContent)
                                 }
-                            listOf(message.id to ContentBlock.Heading(4, listOf(InlineContent(label)))) +
-                                parsedBlocks.map { message.id to it } +
-                                if (message.status == "STOPPED" || message.error != null) {
-                                    listOf(
+                            val hasFooter = message.status == "STOPPED" || message.error != null
+                            ArrayList<Pair<Long, ContentBlock>>(parsedBlocks.size + if (hasFooter) 2 else 1).apply {
+                                add(message.id to ContentBlock.Heading(4, listOf(InlineContent(label))))
+                                for (block in parsedBlocks) add(message.id to block)
+                                if (hasFooter) {
+                                    add(
                                         message.id to
                                             ContentBlock.Paragraph(
                                                 listOf(
@@ -450,20 +458,18 @@ private fun ChatReader(
                                                 ),
                                             ),
                                     )
-                                } else {
-                                    emptyList()
                                 }
+                            }
                         }
                     builtRows[message] = msgBlocks
                     val blockStart = flatBlocks.size
                     flatBlocks.addAll(msgBlocks)
-                    val msgKeys = List(msgBlocks.size) { localIdx -> "${message.id}:$localIdx" }
-                    flatKeys.addAll(msgKeys)
                     val cached = unitCache[message.id]
                     val msgUnits =
                         if (cached != null && cached.blockStart == blockStart && cached.blocks === msgBlocks) {
                             cached.units
                         } else {
+                            val msgKeys = List(msgBlocks.size) { localIdx -> "${message.id}:$localIdx" }
                             renderUnitsFor(msgBlocks, msgKeys, startBlockIndex = blockStart).also { built ->
                                 unitCache[message.id] = CachedMessageUnits(blockStart, msgBlocks, built)
                             }
@@ -471,7 +477,7 @@ private fun ChatReader(
                     flatUnits.addAll(msgUnits)
                 }
                 val flatRanges = unitRangeByBlock(flatUnits, flatBlocks.size)
-                Triple(builtRows, flatBlocks to flatKeys, flatUnits to flatRanges)
+                Triple(builtRows, flatBlocks, flatUnits to flatRanges)
             }
         currentCoroutineContext().ensureActive()
         if (currentSource != (id to messages)) return@LaunchedEffect
@@ -481,9 +487,12 @@ private fun ChatReader(
         val merged = mergeParsed(parsedRows, rows, recentConversations, id)
         recentConversations = merged.second
         parsedRows = merged.first
-        (anchors.keys - (recentConversations + listOfNotNull(id)).toSet()).forEach { anchors.remove(it) }
-        historyBlocks = parsedLayout.second.first
-        historyKeys = parsedLayout.second.second
+        if (anchors.isNotEmpty()) {
+            val retained =
+                if (id == null || id in recentConversations) recentConversations else recentConversations + id
+            anchors.keys.retainAll(retained)
+        }
+        historyBlocks = parsedLayout.second
         renderUnits = parsedLayout.third.first
         unitRanges = parsedLayout.third.second
         parsedConversation = id
@@ -498,11 +507,15 @@ private fun ChatReader(
             renderUnits.getOrNull(unitIndex)?.blockIndex?.coerceIn(historyBlocks.indices)
                 ?: historyBlocks.indices.first
         val messageId = historyBlocks[index].first
-        val message = storedMessages.find { it.id == messageId } ?: return
+        val message = latestMessageById[messageId] ?: return
+        var blockOffset = 0
+        for (i in 0 until index) {
+            if (historyBlocks[i].first == messageId) blockOffset++
+        }
         anchors[id] =
             ReaderAnchor(
                 messageId,
-                historyBlocks.take(index).count { it.first == messageId },
+                blockOffset,
                 listState.firstVisibleItemScrollOffset,
                 message.rawContent.hashCode(),
                 following,
@@ -532,7 +545,13 @@ private fun ChatReader(
             val a = anchors[id]
             following = a?.following ?: (chatState.generating || followNewConversation)
             val position =
-                a?.resolve(historyBlocks, messageById.mapValues { it.value.rawContent.hashCode() }) ?: (0 to 0)
+                if (a != null) {
+                    val anchorHash =
+                        messageById[a.messageId]?.let { mapOf(a.messageId to it.rawContent.hashCode()) }.orEmpty()
+                    a.resolve(historyBlocks, anchorHash)
+                } else {
+                    0 to 0
+                }
             // resolve() answers in BLOCK indices; scrollToItem counts UNITS.
             val targetUnit = unitRanges.getOrNull(position.first)?.takeIf { !it.isEmpty() }?.first ?: position.first
             listState.scrollToItem(targetUnit + if (notice.isNotEmpty()) 1 else 0, position.second)
@@ -726,11 +745,11 @@ private fun ChatReader(
 
             // IME Send and the app's button take the same guarded path.
             fun submitEditor() {
-                if (editorText.isBlank() || chat.composerBusy) return
+                if (editorText.isBlank() || chat.composerBusy || chatState.generating || chatState.unsaved) return
                 val editTarget = editedId
                 if (editTarget != null) {
-                    anchors.remove(chatState.conversationId)
                     if (chat.edit(editTarget, editorText)) {
+                        anchors.remove(chatState.conversationId)
                         lastEditAttempt = editTarget to editorText
                         editField = TextFieldValue()
                         showReader()
@@ -811,7 +830,11 @@ private fun ChatReader(
                 )
                 Button(
                     onClick = { submitEditor() },
-                    enabled = editorText.isNotBlank() && !chatState.generating && !chatState.unsaved,
+                    enabled =
+                        editorText.isNotBlank() &&
+                            !chat.composerBusy &&
+                            !chatState.generating &&
+                            !chatState.unsaved,
                     modifier = Modifier.align(Alignment.CenterHorizontally),
                 ) {
                     Text(
@@ -826,9 +849,10 @@ private fun ChatReader(
                 }
             }
         } else {
+            val liveBlocksShown = renderLab || !chatState.unsaved || historyBlocks.isEmpty()
             val source =
                 if (!renderLab) {
-                    chatState.rawMarkdown.orEmpty()
+                    if (liveBlocksShown) chatState.rawMarkdown.orEmpty() else ""
                 } else {
                     when (section) {
                         "Unicode" -> {
@@ -907,7 +931,6 @@ private fun ChatReader(
             // LazyColumn emits them, and the two had drifted: the count ignored the unsaved-answer row
             // and the provider-error row, and it counted live blocks even while they were suppressed —
             // so auto-follow stopped short of the real last item.
-            val liveBlocksShown = !chatState.unsaved || historyBlocks.isEmpty()
             val transientErrorShown =
                 !renderLab && chatState.error != null && storedMessages.none { it.error == chatState.error }
             val unsavedRowShown = !renderLab && chatState.unsaved
@@ -928,8 +951,12 @@ private fun ChatReader(
             // two more copies on every recomposition, i.e. once per checkpoint emission.
             val answerIndices =
                 remember(historyBlocks, answerId, answerRow?.status, answerRow?.error) {
-                    historyBlocks.indices.filter { historyBlocks[it].first == answerId }.drop(1).let {
-                        if (answerRow?.status == "STOPPED" || answerRow?.error != null) it.dropLast(1) else it
+                    if (answerId == null) {
+                        emptyList()
+                    } else {
+                        historyBlocks.indices.filter { historyBlocks[it].first == answerId }.drop(1).let {
+                            if (answerRow?.status == "STOPPED" || answerRow?.error != null) it.dropLast(1) else it
+                        }
                     }
                 }
             var measuredAnswer by remember(answerId, following, chatState.generating) { mutableStateOf(false) }

@@ -55,6 +55,7 @@ internal object SelfSignedCert {
     private val NOT_AFTER: Instant = Instant.parse("2049-12-31T23:59:59Z")
 
     private val TIME = DateTimeFormatter.ofPattern("yyMMddHHmmss'Z'").withZone(ZoneOffset.UTC)
+    private val secureRandom = SecureRandom()
 
     fun mint(
         keyPair: KeyPair,
@@ -95,11 +96,14 @@ internal object SelfSignedCert {
                         ),
                 ),
             )
+        val serial =
+            BigInteger(1, ByteArray(16).also { secureRandom.nextBytes(it) })
+                .let { if (it.signum() > 0) it else BigInteger.ONE }
         val tbs =
             der(
                 0x30,
                 der(0xA0, integer(BigInteger.valueOf(2))) + // v3
-                    integer(BigInteger(1, ByteArray(16).also { SecureRandom().nextBytes(it) })) +
+                    integer(serial) +
                     algorithm +
                     name +
                     validity +
@@ -134,15 +138,19 @@ internal object SelfSignedCert {
         keyPair: KeyPair,
         certificate: X509Certificate,
     ): SSLContext {
-        val password = CharArray(24) { "0123456789abcdef"[SecureRandom().nextInt(16)] }
-        val store = KeyStore.getInstance("PKCS12")
-        store.load(null, null)
-        store.setKeyEntry("pairing", keyPair.private, password, arrayOf(certificate))
-        val managers =
-            KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm()).apply {
-                init(store, password)
-            }
-        return SSLContext.getInstance("TLS").apply { init(managers.keyManagers, null, null) }
+        val password = CharArray(24) { "0123456789abcdef"[secureRandom.nextInt(16)] }
+        try {
+            val store = KeyStore.getInstance("PKCS12")
+            store.load(null, null)
+            store.setKeyEntry("pairing", keyPair.private, password, arrayOf(certificate))
+            val managers =
+                KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm()).apply {
+                    init(store, password)
+                }
+            return SSLContext.getInstance("TLS").apply { init(managers.keyManagers, null, null) }
+        } finally {
+            password.fill('\u0000')
+        }
     }
 
     private fun extension(
